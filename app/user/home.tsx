@@ -26,7 +26,6 @@ import { useFocusEffect } from "@react-navigation/native";
 import SoundManager from "./components/souund/soundManager";
 import { RefreshControl } from "react-native";
 
-
 export default function HomeScreen() {
   const LEVEL_STORAGE_KEY = "highestLevelReached";
   const router = useRouter();
@@ -35,14 +34,14 @@ export default function HomeScreen() {
   const [fullName, setFullName] = useState("Unavailable");
   const [referrals, setReferrals] = useState(0);
   const [availableLevels, setAvailableLevels] = useState([]);
-  const [highestCompletedLevelCompleted, setHighestCompletedLevelComplete] = useState(0)
+  const [highestCompletedLevelCompleted, setHighestCompletedLevelComplete] =
+    useState(0);
   const [finishedQuizzes, setFinishedQuizzes] = useState([]);
   const [quizCode, setQuizCode] = useState("");
   const [loading, setLoading] = useState(false);
   useEffect(() => {
-    console.log('availableLevels------>42', availableLevels);
-
-  })
+    console.log("availableLevels------>42", availableLevels);
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -56,20 +55,18 @@ export default function HomeScreen() {
       BackHandler.addEventListener("hardwareBackPress", onBackPress);
       return () =>
         BackHandler.removeEventListener("hardwareBackPress", onBackPress);
-    }, []),
+    }, [])
   );
-
-
 
   useFocusEffect(
     useCallback(() => {
       loadUserData();
-    }, []),
+    }, [])
   );
 
   const loadUserData = async () => {
     try {
-      setLoading(true)
+      setLoading(true);
       const userId = auth.currentUser?.uid;
       if (userId) {
         const cachedData = await AsyncStorage.getItem("userData");
@@ -77,13 +74,12 @@ export default function HomeScreen() {
 
         if (cachedData) {
           data = JSON.parse(cachedData);
-          setUserName(data.username || "User");
+          console.log("CACHED DATA DATA:::::::::::::");
+          console.log(data);
+          setUserName(data.fullname || "User");
           setFullName(data.fullName || "Unavailable");
           setReferrals(data.referrals || 0);
           setUserPoints(data.totalPoints || 0);
-
-
-
         }
 
         const userRef = ref(database, `users/${userId}`);
@@ -96,20 +92,21 @@ export default function HomeScreen() {
             fullName: data.fullName || "Unavailable",
             referrals: data.referrals || 0,
             totalPoints: data.totalPoints || 0,
-            highestCompletedLevelCompleted: data.highestCompletedLevelCompleted || ''
+            highestCompletedLevelCompleted:
+              data.highestCompletedLevelCompleted || "",
           };
-          setUserName(formattedData.username);
+          console.log("FORMATTED DATA:::::::::");
+          console.log(formattedData);
+          setUserName(formattedData.fullName);
           setFullName(formattedData.fullName);
           setReferrals(formattedData.referrals);
           setUserPoints(formattedData.totalPoints);
-
 
           await AsyncStorage.setItem("userData", JSON.stringify(formattedData));
         }
       }
       await fetchAvailableLevels();
       await fetchFinishedQuizzes();
-
     } catch (error) {
       console.error("Failed to load user data:", error);
     } finally {
@@ -129,22 +126,16 @@ export default function HomeScreen() {
         const userData = userSnapshot.val() || {};
         const currentUserLevel = userData.currentLevel || 1;
 
-
-
         // Get highest completed level from AsyncStorage
         const storedLevel = await AsyncStorage.getItem(LEVEL_STORAGE_KEY);
         console.log("storedLevel=---->>> 123", storedLevel);
 
-
         setHighestCompletedLevelComplete(Number(storedLevel));
-
-
-
 
         // Create array of available levels up to user's current level
         const availableLevelsArray = Array.from(
           { length: currentUserLevel },
-          (_, i) => i + 1,
+          (_, i) => i + 1
         );
 
         setAvailableLevels(availableLevelsArray as any);
@@ -155,8 +146,6 @@ export default function HomeScreen() {
       setLoading(false);
     }
   };
-
-
 
   const fetchFinishedQuizzes = async () => {
     try {
@@ -203,22 +192,20 @@ export default function HomeScreen() {
       } else {
         Alert.alert(
           "Invalid Quiz Code",
-          "The quiz code you entered does not exist.",
+          "The quiz code you entered does not exist."
         );
       }
     } catch (error) {
       console.error("Error validating quiz code:", error);
       Alert.alert(
         "Error",
-        "Something went wrong while validating the quiz code. Please try again.",
+        "Something went wrong while validating the quiz code. Please try again."
       );
     }
   };
 
   const [maxLevel, setMaxLevel] = useState<number>(0);
-  const [handleStart, setHandleStart] = useState(false)
-
-
+  const [handleStart, setHandleStart] = useState(false);
 
   const getMaxLevel = async () => {
     try {
@@ -240,11 +227,10 @@ export default function HomeScreen() {
     }
   };
 
-
-  const [isLoadingLevels, setIsLoadingLevels] = useState(false)
+  const [isLoadingLevels, setIsLoadingLevels] = useState(false);
   const [isAllLevelsComplete, setIsAllLevelsComplete] = useState(false);
-  const [quizzesSnapshot, setQuizzesSnapshot] = useState<null | {}>(null)
-  const [currentLevel, setCurrentLevel] = useState(1)
+  const [quizzesSnapshot, setQuizzesSnapshot] = useState<null | {}>(null);
+  const [currentLevel, setCurrentLevel] = useState(1);
   const checkAllLevelsCompletion = async () => {
     const userId = auth.currentUser?.uid;
     if (!userId) return;
@@ -254,15 +240,14 @@ export default function HomeScreen() {
       const snapshot = await get(userRef);
       const userData = snapshot.val() || {};
       const currentLevel = userData.currentLevel;
-      setCurrentLevel(currentLevel)
-      console.log('my current level is in home---.>', currentLevel);
-
+      setCurrentLevel(currentLevel);
+      console.log("my current level is in home---.>", currentLevel);
 
       // Get max level from quizzes
-      const quizzesRef = ref(database, 'quizzes');
+      const quizzesRef = ref(database, "quizzes");
       const quizzesSnapshot = await get(quizzesRef);
       setQuizzesSnapshot(quizzesSnapshot.val()); // Store actual snapshot value
-      console.log('quizzesSnapshot---->>. 236', quizzesSnapshot);
+      console.log("quizzesSnapshot---->>. 236", quizzesSnapshot);
 
       let maxLevel = 1;
 
@@ -283,22 +268,23 @@ export default function HomeScreen() {
     }
   };
 
-  const [hasFetched, setHasFreshed] = useState('false'); // ✅ Tracks if data has been fetched
+  const [hasFetched, setHasFreshed] = useState("false"); // ✅ Tracks if data has been fetched
 
   const fetchData = async (forceRefresh = false) => {
     try {
       setIsLoadingLevels(true);
-  
+
       if (!forceRefresh) {
         // ✅ Only check AsyncStorage if not forcing a refresh
-        const [alreadyFetched, storedMaxLevel, storedCurrentLevel] = await Promise.all([
-          AsyncStorage.getItem("hasFetched"),
-          AsyncStorage.getItem("maxLevel"),
-          AsyncStorage.getItem("currentLevel"),
-        ]);
-  
+        const [alreadyFetched, storedMaxLevel, storedCurrentLevel] =
+          await Promise.all([
+            AsyncStorage.getItem("hasFetched"),
+            AsyncStorage.getItem("maxLevel"),
+            AsyncStorage.getItem("currentLevel"),
+          ]);
+
         setHasFreshed(alreadyFetched as any);
-  
+
         if (storedMaxLevel && storedCurrentLevel && alreadyFetched === "true") {
           setMaxLevel(JSON.parse(storedMaxLevel));
           setCurrentLevel(JSON.parse(storedCurrentLevel));
@@ -307,22 +293,26 @@ export default function HomeScreen() {
           return;
         }
       }
-  
+
       // ✅ Fetch from backend (forceRefresh or initial load)
-      console.log(forceRefresh ? "Refreshing from backend... 🔄" : "Fetching from backend... 🌐");
-  
+      console.log(
+        forceRefresh
+          ? "Refreshing from backend... 🔄"
+          : "Fetching from backend... 🌐"
+      );
+
       await Promise.all([
         loadUserData(),
         checkAllLevelsCompletion(),
         fetchAvailableLevels(),
         fetchFinishedQuizzes(),
       ]);
-  
+
       console.log("Quizzes Snapshot ->", quizzesSnapshot);
-  
+
       const maxLvl = await getMaxLevel();
       console.log("my server level 262---->>", maxLvl);
-  
+
       // ✅ Update state and AsyncStorage
       setMaxLevel(maxLvl);
       await Promise.all([
@@ -336,62 +326,54 @@ export default function HomeScreen() {
       setIsLoadingLevels(false);
     }
   };
-  
+
   // ✅ useEffect for initial load
   useEffect(() => {
     fetchData();
-  
+
     const handleAppStateChange = (nextAppState: string) => {
       if (nextAppState === "active") {
         fetchData(); // ✅ Refresh on app resume
       }
     };
-  
-    const subscription = AppState.addEventListener("change", handleAppStateChange);
-  
+
+    const subscription = AppState.addEventListener(
+      "change",
+      handleAppStateChange
+    );
+
     return () => {
       subscription.remove(); // ✅ Cleanup
     };
   }, []);
-  
 
   const onRefresh = () => {
     fetchData(true);
   };
-  
 
   const params = useLocalSearchParams();
-  const {
-    openLevelPopup,
-  } = params;
-
-
-
+  const { openLevelPopup } = params;
 
   const handlePoUp = async () => {
-    setHandleStart(true)
+    setHandleStart(true);
 
-    await SoundManager.playSound('levelSoundEffect', { isLooping: true });
-  }
-
+    await SoundManager.playSound("levelSoundEffect", { isLooping: true });
+  };
 
   useEffect(() => {
     // Only run if the value actually changes
 
-
     if (openLevelPopup) {
       handlePoUp();
-
     }
   }, [openLevelPopup]);
 
-
   const handleHidePoUp = async () => {
-    await SoundManager.stopSound('levelSoundEffect');
-    await SoundManager.stopSound('clappingSoundEffect');
-    await SoundManager.stopSound('victorySoundEffect');
-    await SoundManager.stopSound('failSoundEffect');
-    setHandleStart(false)
+    await SoundManager.stopSound("levelSoundEffect");
+    await SoundManager.stopSound("clappingSoundEffect");
+    await SoundManager.stopSound("victorySoundEffect");
+    await SoundManager.stopSound("failSoundEffect");
+    setHandleStart(false);
     const newParams = { ...params };
     delete newParams.openLevelPopup; // Remove the parameter
 
@@ -399,14 +381,12 @@ export default function HomeScreen() {
       pathname: "", // Replace with your actual page route
       params: newParams, // Updated params without `openLevelPopup`
     });
-  }
-
+  };
 
   const handleContinue = async () => {
-    router.push("/user/QuizScreen")
-    await SoundManager.stopSound('levelSoundEffect');
-
-  }
+    router.push("/user/QuizScreen");
+    await SoundManager.stopSound("levelSoundEffect");
+  };
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -430,50 +410,40 @@ export default function HomeScreen() {
     startZoomAnimation();
   }, [scaleAnim]);
 
-
   const handleQuizChoice = async (level: any, isMannualSelection: boolean) => {
-    console.log('level choice is ---->>>> 532', level);
+    console.log("level choice is ---->>>> 532", level);
 
-    await SoundManager.stopSound('levelSoundEffect');
-    await SoundManager.stopSound('clappingSoundEffect');
-    await SoundManager.stopSound('victorySoundEffect');
-    await SoundManager.stopSound('failSoundEffect');
+    await SoundManager.stopSound("levelSoundEffect");
+    await SoundManager.stopSound("clappingSoundEffect");
+    await SoundManager.stopSound("victorySoundEffect");
+    await SoundManager.stopSound("failSoundEffect");
     if (currentLevel === undefined) {
       router.push({
         pathname: "/user/QuizScreen",
         params: {
           level: level,
-          isSelectedLevel: isMannualSelection as any
-
+          isSelectedLevel: isMannualSelection as any,
         },
       });
-
     }
     if (currentLevel === 1) {
       router.push({
         pathname: "/user/QuizScreen",
         params: {
           level: level,
-          isSelectedLevel: isMannualSelection as any
-
+          isSelectedLevel: isMannualSelection as any,
         },
       });
-
-    }
-
-
-    else if (currentLevel > 1) {
+    } else if (currentLevel > 1) {
       router.push({
         pathname: "/user/QuizScreen",
         params: {
           level: level,
-          isSelectedLevel: isMannualSelection as any
-
+          isSelectedLevel: isMannualSelection as any,
         },
       });
     }
-
-  }
+  };
 
   const scrollY = useRef(new Animated.Value(0)).current;
 
@@ -492,15 +462,45 @@ export default function HomeScreen() {
     startAnimation();
   }, [animatedValue]);
 
-
   return (
-    <ScrollView style={styles.container}  refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} />}>
-      <Text style={{fontSize: 11, fontFamily: "Poppins-Bold", color: "#333333",marginBottom:10 }}>For autoRefresh Please Drag Down from Top to bottom</Text>
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={false} onRefresh={onRefresh} />
+      }
+    >
+      <Text
+        style={{
+          fontSize: 11,
+          fontFamily: "Poppins-Bold",
+          color: "#333333",
+          marginBottom: 10,
+        }}
+      >
+        For autoRefresh Please Drag Down from Top to bottom
+      </Text>
       <View style={styles.welcomeContainer}>
         <View style={styles.welcomeHeader}>
-          <View style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+          <View
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-start",
+            }}
+          >
             <Text style={styles.welcomeText}>Welcome, {userName}</Text>
-            <Text style={{ fontSize: 11, fontFamily: "Poppins-Bold", color: "#333333" }}>Total levels Completed: {highestCompletedLevelCompleted != 0 ? `level(1 - ${highestCompletedLevelCompleted})` : 0}</Text>
+            <Text
+              style={{
+                fontSize: 11,
+                fontFamily: "Poppins-Bold",
+                color: "#333333",
+              }}
+            >
+              Total levels Completed:{" "}
+              {highestCompletedLevelCompleted != 0
+                ? `level(1 - ${highestCompletedLevelCompleted})`
+                : 0}
+            </Text>
           </View>
           <View style={styles.pointsContainer}>
             <Image
@@ -508,7 +508,11 @@ export default function HomeScreen() {
               style={styles.diamondIcon}
             />
 
-            {loading ? <ActivityIndicator color='#ffffff' size={30} /> : <Text style={styles.pointsText}>{userPoints.toFixed()}</Text>}
+            {loading ? (
+              <ActivityIndicator color="#ffffff" size={30} />
+            ) : (
+              <Text style={styles.pointsText}>{userPoints.toFixed()}</Text>
+            )}
           </View>
         </View>
         <Text style={styles.subtitle}>Test your knowledge and have fun!</Text>
@@ -517,8 +521,7 @@ export default function HomeScreen() {
         style={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
       >
-
-        <View >
+        <View>
           <TouchableOpacity
             style={{
               backgroundColor: "#F7C948",
@@ -527,44 +530,83 @@ export default function HomeScreen() {
               paddingHorizontal: 20,
               borderRadius: 10,
               alignItems: "center",
-              overflow: 'hidden',
+              overflow: "hidden",
             }}
             disabled={currentLevel === 0 || undefined}
             onPress={() => handlePoUp()}
-          // router.push("/user/QuizScreen")
+            // router.push("/user/QuizScreen")
           >
-            {currentLevel === 0 || undefined ?
-              <View style={{ overflow: "hidden", width: textWidth, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            {currentLevel === 0 || undefined ? (
+              <View
+                style={{
+                  overflow: "hidden",
+                  width: textWidth,
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
                 <Animated.Text
                   style={{
                     transform: [{ translateX: animatedValue }],
                     color: "#333333",
                     fontFamily: "Poppins-Bold",
                     fontSize: 12,
-                    textAlign: 'center'
-
+                    textAlign: "center",
                   }}
                 >
                   ⚠️⚠️⚠️Currently There is no Quiz available...
                 </Animated.Text>
               </View>
-              : null}
-            <Text style={{
-              color: "#333333",
-              fontFamily: "Poppins-Bold",
-              fontSize: 16,
-            }}>Start Your Quiz</Text>
+            ) : null}
+            <Text
+              style={{
+                color: "#333333",
+                fontFamily: "Poppins-Bold",
+                fontSize: 16,
+              }}
+            >
+              Start Your Quiz
+            </Text>
           </TouchableOpacity>
 
-          <Modal visible={handleStart} transparent animationType="fade" style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>
+          <Modal
+            visible={handleStart}
+            transparent
+            animationType="fade"
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              flexDirection: "column",
+            }}
+          >
             <View
               // Change to your image path
-              style={{ width: "100%", height: "100%", justifyContent: "flex-start", alignItems: "flex-start", backgroundColor: '#FFF2CC', flex: 1, flexDirection: 'column' }}
-
+              style={{
+                width: "100%",
+                height: "100%",
+                justifyContent: "flex-start",
+                alignItems: "flex-start",
+                backgroundColor: "#FFF2CC",
+                flex: 1,
+                flexDirection: "column",
+              }}
             >
-
-              <View style={{ backgroundColor: 'transparent', width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', }}>
-                {currentLevel > 1 &&
+              <View
+                style={{
+                  backgroundColor: "transparent",
+                  width: "100%",
+                  height: "100%",
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  flexDirection: "column",
+                }}
+              >
+                {currentLevel > 1 && (
                   <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
                     <TouchableOpacity
                       style={{
@@ -585,13 +627,18 @@ export default function HomeScreen() {
                           width: "100%",
                           height: "100%",
                           justifyContent: "center",
-                          flexDirection: 'row',
+                          flexDirection: "row",
                           alignItems: "center",
                         }}
                         resizeMode="cover"
                       >
-                        {currentLevel === maxLevel && <Image source={require('../../assets/images/mathKing.png')} style={{ width: 30, height: 30 }}
-                          resizeMode="contain" />}
+                        {currentLevel === maxLevel && (
+                          <Image
+                            source={require("../../assets/images/mathKing.png")}
+                            style={{ width: 30, height: 30 }}
+                            resizeMode="contain"
+                          />
+                        )}
                         <Text
                           style={{
                             fontSize: 11,
@@ -603,43 +650,52 @@ export default function HomeScreen() {
                         </Text>
                       </ImageBackground>
                     </TouchableOpacity>
-                  </Animated.View>}
-                <ImageBackground source={require('../../assets/images/selectLevel.png')} // Change to your image path
+                  </Animated.View>
+                )}
+                <ImageBackground
+                  source={require("../../assets/images/selectLevel.png")} // Change to your image path
                   style={{
-                    width: 150, height: 150, justifyContent: "center", alignItems: "center",
-                    display: 'flex'
-
-
+                    width: 150,
+                    height: 150,
+                    justifyContent: "center",
+                    alignItems: "center",
+                    display: "flex",
                   }}
-                  resizeMode="cover">
-                  <Text style={{
-
-                    backgroundColor: '#5873a4',
-                    borderRadius: 20,
-                    fontSize: 15,
-                    paddingLeft: 10,
-                    fontWeight: 'condensed',
-                    paddingRight: 10,
-                    color: "#ffffff",
-                    fontFamily: "Poppins-Bold", zIndex: 9999999
-                  }}>  {currentLevel <= 1 ? "Start Quiz" : "Select Level"}
+                  resizeMode="cover"
+                >
+                  <Text
+                    style={{
+                      backgroundColor: "#5873a4",
+                      borderRadius: 20,
+                      fontSize: 15,
+                      paddingLeft: 10,
+                      fontWeight: "condensed",
+                      paddingRight: 10,
+                      color: "#ffffff",
+                      fontFamily: "Poppins-Bold",
+                      zIndex: 9999999,
+                    }}
+                  >
+                    {" "}
+                    {currentLevel <= 1 ? "Start Quiz" : "Select Level"}
                   </Text>
                 </ImageBackground>
 
-                <View style={{ position: 'relative', width: '100%', marginTop: 20 }}>
-
+                <View
+                  style={{ position: "relative", width: "100%", marginTop: 20 }}
+                >
                   <ScrollView
                     style={{
-                      width: '100%',
+                      width: "100%",
                       minHeight: 100,
                       maxHeight: 270,
                     }}
                     contentContainerStyle={{
-                      flexDirection: 'column',
-                      display: 'flex',
+                      flexDirection: "column",
+                      display: "flex",
                       gap: 10,
-                      justifyContent: 'center',
-                      alignItems: 'center',
+                      justifyContent: "center",
+                      alignItems: "center",
                     }}
                     onScroll={Animated.event(
                       [{ nativeEvent: { contentOffset: { y: scrollY } } }],
@@ -649,102 +705,141 @@ export default function HomeScreen() {
                   >
                     {Array.from({ length: maxLevel }, (_, index) => {
                       const level = index + 1;
-                      console.log('level 741----.>>>>>', level);
+                      console.log("level 741----.>>>>>", level);
 
                       // Default to 0 if currentLevel is undefined
-                      const completedLevels = highestCompletedLevelCompleted ? Number(highestCompletedLevelCompleted) : 0;
-
+                      const completedLevels = highestCompletedLevelCompleted
+                        ? Number(highestCompletedLevelCompleted)
+                        : 0;
 
                       // If currentLevel is undefined, enable only index 0
-                      const highestEnabledIndex = currentLevel === undefined ? 0 : completedLevels;
+                      const highestEnabledIndex =
+                        currentLevel === undefined ? 0 : completedLevels;
 
                       // Disable any index greater than highestEnabledIndex
                       const isDisabled = index > highestEnabledIndex;
-                      console.log('Current Level:', currentLevel, 'Index:', index, 'Disabled:', isDisabled);
+                      console.log(
+                        "Current Level:",
+                        currentLevel,
+                        "Index:",
+                        index,
+                        "Disabled:",
+                        isDisabled
+                      );
 
-                      console.log('Current Level:', currentLevel, 'Index:', index, 'Disabled:', isDisabled);
+                      console.log(
+                        "Current Level:",
+                        currentLevel,
+                        "Index:",
+                        index,
+                        "Disabled:",
+                        isDisabled
+                      );
 
                       return (
-                        <Animated.View style={{ transform: [{ scale: isDisabled ? 1 : scaleAnim }] }} key={level}>
+                        <Animated.View
+                          style={{
+                            transform: [{ scale: isDisabled ? 1 : scaleAnim }],
+                          }}
+                          key={level}
+                        >
                           <TouchableOpacity
                             disabled={isDisabled}
-
                             style={{
                               width: 60,
 
                               height: 60,
                               backgroundColor: isDisabled ? "#ccc" : "#b91c1c", // Gray out disabled buttons
                               borderRadius: 50,
-                              display: 'flex',
-                              justifyContent: 'center',
-                              alignItems: 'center',
+                              display: "flex",
+                              justifyContent: "center",
+                              alignItems: "center",
                               opacity: isDisabled ? 0.6 : 1,
-
                             }}
                             onPress={() => handleQuizChoice(level, true)}
                           >
-                            <ImageBackground source={require('../../assets/images/levelImage.png')} // Change to your image path
-                              style={{ width: "100%", height: "100%", justifyContent: "center", alignItems: "center" }}
-                              resizeMode="cover">
-                              <Text style={{ color: "white", fontWeight: "bold" }}>level {''}{level}</Text>
+                            <ImageBackground
+                              source={require("../../assets/images/levelImage.png")} // Change to your image path
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                justifyContent: "center",
+                                alignItems: "center",
+                              }}
+                              resizeMode="cover"
+                            >
+                              <Text
+                                style={{ color: "white", fontWeight: "bold" }}
+                              >
+                                level {""}
+                                {level}
+                              </Text>
                             </ImageBackground>
-
                           </TouchableOpacity>
                         </Animated.View>
                       );
                     })}
                   </ScrollView>
 
+                  <Animated.Image
+                    source={require("../../assets/images/scrollIndicator.png")}
+                    style={[
+                      {
+                        position: "absolute",
+                        left: "70.3%", // Adjust position (e.g., set `left: 10` for left side)
+                        bottom: 0,
+                        width: 80,
+                        height: 200, // Custom scrollbar size
 
-                  <Animated.Image source={require('../../assets/images/scrollIndicator.png')} style={[
-                    {
-                      position: 'absolute',
-                      left: '70.3%', // Adjust position (e.g., set `left: 10` for left side)
-                      bottom: 0,
-                      width: 80,
-                      height: 200, // Custom scrollbar size
-
-                      borderRadius: 10,
-                      transform: [
-                        {
-                          translateY: scrollY.interpolate({
-                            inputRange: [0, 1000],
-                            outputRange: [0, 200], // Adjust for screen size
-                            extrapolate: 'clamp',
-                          }),
-                        },
-                      ],
-                    },
-                  ]}
-                    resizeMode="cover" />
+                        borderRadius: 10,
+                        transform: [
+                          {
+                            translateY: scrollY.interpolate({
+                              inputRange: [0, 1000],
+                              outputRange: [0, 200], // Adjust for screen size
+                              extrapolate: "clamp",
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                    resizeMode="cover"
+                  />
                 </View>
 
-
-                <TouchableOpacity style={{
-                  position: 'absolute',
-                  top: '1%',
-                  left: 0,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  backgroundColor: "transparent",
-                  height: 40,
-                  width: 150,
-                  borderRadius: 20,
-                  display: 'flex', justifyContent: 'center',
-                }}
-                  onPress={() => handleHidePoUp()}>
-                  <Image source={require('../../assets/images/quiteQuize.png')} style={{ width: 20, height: 20 }} tintColor='#000000' />
-                  <Text style={{
-                    fontSize: 17,
-                    color: "#000000",
-                    fontFamily: "Poppins-Bold",
-                  }}>
+                <TouchableOpacity
+                  style={{
+                    position: "absolute",
+                    top: "1%",
+                    left: 0,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: "transparent",
+                    height: 40,
+                    width: 150,
+                    borderRadius: 20,
+                    display: "flex",
+                    justifyContent: "center",
+                  }}
+                  onPress={() => handleHidePoUp()}
+                >
+                  <Image
+                    source={require("../../assets/images/quiteQuize.png")}
+                    style={{ width: 20, height: 20 }}
+                    tintColor="#000000"
+                  />
+                  <Text
+                    style={{
+                      fontSize: 17,
+                      color: "#000000",
+                      fontFamily: "Poppins-Bold",
+                    }}
+                  >
                     Go Back
                   </Text>
                 </TouchableOpacity>
               </View>
             </View>
-
           </Modal>
         </View>
 
@@ -763,11 +858,15 @@ export default function HomeScreen() {
               style={styles.quizCodeButton}
               onPress={handleEnterQuizCode}
             >
-              <Text style={{
-                color: "#333333",
-                fontFamily: "Poppins-Bold",
-                fontSize: 16,
-              }}>Enter</Text>
+              <Text
+                style={{
+                  color: "#333333",
+                  fontFamily: "Poppins-Bold",
+                  fontSize: 16,
+                }}
+              >
+                Enter
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -911,7 +1010,7 @@ const styles = StyleSheet.create({
   },
 });
 
-
-
 // import { RefreshControl } from "react-native";
-{/* <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} showsVerticalScrollIndicator={false}> */}
+{
+  /* <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} showsVerticalScrollIndicator={false}> */
+}

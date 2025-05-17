@@ -1,6 +1,6 @@
 // firebase/firebaseConfig.ts
 import { initializeApp } from "firebase/app";
-import { initializeAuth, getReactNativePersistence } from "firebase/auth";
+import { initializeAuth, getAuth } from "firebase/auth";
 import { getDatabase } from "firebase/database";
 import { getStorage } from "firebase/storage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -19,10 +19,34 @@ const firebaseConfig = {
 // Initialize Firebase app
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase Auth with AsyncStorage persistence for React Native
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage),
-});
+// Set up persistent auth
+let auth;
+
+try {
+  // Create a custom persistence implementation
+  const customPersistence = {
+    type: 'customImplementation',
+    async _get(key) {
+      const value = await AsyncStorage.getItem(key);
+      return value;
+    },
+    async _set(key, value) {
+      await AsyncStorage.setItem(key, value);
+    },
+    async _remove(key) {
+      await AsyncStorage.removeItem(key);
+    }
+  };
+
+  // Initialize auth with custom persistence
+  auth = initializeAuth(app, {
+    persistence: customPersistence
+  });
+} catch (error) {
+  // Fallback to standard auth if custom persistence fails
+  console.warn("Custom auth persistence failed, using standard auth:", error);
+  auth = getAuth(app);
+}
 
 // Initialize other Firebase services
 const database = getDatabase(app);
