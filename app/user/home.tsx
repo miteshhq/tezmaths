@@ -1,4 +1,3 @@
-// app/user/home.tsx
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
@@ -39,6 +38,8 @@ export default function HomeScreen() {
   const [finishedQuizzes, setFinishedQuizzes] = useState([]);
   const [quizCode, setQuizCode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [userStreak, setUserStreak] = useState(0);
+
   useEffect(() => {
     console.log("availableLevels------>42", availableLevels);
   });
@@ -80,6 +81,7 @@ export default function HomeScreen() {
           setFullName(data.fullName || "Unavailable");
           setReferrals(data.referrals || 0);
           setUserPoints(data.totalPoints || 0);
+          setUserStreak(data.streak || 0);
         }
 
         const userRef = ref(database, `users/${userId}`);
@@ -94,6 +96,7 @@ export default function HomeScreen() {
             totalPoints: data.totalPoints || 0,
             highestCompletedLevelCompleted:
               data.highestCompletedLevelCompleted || "",
+            streak: data.streak || 0,
           };
           console.log("FORMATTED DATA:::::::::");
           console.log(formattedData);
@@ -101,6 +104,7 @@ export default function HomeScreen() {
           setFullName(formattedData.fullName);
           setReferrals(formattedData.referrals);
           setUserPoints(formattedData.totalPoints);
+          setUserStreak(formattedData.streak);
 
           await AsyncStorage.setItem("userData", JSON.stringify(formattedData));
         }
@@ -120,19 +124,16 @@ export default function HomeScreen() {
       const userId = auth.currentUser?.uid;
 
       if (userId) {
-        // Get user's current level
         const userRef = ref(database, `users/${userId}`);
         const userSnapshot = await get(userRef);
         const userData = userSnapshot.val() || {};
         const currentUserLevel = userData.currentLevel || 1;
 
-        // Get highest completed level from AsyncStorage
         const storedLevel = await AsyncStorage.getItem(LEVEL_STORAGE_KEY);
         console.log("storedLevel=---->>> 123", storedLevel);
 
         setHighestCompletedLevelComplete(Number(storedLevel));
 
-        // Create array of available levels up to user's current level
         const availableLevelsArray = Array.from(
           { length: currentUserLevel },
           (_, i) => i + 1
@@ -168,7 +169,7 @@ export default function HomeScreen() {
           }
         }
 
-        setFinishedQuizzes(finished.reverse().slice(0, 5)); // Update finished quizzes
+        setFinishedQuizzes(finished.reverse().slice(0, 5));
       }
     } catch (error) {
       console.log("Error fetching finished quizzes:", error);
@@ -243,10 +244,9 @@ export default function HomeScreen() {
       setCurrentLevel(currentLevel);
       console.log("my current level is in home---.>", currentLevel);
 
-      // Get max level from quizzes
       const quizzesRef = ref(database, "quizzes");
       const quizzesSnapshot = await get(quizzesRef);
-      setQuizzesSnapshot(quizzesSnapshot.val()); // Store actual snapshot value
+      setQuizzesSnapshot(quizzesSnapshot.val());
       console.log("quizzesSnapshot---->>. 236", quizzesSnapshot);
 
       let maxLevel = 1;
@@ -268,14 +268,13 @@ export default function HomeScreen() {
     }
   };
 
-  const [hasFetched, setHasFreshed] = useState("false"); // ✅ Tracks if data has been fetched
+  const [hasFetched, setHasFreshed] = useState("false");
 
   const fetchData = async (forceRefresh = false) => {
     try {
       setIsLoadingLevels(true);
 
       if (!forceRefresh) {
-        // ✅ Only check AsyncStorage if not forcing a refresh
         const [alreadyFetched, storedMaxLevel, storedCurrentLevel] =
           await Promise.all([
             AsyncStorage.getItem("hasFetched"),
@@ -294,7 +293,6 @@ export default function HomeScreen() {
         }
       }
 
-      // ✅ Fetch from backend (forceRefresh or initial load)
       console.log(
         forceRefresh
           ? "Refreshing from backend... 🔄"
@@ -313,7 +311,6 @@ export default function HomeScreen() {
       const maxLvl = await getMaxLevel();
       console.log("my server level 262---->>", maxLvl);
 
-      // ✅ Update state and AsyncStorage
       setMaxLevel(maxLvl);
       await Promise.all([
         AsyncStorage.setItem("maxLevel", JSON.stringify(maxLvl)),
@@ -327,13 +324,12 @@ export default function HomeScreen() {
     }
   };
 
-  // ✅ useEffect for initial load
   useEffect(() => {
     fetchData();
 
     const handleAppStateChange = (nextAppState: string) => {
       if (nextAppState === "active") {
-        fetchData(); // ✅ Refresh on app resume
+        fetchData();
       }
     };
 
@@ -343,7 +339,7 @@ export default function HomeScreen() {
     );
 
     return () => {
-      subscription.remove(); // ✅ Cleanup
+      subscription.remove();
     };
   }, []);
 
@@ -361,8 +357,6 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    // Only run if the value actually changes
-
     if (openLevelPopup) {
       handlePoUp();
     }
@@ -375,11 +369,11 @@ export default function HomeScreen() {
     await SoundManager.stopSound("failSoundEffect");
     setHandleStart(false);
     const newParams = { ...params };
-    delete newParams.openLevelPopup; // Remove the parameter
+    delete newParams.openLevelPopup;
 
     router.replace({
-      pathname: "", // Replace with your actual page route
-      params: newParams, // Updated params without `openLevelPopup`
+      pathname: "",
+      params: newParams,
     });
   };
 
@@ -394,12 +388,12 @@ export default function HomeScreen() {
       Animated.loop(
         Animated.sequence([
           Animated.timing(scaleAnim, {
-            toValue: 1.05, // Zoom in
+            toValue: 1.05,
             duration: 500,
             useNativeDriver: true,
           }),
           Animated.timing(scaleAnim, {
-            toValue: 1, // Zoom out
+            toValue: 1,
             duration: 500,
             useNativeDriver: true,
           }),
@@ -447,16 +441,16 @@ export default function HomeScreen() {
 
   const scrollY = useRef(new Animated.Value(0)).current;
 
-  const textWidth = 270; // Set the width you want
+  const textWidth = 270;
   const animatedValue = useRef(new Animated.Value(textWidth)).current;
   useEffect(() => {
     const startAnimation = () => {
-      animatedValue.setValue(textWidth); // Reset position
+      animatedValue.setValue(textWidth);
       Animated.timing(animatedValue, {
-        toValue: -textWidth, // Move left beyond its width
-        duration: 8000, // Adjust speed as needed
+        toValue: -textWidth,
+        duration: 8000,
         useNativeDriver: true,
-      }).start(() => startAnimation()); // Loop animation
+      }).start(() => startAnimation());
     };
 
     startAnimation();
@@ -514,6 +508,23 @@ export default function HomeScreen() {
               <Text style={styles.pointsText}>{userPoints.toFixed()}</Text>
             )}
           </View>
+          <View
+            style={{ flexDirection: "row", alignItems: "center", marginTop: 5 }}
+          >
+            <Image
+              source={require("../../assets/streakIcon.png")}
+              style={{ width: 16, height: 16, marginRight: 4 }}
+            />
+            <Text
+              style={{
+                fontSize: 11,
+                fontFamily: "Poppins-Bold",
+                color: "#333333",
+              }}
+            >
+              {userStreak} days
+            </Text>
+          </View>
         </View>
         <Text style={styles.subtitle}>Test your knowledge and have fun!</Text>
       </View>
@@ -534,7 +545,6 @@ export default function HomeScreen() {
             }}
             disabled={currentLevel === 0 || undefined}
             onPress={() => handlePoUp()}
-            // router.push("/user/QuizScreen")
           >
             {currentLevel === 0 || undefined ? (
               <View
@@ -570,6 +580,13 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
 
+          <TouchableOpacity
+            style={styles.tasksButton}
+            onPress={() => router.push("/user/TasksScreen")}
+          >
+            <Text style={styles.tasksButtonText}>View Tasks</Text>
+          </TouchableOpacity>
+
           <Modal
             visible={handleStart}
             transparent
@@ -584,7 +601,6 @@ export default function HomeScreen() {
             }}
           >
             <View
-              // Change to your image path
               style={{
                 width: "100%",
                 height: "100%",
@@ -622,7 +638,7 @@ export default function HomeScreen() {
                       onPress={() => handleContinue()}
                     >
                       <ImageBackground
-                        source={require("../../assets/images/continue.png")} // Change to your image path
+                        source={require("../../assets/images/continue.png")}
                         style={{
                           width: "100%",
                           height: "100%",
@@ -653,7 +669,7 @@ export default function HomeScreen() {
                   </Animated.View>
                 )}
                 <ImageBackground
-                  source={require("../../assets/images/selectLevel.png")} // Change to your image path
+                  source={require("../../assets/images/selectLevel.png")}
                   style={{
                     width: 150,
                     height: 150,
@@ -701,22 +717,19 @@ export default function HomeScreen() {
                       [{ nativeEvent: { contentOffset: { y: scrollY } } }],
                       { useNativeDriver: false }
                     )}
-                    showsVerticalScrollIndicator={false} // Hide default
+                    showsVerticalScrollIndicator={false}
                   >
                     {Array.from({ length: maxLevel }, (_, index) => {
                       const level = index + 1;
                       console.log("level 741----.>>>>>", level);
 
-                      // Default to 0 if currentLevel is undefined
                       const completedLevels = highestCompletedLevelCompleted
                         ? Number(highestCompletedLevelCompleted)
                         : 0;
 
-                      // If currentLevel is undefined, enable only index 0
                       const highestEnabledIndex =
                         currentLevel === undefined ? 0 : completedLevels;
 
-                      // Disable any index greater than highestEnabledIndex
                       const isDisabled = index > highestEnabledIndex;
                       console.log(
                         "Current Level:",
@@ -749,7 +762,7 @@ export default function HomeScreen() {
                               width: 60,
 
                               height: 60,
-                              backgroundColor: isDisabled ? "#ccc" : "#b91c1c", // Gray out disabled buttons
+                              backgroundColor: isDisabled ? "#ccc" : "#b91c1c",
                               borderRadius: 50,
                               display: "flex",
                               justifyContent: "center",
@@ -759,7 +772,7 @@ export default function HomeScreen() {
                             onPress={() => handleQuizChoice(level, true)}
                           >
                             <ImageBackground
-                              source={require("../../assets/images/levelImage.png")} // Change to your image path
+                              source={require("../../assets/images/levelImage.png")}
                               style={{
                                 width: "100%",
                                 height: "100%",
@@ -786,17 +799,17 @@ export default function HomeScreen() {
                     style={[
                       {
                         position: "absolute",
-                        left: "70.3%", // Adjust position (e.g., set `left: 10` for left side)
+                        left: "70.3%",
                         bottom: 0,
                         width: 80,
-                        height: 200, // Custom scrollbar size
+                        height: 200,
 
                         borderRadius: 10,
                         transform: [
                           {
                             translateY: scrollY.interpolate({
                               inputRange: [0, 1000],
-                              outputRange: [0, 200], // Adjust for screen size
+                              outputRange: [0, 200],
                               extrapolate: "clamp",
                             }),
                           },
@@ -843,7 +856,6 @@ export default function HomeScreen() {
           </Modal>
         </View>
 
-        {/*quiz code*/}
         <View style={styles.quizCodeSection}>
           <Text style={styles.sectionTitle}>Enter Quiz Code</Text>
           <View style={styles.quizCodeInputContainer}>
@@ -875,7 +887,6 @@ export default function HomeScreen() {
   );
 }
 
-// Styling
 const { width } = Dimensions.get("window");
 const CARD_WIDTH = width * 0.7;
 const CARD_HEIGHT = 180 * 0.8;
@@ -1008,9 +1019,17 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins-Bold",
     fontSize: 16,
   },
+  tasksButton: {
+    backgroundColor: "#F7C948",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  tasksButtonText: {
+    color: "#333333",
+    fontFamily: "Poppins-Bold",
+    fontSize: 16,
+  },
 });
-
-// import { RefreshControl } from "react-native";
-{
-  /* <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} showsVerticalScrollIndicator={false}> */
-}

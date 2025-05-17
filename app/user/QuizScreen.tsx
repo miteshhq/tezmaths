@@ -139,6 +139,48 @@ export default function QuizScreen() {
     loadHighestLevel();
   }, [maxLevel, auth.currentUser?.uid, database]);
 
+  async function updateStreak() {
+    const userId = auth.currentUser?.uid;
+    if (!userId) return;
+    try {
+      const userRef = ref(database, `users/${userId}`);
+      const currentDate = new Date();
+      const currentDateString = currentDate.toISOString().split("T")[0];
+      const snapshot = await get(userRef);
+      const userData = snapshot.val() || {};
+      const lastCompletionDate = userData.lastCompletionDate;
+      const currentStreak = userData.streak || 0;
+
+      if (lastCompletionDate) {
+        const lastDate = new Date(lastCompletionDate + "T00:00:00");
+        const nextDay = new Date(lastDate);
+        nextDay.setDate(lastDate.getDate() + 1);
+        const nextDayString = nextDay.toISOString().split("T")[0];
+
+        if (currentDateString === lastCompletionDate) {
+          return;
+        } else if (currentDateString === nextDayString) {
+          await update(userRef, {
+            streak: currentStreak + 1,
+            lastCompletionDate: currentDateString,
+          });
+        } else {
+          await update(userRef, {
+            streak: 1,
+            lastCompletionDate: currentDateString,
+          });
+        }
+      } else {
+        await update(userRef, {
+          streak: 1,
+          lastCompletionDate: currentDateString,
+        });
+      }
+    } catch (error) {
+      console.error("Error updating streak:", error);
+    }
+  }
+
   const updateUserPoints = async (points: number) => {
     console.log("points i get is  ------>>>>> line 55", points);
 
@@ -418,6 +460,7 @@ export default function QuizScreen() {
     } else {
       await markLevelAsCompleted(currentLevel);
       await handleLevelChange(currentLevel);
+      await updateStreak();
     }
   };
 
@@ -606,6 +649,9 @@ export default function QuizScreen() {
         text: questions[currentQuestionIndex]?.explanation,
         image: questions[currentQuestionIndex]?.answerImage,
       });
+      if (currentQuestionIndex === questions.length - 1) {
+        await updateStreak(); // Add this line
+      }
     }
   };
 

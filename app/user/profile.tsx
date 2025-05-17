@@ -81,7 +81,7 @@ export default function ProfileScreen() {
   };
 
   const handleCopyReferralLink = async () => {
-    const referralLink = `https://trivia.com/${userData.fullName}`;
+    const referralLink = `https://trivia.com/${userData.username}`;
     await Clipboard.setStringAsync(referralLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -145,7 +145,7 @@ export default function ProfileScreen() {
           <Text style={styles.referralTitle}>Refer friends</Text>
           <View style={styles.referralContainer}>
             <Text style={styles.referralLink}>
-              https://trivia.com/{userData.fullName}
+              https://trivia.com/{userData.username}
             </Text>
             <TouchableOpacity onPress={handleCopyReferralLink}>
               <Text style={styles.copyButton}>📋</Text>
