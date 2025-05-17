@@ -66,8 +66,8 @@ def main():
     parser.add_argument(
         "--exclude-files",
         nargs="*",
-        default=["dump.txt", "package-lock.json"],
-        help="File names to skip (default: dump.txt, package-lock.json)"
+        default=["dump.txt", "package-lock.json", "main.py"],
+        help="File names to skip (default: dump.txt, package-lock.json, main.py)"
     )
     args = parser.parse_args()
 
