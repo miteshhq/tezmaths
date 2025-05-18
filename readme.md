@@ -10,7 +10,7 @@
 4. Streak System - TO BE CHECKED
  • Add daily quiz streak tracking with visual indicator on the dashboard.
 
-5. Continuous Quiz Levels
+5. Continuous Quiz Levels - TO BE CHECKED
  • No manual action unless user loses — keeps quiz flow smooth.
 
 6. Scorecard with Share Option
