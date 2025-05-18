@@ -1,3 +1,5 @@
 node_modules
 tezmaths.zip
 .expo
+./main.py
+./dump.txt
