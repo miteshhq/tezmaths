@@ -496,34 +496,30 @@ export default function HomeScreen() {
                 : 0}
             </Text>
           </View>
-          <View style={styles.pointsContainer}>
-            <Image
-              source={require("../../assets/diamond.png")}
-              style={styles.diamondIcon}
-            />
+          <View style={{ flexDirection: "column", alignItems: "center" }}>
+            <View style={styles.pointsContainer}>
+              <Image
+                source={require("../../assets/diamond.png")}
+                style={styles.diamondIcon}
+              />
+              {loading ? (
+                <ActivityIndicator color="#ffffff" size={30} />
+              ) : (
+                <Text style={styles.pointsText}>{userPoints.toFixed()}</Text>
+              )}
+            </View>
 
-            {loading ? (
-              <ActivityIndicator color="#ffffff" size={30} />
-            ) : (
-              <Text style={styles.pointsText}>{userPoints.toFixed()}</Text>
-            )}
-          </View>
-          <View
-            style={{ flexDirection: "row", alignItems: "center", marginTop: 5 }}
-          >
-            <Image
-              source={require("../../assets/streakIcon.png")}
-              style={{ width: 16, height: 16, marginRight: 4 }}
-            />
-            <Text
-              style={{
-                fontSize: 11,
-                fontFamily: "Poppins-Bold",
-                color: "#333333",
-              }}
-            >
-              {userStreak} days
-            </Text>
+            <View style={styles.pointsContainer}>
+              <Image
+                source={require("../../assets/streakIcon.png")}
+                style={{ width: 16, height: 16, marginRight: 4 }}
+              />
+              {loading ? (
+                <ActivityIndicator color="#ffffff" size={30} />
+              ) : (
+                <Text style={styles.pointsText}>{userStreak} days</Text>
+              )}
+            </View>
           </View>
         </View>
         <Text style={styles.subtitle}>Test your knowledge and have fun!</Text>
@@ -922,6 +918,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 20,
+    marginBottom: 4,
   },
   diamondIcon: {
     width: 16,

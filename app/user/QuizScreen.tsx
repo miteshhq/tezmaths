@@ -431,13 +431,15 @@ export default function QuizScreen() {
       } else {
         await handleLevelCompletion();
       }
-    }, 3000);
+    }, 500);
   };
 
-  const handleIncorrectAnswer = () => {
+  const handleIncorrectAnswer = async () => {
     setIsAnswerWrong(true);
     setIsPlaying(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    if (Platform.OS !== "web") {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
     setShowExplanation(true);
     setCurrentExplanation({
       text: questions[currentQuestionIndex]?.explanation,
@@ -530,7 +532,7 @@ export default function QuizScreen() {
         setTimeout(() => {
           setShowFeedback(false);
           startTimer();
-        }, 3000);
+        }, 500);
       } else {
         router.push({
           pathname: "/user/results",
@@ -572,7 +574,9 @@ export default function QuizScreen() {
     setIsTimeOut(true); // Ascertain if the user loses by quitting (back button) or completes all levels, requiring manual navigation to results.
 
     setIsPlaying(false);
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    if (Platform.OS !== "web") {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
     setShowExplanation(true);
     setCurrentExplanation({
       text: questions[currentQuestionIndex]?.explanation,
@@ -713,22 +717,38 @@ export default function QuizScreen() {
     );
   }
 
+  const handleTestSkip = async () => {
+    console.log("TEST SKIP pressed"); // ← add this
+    if (timerRef.current) {
+      clearInterval(timerRef.current as any);
+      setIsPlaying(false);
+    }
+    await markLevelAsCompleted(currentLevel);
+    router.push({
+      pathname: "/user/results",
+      params: {
+        highestLevelReached,
+        quizScore: 9999,
+        correctAnswers: questions.length,
+        totalQuestions: questions.length,
+        currentLevel,
+        isLevelComplete: true,
+        maxLevel,
+        isSelectedLevel,
+        level: currentLevel,
+      },
+    });
+  };
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
-      <TouchableOpacity
-        style={styles.testButton}
-        onPress={() => {
-          markLevelAsCompleted(currentLevel);
-          handleLevelChange(currentLevel + 1);
-          setQuizScore(9999);
-          setCorrectAnswers(questions.length);
-        }}
-      >
+      <TouchableOpacity style={styles.testButton} onPress={handleTestSkip}>
         <Text style={styles.testText}>TEST SKIP</Text>
       </TouchableOpacity>
+
       <View style={styles.contentContainer}>
         {showFeedback && (
           <View style={styles.feedbackCard}>
@@ -983,6 +1003,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 20,
     right: 20,
+    zIndex: 999,
+    pointerEvents: "auto",
     backgroundColor: "red",
     padding: 10,
     borderRadius: 10,
