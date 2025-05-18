@@ -1,12 +1,22 @@
-import React, { useState, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert, BackHandler, ScrollView } from "react-native";
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  BackHandler,
+  ScrollView,
+  Platform,
+  Linking,
+} from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { ref, get, update } from "firebase/database";
 import { database, auth } from "../../firebase/firebaseConfig";
-
 import { Player } from "@lottiefiles/react-lottie-player";
 import SoundManager from "./components/souund/soundManager";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Share } from "react-native";
 
 export default function ResultsScreen() {
   const [showScore, setShowScore] = useState(false);
@@ -20,40 +30,55 @@ export default function ResultsScreen() {
     currentLevel,
     maxLevel,
     isSelectedLevel,
-    level: level
-
+    level: level,
   } = params;
 
+  const [username, setUsername] = useState("");
 
+  useEffect(() => {
+    const loadUsername = async () => {
+      try {
+        const cachedData = await AsyncStorage.getItem("userData");
+        if (cachedData) {
+          const data = JSON.parse(cachedData);
+          setUsername(data.username || "User");
+        }
+      } catch (error) {
+        console.error("Failed to load username:", error);
+      }
+    };
+    loadUsername();
+  }, []);
 
   useEffect(() => {
     const playLevelSound = async () => {
-      if ((isLevelComplete && maxLevel !== currentLevel) || (isLevelComplete && maxLevel === currentLevel)) {
-        await SoundManager.playSound('clappingSoundEffect', { isLooping: false });
-        await SoundManager.playSound('victorySoundEffect', { isLooping: false });
-
-      }
-      else if (!isLevelComplete) {
-        await SoundManager.playSound('failSoundEffect', { isLooping: false });
+      if (
+        (isLevelComplete && maxLevel !== currentLevel) ||
+        (isLevelComplete && maxLevel === currentLevel)
+      ) {
+        await SoundManager.playSound("clappingSoundEffect", {
+          isLooping: false,
+        });
+        await SoundManager.playSound("victorySoundEffect", {
+          isLooping: false,
+        });
+      } else if (!isLevelComplete) {
+        await SoundManager.playSound("failSoundEffect", { isLooping: false });
       }
       console.log("state of me now 200", isLevelComplete);
       console.log("maxlevel 2343", maxLevel, currentLevel);
     };
 
-
     playLevelSound();
-  }, [isLevelComplete, maxLevel, currentLevel]); // Add dependencies to re-run effect only when values change
-
-
+  }, [isLevelComplete, maxLevel, currentLevel]);
 
   const getAllLevelScores = async (maxLevel: number) => {
-    let scores: { [key: string]: number } = {}; // Ensure object keys are strings
+    let scores: { [key: string]: number } = {};
     try {
-      for (let level = 1; level <= maxLevel; level++) {
+      for (let level = 1; value <= maxLevel; level++) {
         const key = `levelScore_${level}`;
         const score = await AsyncStorage.getItem(key);
-
-        if (score !== null) { // Only store if a value exists
+        if (score !== null) {
           scores[`Level${level}`] = Number(score);
         }
       }
@@ -65,27 +90,22 @@ export default function ResultsScreen() {
     }
   };
 
-
   const [scores, setScores] = useState<{ [key: string]: number } | null>(null);
 
   useEffect(() => {
     const fetchScores = async () => {
       const retrievedScores = await getAllLevelScores(Number(currentLevel));
       setScores(retrievedScores);
-
     };
-
     fetchScores();
   }, []);
 
-
   const clearAllLevelScores = async () => {
     try {
-      const keys = await AsyncStorage.getAllKeys(); // Get all stored keys
-      const levelKeys = keys.filter((key) => key.startsWith("levelScore_")); // Filter only level score keys
-
+      const keys = await AsyncStorage.getAllKeys();
+      const levelKeys = keys.filter((key) => key.startsWith("levelScore_"));
       if (levelKeys.length > 0) {
-        await AsyncStorage.multiRemove(levelKeys); // Remove all level score keys
+        await AsyncStorage.multiRemove(levelKeys);
         console.log("All level scores removed successfully!");
       } else {
         console.log("No level scores found to remove.");
@@ -95,10 +115,8 @@ export default function ResultsScreen() {
     }
   };
 
-
   useEffect(() => {
     const backAction = () => {
-
       Alert.alert(
         "Are you sure you want to quit the quiz?",
         ``,
@@ -106,40 +124,40 @@ export default function ResultsScreen() {
           {
             text: "Resume Quiz",
             style: "cancel",
-            onPress: () => { }, // Just cancels the alert
+            onPress: () => {},
           },
           {
             text: "Quit anyway!",
             onPress: async () => {
-              await clearAllLevelScores()
-              await SoundManager.stopSound('clappingSoundEffect');
-              await SoundManager.stopSound('victorySoundEffect');
-              await SoundManager.stopSound('failSoundEffect');
-
-              router.push({ pathname: "/dashboard", params: { openLevelPopup: true as any } })
+              await clearAllLevelScores();
+              await SoundManager.stopSound("clappingSoundEffect");
+              await SoundManager.stopSound("victorySoundEffect");
+              await SoundManager.stopSound("failSoundEffect");
+              router.push({
+                pathname: "/dashboard",
+                params: { openLevelPopup: true as any },
+              });
             },
           },
         ],
         { cancelable: true }
       );
-
-      return true; // Prevent default back action
+      return true;
     };
 
-    const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction as any);
-
-    return () => backHandler.remove(); // Cleanup on unmount
-  }, []); // ✅ Add resumeTimer as a dependency
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      backAction as any
+    );
+    return () => backHandler.remove();
+  }, []);
 
   const [isAllLevelsComplete, setIsAllLevelsComplete] = useState(false);
-
-
 
   useEffect(() => {
     if (showScore) {
       checkAllLevelsCompletion();
     }
-    // updateUserProgress();
   }, [showScore]);
 
   const checkAllLevelsCompletion = async () => {
@@ -151,8 +169,7 @@ export default function ResultsScreen() {
       const snapshot = await get(userRef);
       const userData = snapshot.val() || {};
 
-      // Get max level from quizzes
-      const quizzesRef = ref(database, 'quizzes');
+      const quizzesRef = ref(database, "quizzes");
       const quizzesSnapshot = await get(quizzesRef);
       let maxLevel = 1;
 
@@ -173,38 +190,67 @@ export default function ResultsScreen() {
     }
   };
 
-
   const handleContinue = async () => {
-    await SoundManager.stopSound('clappingSoundEffect');
-    await SoundManager.stopSound('victorySoundEffect');
-    await SoundManager.stopSound('failSoundEffect');
+    await SoundManager.stopSound("clappingSoundEffect");
+    await SoundManager.stopSound("victorySoundEffect");
+    await SoundManager.stopSound("failSoundEffect");
     if (isSelectedLevel && level !== maxLevel) {
       router.push({
         pathname: "/user/QuizScreen",
         params: {
-          level: Number(level) + 1
-
+          level: Number(level) + 1,
         },
       });
-
-
-    }
-
-    else {
-      if ((maxLevel != currentLevel) && isLevelComplete) {
-        router.push("/user/QuizScreen")
-
-      } else if ((maxLevel != currentLevel) && !isLevelComplete) {
-        router.push({ pathname: "/dashboard", params: { openLevelPopup: true as any } })
-        await clearAllLevelScores()
+    } else {
+      if (maxLevel != currentLevel && isLevelComplete) {
+        router.push("/user/QuizScreen");
+      } else if (maxLevel != currentLevel && !isLevelComplete) {
+        router.push({
+          pathname: "/dashboard",
+          params: { openLevelPopup: true as any },
+        });
+        await clearAllLevelScores();
+      } else if (maxLevel === currentLevel) {
+        router.push({
+          pathname: "/dashboard",
+          params: { openLevelPopup: true as any },
+        });
+        await clearAllLevelScores();
       }
-
-      else if (maxLevel === currentLevel) {
-        router.push({ pathname: "/dashboard", params: { openLevelPopup: true as any } })
-        await clearAllLevelScores()
-      }
     }
+  };
 
+  const handleShare = async () => {
+    try {
+      const totalScore = Object.values(scores ?? {}).reduce(
+        (sum, score) => sum + score,
+        0
+      );
+      const message = `I scored ${totalScore} in the quiz!`;
+
+      if (Platform.OS === "ios") {
+        await Share.share({
+          message,
+        });
+      } else if (Platform.OS === "android") {
+        try {
+          await Linking.openURL(
+            `whatsapp://send?text=${encodeURIComponent(message)}`
+          );
+        } catch (error) {
+          Alert.alert(
+            "Error",
+            "WhatsApp is not installed. Please share manually."
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error sharing:", error);
+      Alert.alert(
+        "Sharing Error",
+        "There was an issue sharing your score. Please try again."
+      );
+    }
   };
 
   return (
@@ -218,74 +264,107 @@ export default function ResultsScreen() {
         </TouchableOpacity>
       ) : (
         <View style={styles.scoreCard}>
+          <Text style={styles.userInfoText}>Username: {username}</Text>
           <Text style={styles.scoreText}>
-            Total score for this attempt: {Object.values(scores ?? {}).reduce((sum, score) => sum + score, 0)}
+            Total score for this attempt:{" "}
+            {Object.values(scores ?? {}).reduce((sum, score) => sum + score, 0)}
           </Text>
 
-          <View style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <ScrollView style={{ maxHeight: 200 }} contentContainerStyle={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderColor: 'gray', borderWidth: 3, padding: 5, borderRadius: 22,
-            }}>
-              <Text style={{
-                fontSize: 14,
-                color: "#333",
-                fontFamily: "Poppins-Bold",
-                marginBottom: 10,
-                textDecorationStyle: 'dotted',
-                textDecorationLine: 'underline'
-              }}>
+          <View
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+            }}
+          >
+            <ScrollView
+              style={{ maxHeight: 200 }}
+              contentContainerStyle={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                borderColor: "gray",
+                borderWidth: 3,
+                padding: 5,
+                borderRadius: 22,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: "#333",
+                  fontFamily: "Poppins-Bold",
+                  marginBottom: 10,
+                  textDecorationStyle: "dotted",
+                  textDecorationLine: "underline",
+                }}
+              >
                 Your Score For this attempt
               </Text>
               <View>
                 {scores &&
                   Object.entries(scores).map(([level, score]) => (
-                    <Text key={level} style={{ fontSize: 16, marginVertical: 4 }}>
+                    <Text
+                      key={level}
+                      style={{ fontSize: 16, marginVertical: 4 }}
+                    >
                       {level}: {score}
                     </Text>
                   ))}
               </View>
-              <Text style={{
-                fontSize: 14,
-                color: "#333",
-                fontFamily: "Poppins-Bold",
-                marginBottom: 10,
-                textDecorationStyle: 'dotted',
-                textDecorationLine: 'underline'
-              }}>
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: "#333",
+                  fontFamily: "Poppins-Bold",
+                  marginBottom: 10,
+                  textDecorationStyle: "dotted",
+                  textDecorationLine: "underline",
+                }}
+              >
                 level:{currentLevel} Quiz Statistics
               </Text>
-              <Text style={{
-                fontSize: 14,
-                color: "#333",
-                fontFamily: "Poppins-Bold",
-                marginBottom: 10,
-                maxWidth: 160
-              }}>
-                Number of Correctly Answered question in level {currentLevel}:{correctAnswers}
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: "#333",
+                  fontFamily: "Poppins-Bold",
+                  marginBottom: 10,
+                  maxWidth: 160,
+                }}
+              >
+                Number of Correctly Answered question in level {currentLevel}:
+                {correctAnswers}
               </Text>
-              <Text style={{
-                fontSize: 14,
-                color: "#333",
-                fontFamily: "Poppins-Bold",
-                marginBottom: 10,
-              }}>
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: "#333",
+                  fontFamily: "Poppins-Bold",
+                  marginBottom: 10,
+                }}
+              >
                 Total Question in level {currentLevel} :{totalQuestions}
               </Text>
-              <Text style={{
-                fontSize: 14,
-                color: "#333",
-                fontFamily: "Poppins-Bold",
-                marginBottom: 10,
-              }}>
-                Total Miss/UnAnswered question in level {currentLevel}: {Number(totalQuestions) - Number(correctAnswers)}
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: "#333",
+                  fontFamily: "Poppins-Bold",
+                  marginBottom: 10,
+                }}
+              >
+                Total Miss/UnAnswered question in level {currentLevel}:{" "}
+                {Number(totalQuestions) - Number(correctAnswers)}
               </Text>
             </ScrollView>
-
           </View>
           {isLevelComplete && maxLevel != currentLevel && (
             <View style={styles.completionMessage}>
               <Text style={styles.congratsText}>
-                🎉 Congratulations on completing  level:{currentLevel} of the math quiz!
+                🎉 Congratulations on completing level:{currentLevel} of the
+                math quiz!
               </Text>
             </View>
           )}
@@ -293,7 +372,8 @@ export default function ResultsScreen() {
           {!isLevelComplete && (
             <View style={styles.completionMessage}>
               <Text style={styles.congratsText}>
-                😞 😔 unfortunately you didn't  complete this level press continue to select a level and try again!
+                😞 😔 unfortunately you didn't complete this level press
+                continue to select a level and try again!
               </Text>
             </View>
           )}
@@ -301,7 +381,8 @@ export default function ResultsScreen() {
           {isLevelComplete && maxLevel === currentLevel && (
             <View style={styles.completionMessage}>
               <Text style={styles.congratsText}>
-                🎉 Congratulations you have successfully completed all level of the quiz!.
+                🎉 Congratulations you have successfully completed all levels of
+                the quiz!.
               </Text>
             </View>
           )}
@@ -312,33 +393,38 @@ export default function ResultsScreen() {
           >
             <Text style={styles.buttonText}>Continue</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
+            <Text style={styles.buttonText}>Share Score</Text>
+          </TouchableOpacity>
         </View>
       )}
-      {isLevelComplete &&
+      {isLevelComplete && (
         <Player
           autoPlay
           style={{
-            width: '100%',
-            height: '30%',
+            width: "100%",
+            height: "30%",
             marginTop: 30,
             top: 45,
-            position: 'absolute'
+            position: "absolute",
           }}
-          source={require('./../../assets/icons/congrate.json')}
-        />}
-      {!isLevelComplete &&
+          source={require("./../../assets/icons/congrate.json")}
+        />
+      )}
+      {!isLevelComplete && (
         <Player
           autoPlay
           style={{
-            width: '100%',
-            height: '15%',
+            width: "100%",
+            height: "15%",
             marginTop: 30,
             top: 10,
-            position: 'absolute'
+            position: "absolute",
           }}
-          source={require('./../../assets/icons/faliure.json')}
-        />}
-
+          source={require("./../../assets/icons/faliure.json")}
+        />
+      )}
     </View>
   );
 }
@@ -405,5 +491,18 @@ const styles = StyleSheet.create({
     color: "#333",
     fontFamily: "Poppins-Bold",
     textAlign: "center",
+  },
+  userInfoText: {
+    fontSize: 14,
+    color: "#333",
+    fontFamily: "Poppins-Regular",
+    marginBottom: 10,
+  },
+  shareButton: {
+    backgroundColor: "#F7C948",
+    paddingVertical: 15,
+    paddingHorizontal: 40,
+    borderRadius: 10,
+    marginTop: 20,
   },
 });

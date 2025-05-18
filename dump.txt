@@ -34,7 +34,6 @@ export const getRandomQuestions = async (level: number = 1) => {
 };
 
 === FILE: .\app\user\home.tsx ===
-// app/user/home.tsx
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
@@ -75,6 +74,8 @@ export default function HomeScreen() {
   const [finishedQuizzes, setFinishedQuizzes] = useState([]);
   const [quizCode, setQuizCode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [userStreak, setUserStreak] = useState(0);
+
   useEffect(() => {
     console.log("availableLevels------>42", availableLevels);
   });
@@ -116,6 +117,7 @@ export default function HomeScreen() {
           setFullName(data.fullName || "Unavailable");
           setReferrals(data.referrals || 0);
           setUserPoints(data.totalPoints || 0);
+          setUserStreak(data.streak || 0);
         }
 
         const userRef = ref(database, `users/${userId}`);
@@ -130,6 +132,7 @@ export default function HomeScreen() {
             totalPoints: data.totalPoints || 0,
             highestCompletedLevelCompleted:
               data.highestCompletedLevelCompleted || "",
+            streak: data.streak || 0,
           };
           console.log("FORMATTED DATA:::::::::");
           console.log(formattedData);
@@ -137,6 +140,7 @@ export default function HomeScreen() {
           setFullName(formattedData.fullName);
           setReferrals(formattedData.referrals);
           setUserPoints(formattedData.totalPoints);
+          setUserStreak(formattedData.streak);
 
           await AsyncStorage.setItem("userData", JSON.stringify(formattedData));
         }
@@ -156,19 +160,16 @@ export default function HomeScreen() {
       const userId = auth.currentUser?.uid;
 
       if (userId) {
-        // Get user's current level
         const userRef = ref(database, `users/${userId}`);
         const userSnapshot = await get(userRef);
         const userData = userSnapshot.val() || {};
         const currentUserLevel = userData.currentLevel || 1;
 
-        // Get highest completed level from AsyncStorage
         const storedLevel = await AsyncStorage.getItem(LEVEL_STORAGE_KEY);
         console.log("storedLevel=---->>> 123", storedLevel);
 
         setHighestCompletedLevelComplete(Number(storedLevel));
 
-        // Create array of available levels up to user's current level
         const availableLevelsArray = Array.from(
           { length: currentUserLevel },
           (_, i) => i + 1
@@ -204,7 +205,7 @@ export default function HomeScreen() {
           }
         }
 
-        setFinishedQuizzes(finished.reverse().slice(0, 5)); // Update finished quizzes
+        setFinishedQuizzes(finished.reverse().slice(0, 5));
       }
     } catch (error) {
       console.log("Error fetching finished quizzes:", error);
@@ -279,10 +280,9 @@ export default function HomeScreen() {
       setCurrentLevel(currentLevel);
       console.log("my current level is in home---.>", currentLevel);
 
-      // Get max level from quizzes
       const quizzesRef = ref(database, "quizzes");
       const quizzesSnapshot = await get(quizzesRef);
-      setQuizzesSnapshot(quizzesSnapshot.val()); // Store actual snapshot value
+      setQuizzesSnapshot(quizzesSnapshot.val());
       console.log("quizzesSnapshot---->>. 236", quizzesSnapshot);
 
       let maxLevel = 1;
@@ -304,14 +304,13 @@ export default function HomeScreen() {
     }
   };
 
-  const [hasFetched, setHasFreshed] = useState("false"); // ✅ Tracks if data has been fetched
+  const [hasFetched, setHasFreshed] = useState("false");
 
   const fetchData = async (forceRefresh = false) => {
     try {
       setIsLoadingLevels(true);
 
       if (!forceRefresh) {
-        // ✅ Only check AsyncStorage if not forcing a refresh
         const [alreadyFetched, storedMaxLevel, storedCurrentLevel] =
           await Promise.all([
             AsyncStorage.getItem("hasFetched"),
@@ -330,7 +329,6 @@ export default function HomeScreen() {
         }
       }
 
-      // ✅ Fetch from backend (forceRefresh or initial load)
       console.log(
         forceRefresh
           ? "Refreshing from backend... 🔄"
@@ -349,7 +347,6 @@ export default function HomeScreen() {
       const maxLvl = await getMaxLevel();
       console.log("my server level 262---->>", maxLvl);
 
-      // ✅ Update state and AsyncStorage
       setMaxLevel(maxLvl);
       await Promise.all([
         AsyncStorage.setItem("maxLevel", JSON.stringify(maxLvl)),
@@ -363,13 +360,12 @@ export default function HomeScreen() {
     }
   };
 
-  // ✅ useEffect for initial load
   useEffect(() => {
     fetchData();
 
     const handleAppStateChange = (nextAppState: string) => {
       if (nextAppState === "active") {
-        fetchData(); // ✅ Refresh on app resume
+        fetchData();
       }
     };
 
@@ -379,7 +375,7 @@ export default function HomeScreen() {
     );
 
     return () => {
-      subscription.remove(); // ✅ Cleanup
+      subscription.remove();
     };
   }, []);
 
@@ -397,8 +393,6 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    // Only run if the value actually changes
-
     if (openLevelPopup) {
       handlePoUp();
     }
@@ -411,11 +405,11 @@ export default function HomeScreen() {
     await SoundManager.stopSound("failSoundEffect");
     setHandleStart(false);
     const newParams = { ...params };
-    delete newParams.openLevelPopup; // Remove the parameter
+    delete newParams.openLevelPopup;
 
     router.replace({
-      pathname: "", // Replace with your actual page route
-      params: newParams, // Updated params without `openLevelPopup`
+      pathname: "",
+      params: newParams,
     });
   };
 
@@ -430,12 +424,12 @@ export default function HomeScreen() {
       Animated.loop(
         Animated.sequence([
           Animated.timing(scaleAnim, {
-            toValue: 1.05, // Zoom in
+            toValue: 1.05,
             duration: 500,
             useNativeDriver: true,
           }),
           Animated.timing(scaleAnim, {
-            toValue: 1, // Zoom out
+            toValue: 1,
             duration: 500,
             useNativeDriver: true,
           }),
@@ -483,16 +477,16 @@ export default function HomeScreen() {
 
   const scrollY = useRef(new Animated.Value(0)).current;
 
-  const textWidth = 270; // Set the width you want
+  const textWidth = 270;
   const animatedValue = useRef(new Animated.Value(textWidth)).current;
   useEffect(() => {
     const startAnimation = () => {
-      animatedValue.setValue(textWidth); // Reset position
+      animatedValue.setValue(textWidth);
       Animated.timing(animatedValue, {
-        toValue: -textWidth, // Move left beyond its width
-        duration: 8000, // Adjust speed as needed
+        toValue: -textWidth,
+        duration: 8000,
         useNativeDriver: true,
-      }).start(() => startAnimation()); // Loop animation
+      }).start(() => startAnimation());
     };
 
     startAnimation();
@@ -538,17 +532,30 @@ export default function HomeScreen() {
                 : 0}
             </Text>
           </View>
-          <View style={styles.pointsContainer}>
-            <Image
-              source={require("../../assets/diamond.png")}
-              style={styles.diamondIcon}
-            />
+          <View style={{ flexDirection: "column", alignItems: "center" }}>
+            <View style={styles.pointsContainer}>
+              <Image
+                source={require("../../assets/diamond.png")}
+                style={styles.diamondIcon}
+              />
+              {loading ? (
+                <ActivityIndicator color="#ffffff" size={30} />
+              ) : (
+                <Text style={styles.pointsText}>{userPoints.toFixed()}</Text>
+              )}
+            </View>
 
-            {loading ? (
-              <ActivityIndicator color="#ffffff" size={30} />
-            ) : (
-              <Text style={styles.pointsText}>{userPoints.toFixed()}</Text>
-            )}
+            <View style={styles.pointsContainer}>
+              <Image
+                source={require("../../assets/streakIcon.png")}
+                style={{ width: 16, height: 16, marginRight: 4 }}
+              />
+              {loading ? (
+                <ActivityIndicator color="#ffffff" size={30} />
+              ) : (
+                <Text style={styles.pointsText}>{userStreak} days</Text>
+              )}
+            </View>
           </View>
         </View>
         <Text style={styles.subtitle}>Test your knowledge and have fun!</Text>
@@ -570,7 +577,6 @@ export default function HomeScreen() {
             }}
             disabled={currentLevel === 0 || undefined}
             onPress={() => handlePoUp()}
-            // router.push("/user/QuizScreen")
           >
             {currentLevel === 0 || undefined ? (
               <View
@@ -606,6 +612,13 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
 
+          <TouchableOpacity
+            style={styles.tasksButton}
+            onPress={() => router.push("/user/TasksScreen")}
+          >
+            <Text style={styles.tasksButtonText}>View Tasks</Text>
+          </TouchableOpacity>
+
           <Modal
             visible={handleStart}
             transparent
@@ -620,7 +633,6 @@ export default function HomeScreen() {
             }}
           >
             <View
-              // Change to your image path
               style={{
                 width: "100%",
                 height: "100%",
@@ -658,7 +670,7 @@ export default function HomeScreen() {
                       onPress={() => handleContinue()}
                     >
                       <ImageBackground
-                        source={require("../../assets/images/continue.png")} // Change to your image path
+                        source={require("../../assets/images/continue.png")}
                         style={{
                           width: "100%",
                           height: "100%",
@@ -689,7 +701,7 @@ export default function HomeScreen() {
                   </Animated.View>
                 )}
                 <ImageBackground
-                  source={require("../../assets/images/selectLevel.png")} // Change to your image path
+                  source={require("../../assets/images/selectLevel.png")}
                   style={{
                     width: 150,
                     height: 150,
@@ -737,22 +749,19 @@ export default function HomeScreen() {
                       [{ nativeEvent: { contentOffset: { y: scrollY } } }],
                       { useNativeDriver: false }
                     )}
-                    showsVerticalScrollIndicator={false} // Hide default
+                    showsVerticalScrollIndicator={false}
                   >
                     {Array.from({ length: maxLevel }, (_, index) => {
                       const level = index + 1;
                       console.log("level 741----.>>>>>", level);
 
-                      // Default to 0 if currentLevel is undefined
                       const completedLevels = highestCompletedLevelCompleted
                         ? Number(highestCompletedLevelCompleted)
                         : 0;
 
-                      // If currentLevel is undefined, enable only index 0
                       const highestEnabledIndex =
                         currentLevel === undefined ? 0 : completedLevels;
 
-                      // Disable any index greater than highestEnabledIndex
                       const isDisabled = index > highestEnabledIndex;
                       console.log(
                         "Current Level:",
@@ -785,7 +794,7 @@ export default function HomeScreen() {
                               width: 60,
 
                               height: 60,
-                              backgroundColor: isDisabled ? "#ccc" : "#b91c1c", // Gray out disabled buttons
+                              backgroundColor: isDisabled ? "#ccc" : "#b91c1c",
                               borderRadius: 50,
                               display: "flex",
                               justifyContent: "center",
@@ -795,7 +804,7 @@ export default function HomeScreen() {
                             onPress={() => handleQuizChoice(level, true)}
                           >
                             <ImageBackground
-                              source={require("../../assets/images/levelImage.png")} // Change to your image path
+                              source={require("../../assets/images/levelImage.png")}
                               style={{
                                 width: "100%",
                                 height: "100%",
@@ -822,17 +831,17 @@ export default function HomeScreen() {
                     style={[
                       {
                         position: "absolute",
-                        left: "70.3%", // Adjust position (e.g., set `left: 10` for left side)
+                        left: "70.3%",
                         bottom: 0,
                         width: 80,
-                        height: 200, // Custom scrollbar size
+                        height: 200,
 
                         borderRadius: 10,
                         transform: [
                           {
                             translateY: scrollY.interpolate({
                               inputRange: [0, 1000],
-                              outputRange: [0, 200], // Adjust for screen size
+                              outputRange: [0, 200],
                               extrapolate: "clamp",
                             }),
                           },
@@ -879,7 +888,6 @@ export default function HomeScreen() {
           </Modal>
         </View>
 
-        {/*quiz code*/}
         <View style={styles.quizCodeSection}>
           <Text style={styles.sectionTitle}>Enter Quiz Code</Text>
           <View style={styles.quizCodeInputContainer}>
@@ -911,7 +919,6 @@ export default function HomeScreen() {
   );
 }
 
-// Styling
 const { width } = Dimensions.get("window");
 const CARD_WIDTH = width * 0.7;
 const CARD_HEIGHT = 180 * 0.8;
@@ -947,6 +954,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 20,
+    marginBottom: 4,
   },
   diamondIcon: {
     width: 16,
@@ -1044,12 +1052,20 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins-Bold",
     fontSize: 16,
   },
+  tasksButton: {
+    backgroundColor: "#F7C948",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  tasksButtonText: {
+    color: "#333333",
+    fontFamily: "Poppins-Bold",
+    fontSize: 16,
+  },
 });
-
-// import { RefreshControl } from "react-native";
-{
-  /* <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} showsVerticalScrollIndicator={false}> */
-}
 
 === FILE: .\app\user\QuizScreen.tsx ===
 // app/user/QuizScreen.tsx
@@ -1064,9 +1080,9 @@ import {
   KeyboardAvoidingView,
   Dimensions,
   Image,
-  TouchableOpacity,
-  BackHandler,
   ScrollView,
+  BackHandler,
+  TouchableOpacity,
 } from "react-native";
 import { Player } from "@lottiefiles/react-lottie-player";
 import { CountdownCircleTimer } from "react-native-countdown-circle-timer";
@@ -1126,7 +1142,11 @@ const getMaxLevel = async () => {
 
 export default function QuizScreen() {
   const params = useLocalSearchParams();
-  const { level, isSelectedLevel, useLevel } = params;
+  const { level, isSelectedLevel } = params;
+
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [feedbackType, setFeedbackType] = useState(""); // e.g., "correct", "incorrect", "levelStart"
 
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -1149,15 +1169,11 @@ export default function QuizScreen() {
     useState<CurrentQuestion | null>(null);
   const questionsCache = useRef<any>({});
   const [questionsLocked, setQuestionsLocked] = useState(false);
-  const [levelComplete, setLevelComplete] = useState(false);
-  const [isLevelComplete, setIsLevelComplete] = useState(false);
-  const [showLottie, setShowLottie] = useState(false);
   const [isTimeOut, setIsTimeOut] = useState(false);
 
-  const LEVEL_STORAGE_KEY = "highestLevelReached"; // Key for AsyncStorage
+  const LEVEL_STORAGE_KEY = "highestLevelReached";
   const [highestLevelReached, setHighestLevelReached] = useState(1);
 
-  // 🔹 Load highest level from AsyncStorage when the app starts
   useEffect(() => {
     const loadHighestLevel = async () => {
       try {
@@ -1166,7 +1182,6 @@ export default function QuizScreen() {
           setHighestLevelReached(Number(storedLevel));
           return;
         }
-        // 2️⃣ If AsyncStorage is empty, fetch from Firebase
         const userId = auth.currentUser?.uid;
         if (!userId) return;
 
@@ -1175,12 +1190,9 @@ export default function QuizScreen() {
         const userData = userSnapshot.val() || {};
 
         const userCurrentLevel = userData.currentLevel || 1;
-
         console.log("Fetched level from database:", userCurrentLevel);
 
         setHighestLevelReached(userCurrentLevel);
-
-        // 3️⃣ Save it to AsyncStorage for future use
         await AsyncStorage.setItem(
           LEVEL_STORAGE_KEY,
           userCurrentLevel.toString()
@@ -1191,11 +1203,51 @@ export default function QuizScreen() {
     };
 
     loadHighestLevel();
-  }, [maxLevel, auth.currentUser?.uid, database]);
+  }, []);
+
+  async function updateStreak() {
+    const userId = auth.currentUser?.uid;
+    if (!userId) return;
+    try {
+      const userRef = ref(database, `users/${userId}`);
+      const currentDate = new Date();
+      const currentDateString = currentDate.toISOString().split("T")[0];
+      const snapshot = await get(userRef);
+      const userData = snapshot.val() || {};
+      const lastCompletionDate = userData.lastCompletionDate;
+      const currentStreak = userData.streak || 0;
+
+      if (lastCompletionDate) {
+        const lastDate = new Date(lastCompletionDate + "T00:00:00");
+        const nextDay = new Date(lastDate);
+        nextDay.setDate(lastDate.getDate() + 1);
+        const nextDayString = nextDay.toISOString().split("T")[0];
+
+        if (currentDateString === lastCompletionDate) {
+          return;
+        } else if (currentDateString === nextDayString) {
+          await update(userRef, {
+            streak: currentStreak + 1,
+            lastCompletionDate: currentDateString,
+          });
+        } else {
+          await update(userRef, {
+            streak: 1,
+            lastCompletionDate: currentDateString,
+          });
+        }
+      } else {
+        await update(userRef, {
+          streak: 1,
+          lastCompletionDate: currentDateString,
+        });
+      }
+    } catch (error) {
+      console.error("Error updating streak:", error);
+    }
+  }
 
   const updateUserPoints = async (points: number) => {
-    console.log("points i get is  ------>>>>> line 55", points);
-
     const userId = auth.currentUser?.uid;
     if (!userId) return;
 
@@ -1203,7 +1255,6 @@ export default function QuizScreen() {
       const userRef = ref(database, `users/${userId}`);
       const snapshot = await get(userRef);
       const userData = snapshot.val() || {};
-      console.log("line -----------64>>>>>", typeof userData.totalPoints);
 
       if (currentLevel > highestLevelReached) {
         await update(userRef, {
@@ -1216,23 +1267,21 @@ export default function QuizScreen() {
   };
 
   const saveLevelLocalScore = async (currentLevel: number, points: number) => {
-    questionsCache.current = {};
     try {
-      const key = `levelScore_${currentLevel}`; // Unique key for each level's score
-      await AsyncStorage.setItem(key, points.toString()); // Save score as string
+      const key = `levelScore_${currentLevel}`;
+      await AsyncStorage.setItem(key, points.toString());
       console.log(`Saved score for Level ${currentLevel}: ${points}`);
     } catch (error) {
       console.error("Error saving level score:", error);
     }
   };
-  const clearAllLevelScores = async () => {
-    questionsCache.current = {};
-    try {
-      const keys = await AsyncStorage.getAllKeys(); // Get all stored keys
-      const levelKeys = keys.filter((key) => key.startsWith("levelScore_")); // Filter only level score keys
 
+  const clearAllLevelScores = async () => {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const levelKeys = keys.filter((key) => key.startsWith("levelScore_"));
       if (levelKeys.length > 0) {
-        await AsyncStorage.multiRemove(levelKeys); // Remove all level score keys
+        await AsyncStorage.multiRemove(levelKeys);
         console.log("All level scores removed successfully!");
       } else {
         console.log("No level scores found to remove.");
@@ -1241,9 +1290,8 @@ export default function QuizScreen() {
       console.error("Error clearing level scores:", error);
     }
   };
+
   const handleLevelChange = async (newLevel: number) => {
-    questionsCache.current = {};
-    // 🚫 Ignore update if user selects a lower level (unless it's level 1)
     if (newLevel < highestLevelReached && newLevel !== 1) {
       console.log(`User selected a lower level (${newLevel}), ignoring...`);
       return;
@@ -1252,26 +1300,18 @@ export default function QuizScreen() {
     console.log(`Updating level to ${newLevel}`);
     setCurrentLevel(newLevel);
 
-    // ✅ Update highest level reached if a new highest level is reached
     if (newLevel > highestLevelReached) {
       setHighestLevelReached(newLevel);
       await AsyncStorage.setItem(LEVEL_STORAGE_KEY, newLevel.toString());
     }
   };
+
   useEffect(() => {
     if (level) {
       questionsCache.current = {};
-      console.log("i get a params from my parent and it is --->>", level);
-
-      console.log(
-        "i get a params from my parent and it is --->>",
-        isSelectedLevel
-      );
-
-      setCurrentLevel(Number(level)); // Ensure it's a number if coming as a string=
-      setQuestionsLocked(false); // Unlock so preloadQuestions can run
-      // Unlock so new questions can load
-      setQuestions([]); // Clear old questions
+      setCurrentLevel(Number(level));
+      setQuestionsLocked(false);
+      setQuestions([]);
       setCurrentQuestion(null);
     }
   }, [level]);
@@ -1280,7 +1320,7 @@ export default function QuizScreen() {
     if (!currentQuestion) return;
 
     clearInterval(timerRef.current as any);
-    setIsPlaying(true); // Start the timer
+    setIsPlaying(true);
 
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
@@ -1295,10 +1335,16 @@ export default function QuizScreen() {
   }, [currentQuestion]);
 
   useEffect(() => {
-    if (loading || showExplanation) return;
+    if (loading || showExplanation || showFeedback) return;
     startTimer();
     return () => clearInterval(timerRef.current as any);
-  }, [currentQuestionIndex, showExplanation, loading, startTimer]);
+  }, [
+    currentQuestionIndex,
+    showExplanation,
+    showFeedback,
+    loading,
+    startTimer,
+  ]);
 
   useEffect(() => {
     const preloadQuestions = async () => {
@@ -1307,17 +1353,15 @@ export default function QuizScreen() {
       try {
         const initialQuestions = await getRandomQuestions(currentLevel);
         if (initialQuestions.length > 0) {
-          // Cache all questions at once
-          const questionsMap = {} as any;
+          const questionsMap = {};
           initialQuestions.forEach((q: any, index: number) => {
             questionsMap[index] = q;
           });
           questionsCache.current = questionsMap;
-          console.log("map question ------- line 169", questionsCache);
 
           setQuestions(initialQuestions as any);
           setCurrentQuestion(initialQuestions[0]);
-          setTimeLeft(initialQuestions[0]?.timeLimit);
+          setTimeLeft(initialQuestions[0]?.timeLimit || 30);
           setQuestionsLocked(true);
         }
       } catch (error) {
@@ -1331,10 +1375,7 @@ export default function QuizScreen() {
   const preloadNextQuestion = useCallback(() => {
     if (currentQuestionIndex < questions.length - 1) {
       const next = questionsCache.current[currentQuestionIndex + 1];
-      console.log("next question is ->>>>>> 297", next);
-
       setNextQuestion(next);
-      console.log("next---->>>>.300", next);
     }
   }, [currentQuestionIndex, questions.length]);
 
@@ -1352,31 +1393,29 @@ export default function QuizScreen() {
       const userSnapshot = await get(userRef);
       const userData = userSnapshot.val() || {};
 
-      // Set the current level from user data
       const userCurrentLevel = level
         ? Number(level)
         : userData.currentLevel || 1;
-      console.log("my level 196", userCurrentLevel);
-
       setCurrentLevel(userCurrentLevel);
 
       const [maxLvl, initialQuestions] = await Promise.all([
         getMaxLevel(),
         getRandomQuestions(userCurrentLevel),
       ]);
-      console.log(maxLvl, initialQuestions);
 
-      setMaxLevel(maxLvl as any);
+      setMaxLevel(maxLvl);
       if (initialQuestions.length > 0) {
         setQuestions(initialQuestions as any);
         setCurrentQuestionIndex(0);
+      } else {
+        Alert.alert("No Questions", "No questions available for this level.", [
+          { text: "OK", onPress: () => router.back() },
+        ]);
       }
     } catch (error) {
       console.error("Error initializing quiz:", error);
     } finally {
-      setTimeout(() => {
-        setLoading(false);
-      }, 100);
+      setLoading(false);
     }
   }, []);
 
@@ -1392,7 +1431,7 @@ export default function QuizScreen() {
     };
 
     initializeQuiz().catch(handleError);
-  }, []);
+  }, [initializeQuiz]);
 
   const getRandomQuestions = async (level: number) => {
     try {
@@ -1410,7 +1449,6 @@ export default function QuizScreen() {
         const quiz = childSnapshot.val();
         if (quiz.level === level && !completedLevels[quiz.id]) {
           quiz.questions.forEach((q: any) => {
-            console.log("quizzes lline 237->>>>>>", 237, q);
             levelQuizzes.push(q);
           });
         }
@@ -1418,7 +1456,6 @@ export default function QuizScreen() {
       const shuffled = JSON.parse(JSON.stringify(levelQuizzes)).sort(
         () => 0.5 - Math.random()
       );
-
       return shuffled;
     } catch (error) {
       console.error("Error getting random questions:", error);
@@ -1427,69 +1464,79 @@ export default function QuizScreen() {
   };
 
   useEffect(() => {
-    // Check if the user answer matches the correct answer
     if (userAnswer.trim() === correctAnswer.trim()) {
       handleSubmitAnswer(correctAnswer);
     }
-  }, [userAnswer, correctAnswer]); // Dependency on userAnswer and correctAnswer
+  }, [userAnswer, correctAnswer]);
 
   const handleInputChange = (text: string, correctAnswer: string) => {
     setUserAnswer(text);
-    setCorrectAnswer(correctAnswer); // Update the correct answer
+    setCorrectAnswer(correctAnswer);
   };
 
   const handleCorrectAnswer = async () => {
     const currentQuestion = questionsCache.current[currentQuestionIndex];
-
-    console.log("This is points------>>> 381", currentQuestion.point);
-
     if (!currentQuestion) return;
 
     clearInterval(timerRef.current as any);
     setIsPlaying(false);
-    // Update states immediately
     setIsAnswerWrong(false);
-    // setUserAnswer("");
     setCorrectAnswers((prev) => prev + 1);
-    setQuizScore((prev) => prev + currentQuestion.point);
+    setQuizScore((prev) => prev + (currentQuestion.points || 10));
 
-    if (currentQuestionIndex < questions.length - 1) {
-      const nextIndex = currentQuestionIndex + 1;
-      const nextQuestion = questionsCache.current[nextIndex];
+    setFeedbackMessage("Correct!");
+    setFeedbackType("correct");
+    setShowFeedback(true);
 
-      // Update all states together after the delay
-      setCurrentQuestion(nextQuestion);
-      setCurrentQuestionIndex(nextIndex);
-
-      setTimeLeft(nextQuestion?.timeLimit);
-      console.log(
-        "next limite timeout ---------> 315",
-        nextQuestion?.timeLimit
-      );
-
-      setUserAnswer("");
-      startTimer();
-    } else {
-      await markLevelAsCompleted(currentLevel);
-      await handleLevelChange(currentLevel);
-    }
+    setTimeout(async () => {
+      setShowFeedback(false);
+      if (currentQuestionIndex < questions.length - 1) {
+        const nextIndex = currentQuestionIndex + 1;
+        const nextQuestion = questionsCache.current[nextIndex];
+        setCurrentQuestion(nextQuestion);
+        setCurrentQuestionIndex(nextIndex);
+        setTimeLeft(nextQuestion?.timeLimit || 30);
+        setUserAnswer("");
+        startTimer();
+      } else {
+        await handleLevelCompletion();
+      }
+    }, 500);
   };
 
-  const handleIncorrectAnswer = () => {
+  const handleIncorrectAnswer = async () => {
     setIsAnswerWrong(true);
     setIsPlaying(false);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    if (Platform.OS !== "web") {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
     setShowExplanation(true);
     setCurrentExplanation({
       text: questions[currentQuestionIndex]?.explanation,
       image: questions[currentQuestionIndex]?.answerImage,
     });
+
+    setTimeout(() => {
+      setShowExplanation(false);
+      setCurrentExplanation(null);
+      setIsAnswerWrong(false);
+      if (currentQuestionIndex < questions.length - 1) {
+        const nextIndex = currentQuestionIndex + 1;
+        const nextQuestion = questionsCache.current[nextIndex];
+        setCurrentQuestion(nextQuestion);
+        setCurrentQuestionIndex(nextIndex);
+        setTimeLeft(nextQuestion?.timeLimit || 30);
+        setUserAnswer("");
+        startTimer();
+      } else {
+        handleLevelCompletion();
+      }
+    }, 5000);
   };
 
   const handleSubmitAnswer = async (correctAnswer: string) => {
     if (!userAnswer) return;
 
-    // Validate the entered answer
     if (userAnswer.trim() === correctAnswer.trim()) {
       await SoundManager.playSound("rightAnswerSoundEffect", {
         isLooping: false,
@@ -1509,165 +1556,125 @@ export default function QuizScreen() {
 
     try {
       const userRef = ref(database, `users/${userId}`);
-      const completedLevelsRef = ref(
-        database,
-        `users/${userId}/completedLevels`
-      );
-      const maxLvl = maxLevel;
+      const nextLevel = level + 1 > maxLevel ? maxLevel : level + 1;
 
-      // Determine next level
-      let nextLevel = level + 1;
-
-      if (nextLevel > maxLvl) {
-        nextLevel = maxLvl; // Restart from level 1 if max level is reached
-      }
-
-      // Update both current level and completed levels
-      if (!isSelectedLevel) {
+      if (
+        !isSelectedLevel ||
+        (isSelectedLevel && level >= highestLevelReached)
+      ) {
         await update(userRef, {
           currentLevel: nextLevel,
           [`completedLevels/${level}`]: true,
         });
-      } else if (isSelectedLevel && level > highestLevelReached) {
-        await update(userRef, {
-          currentLevel: nextLevel,
-          [`completedLevels/${level}`]: true,
-        });
-        // Store the updated highest level in AsyncStorage
       }
-
-      // Fetch and log the updated value
-      const snapshot = await get(completedLevelsRef);
-      if (snapshot.exists()) {
-        const completedLevels = snapshot.val();
-        const keys = Object.keys(completedLevels);
-        console.log("length is now---->>> 485", keys.length);
-        console.log("maxLevel ------ 483>>>", maxLevel, maxLvl);
-
-        console.log("keys...", keys);
-        // Get all level keys
-        const lastKey = keys[keys.length - 1]; // Get the last key
-        const lastValue = completedLevels[lastKey]; // Get the value at the last index
-        console.log("usecase 487===>>", lastValue);
-
-        setIsLevelComplete(lastValue);
-        setLevelComplete(lastValue);
-      } else {
-        console.log("No completedLevels data found.");
-      }
-      console.log("levelComplete,le", levelComplete);
     } catch (error) {
       console.error("Error marking level as completed:", error);
     }
   };
 
-  useEffect(() => {
-    if (isLevelComplete) {
-      const updatePointsAndNavigate = async () => {
-        try {
-          if (qizScore > 0) {
-            await saveLevelLocalScore(currentLevel, qizScore);
-          }
-          await updateUserPoints(qizScore);
-
-          console.log("✅ isLevelComplete updated:", isLevelComplete);
-
-          router.push({
-            pathname: "/user/results",
-            params: {
-              highestLevelReached: highestLevelReached,
-              quizScore: qizScore,
-              correctAnswers: correctAnswers,
-              totalQuestions: questions.length,
-              currentLevel: currentLevel,
-              isLevelComplete: isLevelComplete as any,
-              maxLevel: maxLevel,
-              isSelectedLevel: isSelectedLevel,
-              level: level,
-            },
-          });
-        } catch (error) {
-          console.error("Error updating user points:", error);
-        }
-      };
-
-      updatePointsAndNavigate();
-    }
-  }, [isLevelComplete]);
-
   const handleLevelCompletion = async () => {
-    const userId = auth.currentUser?.uid;
-    if (!userId) return;
+    await markLevelAsCompleted(currentLevel);
+    if (qizScore > 0) {
+      await saveLevelLocalScore(currentLevel, qizScore);
+      await updateUserPoints(qizScore);
+    }
+    await updateStreak();
 
-    try {
-      setShowExplanation(false);
-      setCurrentExplanation(null);
-      setUserAnswer("");
-      setQuestionsLocked(false);
+    if (currentLevel < maxLevel) {
+      const nextLevel = currentLevel + 1;
+      const nextQuestions = await getRandomQuestions(nextLevel);
 
-      const maxLvl = maxLevel;
-      let nextLevel = currentLevel + 1;
-
-      if (nextLevel > maxLvl) {
-        nextLevel = maxLvl;
-        // Stay at max level instead of resetting
-      }
-
-      const nextLevelQuestions = await getRandomQuestions(nextLevel);
-
-      if (nextLevelQuestions.length > 0) {
-        setQuestions(nextLevelQuestions as any);
+      if (nextQuestions.length > 0) {
+        questionsCache.current = {};
+        setQuestions(nextQuestions as any);
         setCurrentQuestionIndex(0);
+        setCurrentQuestion(nextQuestions[0]);
+        setTimeLeft(nextQuestions[0]?.timeLimit || 30);
+        setUserAnswer("");
         setCurrentLevel(nextLevel);
-        console.log(
-          "MY NEXTLEVEL question is 422----",
-          nextLevelQuestions[0]?.timeLimit
-        );
+        setQuizScore(0);
+        setCorrectAnswers(0);
+        setQuestionsLocked(false);
 
-        setTimeLeft(nextLevelQuestions[0]?.timeLimit);
-        setQuestionsLocked(true); // Lock questions for new level
-
-        setTimeout(async () => {
-          setShowLottie(true);
-          await SoundManager.playSound("clappingSoundEffect", {
-            isLooping: false,
-          });
+        setFeedbackMessage(`Moving to Level ${nextLevel}`);
+        setFeedbackType("levelStart");
+        setShowFeedback(true);
+        setTimeout(() => {
+          setShowFeedback(false);
+          startTimer();
         }, 500);
       } else {
-        console.log("Updating isLevelComplete...");
-        setIsLevelComplete(true);
+        router.push({
+          pathname: "/user/results",
+          params: {
+            highestLevelReached,
+            quizScore: qizScore,
+            correctAnswers,
+            totalQuestions: questions.length,
+            currentLevel,
+            isLevelComplete: true,
+            maxLevel,
+            isSelectedLevel,
+            level,
+          },
+        });
       }
-    } catch (error) {
-      console.error("Error updating level:", error);
-    }
-  };
-
-  useEffect(() => {
-    if (levelComplete) {
-      handleLevelCompletion();
-    }
-  }, [levelComplete]);
-  const handleTimeUp = async () => {
-    await SoundManager.playSound("wrongAnswerSoundEffect", {
-      isLooping: false,
-    });
-    setIsTimeOut(true);
-    setIsPlaying(false);
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    if (!showExplanation) {
-      setShowExplanation(true);
-      setCurrentExplanation({
-        text: questions[currentQuestionIndex]?.explanation,
-        image: questions[currentQuestionIndex]?.answerImage,
+    } else {
+      router.push({
+        pathname: "/user/results",
+        params: {
+          highestLevelReached,
+          quizScore: qizScore,
+          correctAnswers,
+          totalQuestions: questions.length,
+          currentLevel,
+          isLevelComplete: true,
+          maxLevel,
+          isSelectedLevel,
+          level,
+        },
       });
     }
   };
 
+  const handleTimeUp = async () => {
+    await SoundManager.playSound("wrongAnswerSoundEffect", {
+      isLooping: false,
+    });
+    setIsTimeOut(true); // Ascertain if the user loses by quitting (back button) or completes all levels, requiring manual navigation to results.
+
+    setIsPlaying(false);
+    if (Platform.OS !== "web") {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+    setShowExplanation(true);
+    setCurrentExplanation({
+      text: questions[currentQuestionIndex]?.explanation,
+      image: questions[currentQuestionIndex]?.answerImage,
+    });
+
+    setTimeout(() => {
+      setShowExplanation(false);
+      setCurrentExplanation(null);
+      setIsTimeOut(false);
+      if (currentQuestionIndex < questions.length - 1) {
+        const nextIndex = currentQuestionIndex + 1;
+        const nextQuestion = questionsCache.current[nextIndex];
+        setCurrentQuestion(nextQuestion);
+        setCurrentQuestionIndex(nextIndex);
+        setTimeLeft(nextQuestion?.timeLimit || 30);
+        setUserAnswer("");
+        startTimer();
+      } else {
+        handleLevelCompletion();
+      }
+    }, 5000);
+  };
+
   const resumeTimer = useCallback(() => {
-    if (!currentQuestion || timeLeft <= 0 || isAnswerWrong || isTimeOut) return; // Stay paused if needed
+    if (!currentQuestion || timeLeft <= 0 || isAnswerWrong || isTimeOut) return;
 
-    clearInterval(timerRef.current as any); // Prevent duplicate intervals
-
+    clearInterval(timerRef.current as any);
     setIsPlaying(true);
 
     timerRef.current = setInterval(() => {
@@ -1689,32 +1696,29 @@ export default function QuizScreen() {
       await SoundManager.stopSound("failSoundEffect");
       if (timerRef.current) {
         clearInterval(timerRef.current);
-        setIsPlaying(false); // Indicate that the timer is paused
+        setIsPlaying(false);
       }
 
       Alert.alert(
         "Are you sure you want to quit the quiz?",
-        ``,
+        "",
         [
           {
             text: "Resume Quiz",
             style: "cancel",
-            onPress: () => {
-              resumeTimer(); // Resume the timer if user chooses to continue
-            },
+            onPress: () => resumeTimer(),
           },
           {
             text: "Quit anyway!",
             onPress: async () => {
               await clearAllLevelScores();
-              if (isLevelComplete && qizScore > 0) {
+              if (qizScore > 0) {
                 await saveLevelLocalScore(currentLevel, qizScore);
                 await markLevelAsCompleted(currentLevel);
-                await handleLevelCompletion();
               }
               router.push({
                 pathname: "/dashboard",
-                params: { openLevelPopup: true as any },
+                params: { openLevelPopup: true },
               });
             },
           },
@@ -1722,59 +1726,29 @@ export default function QuizScreen() {
         { cancelable: true }
       );
 
-      return true; // Prevent default back action
+      return true;
     };
 
     const backHandler = BackHandler.addEventListener(
       "hardwareBackPress",
       backAction as any
     );
-
-    return () => backHandler.remove(); // Cleanup on unmount
-  }, [resumeTimer]); // ✅ Add resumeTimer as a dependency
+    return () => backHandler.remove();
+  }, [resumeTimer, qizScore, currentLevel]);
 
   const renderExplanation = () => {
     return (
       <View style={styles.explanationCard}>
         <Text style={styles.explanationText}>
-          {" "}
-          {currentQuestion?.explanation || "No explanation available"}
+          {currentExplanation?.text || "No explanation available"}
         </Text>
-
         {currentExplanation?.image && (
           <Image
-            source={{ uri: currentQuestion?.image }}
+            source={{ uri: currentExplanation.image }}
             style={styles.explanationImage}
             resizeMode="contain"
           />
         )}
-        <TouchableOpacity
-          style={styles.continueButton}
-          onPress={async () => {
-            console.log(
-              " tis i swhat i answerd corretly->>>>> 669",
-              correctAnswers
-            );
-
-            if (!isLevelComplete && qizScore > 0) {
-              await saveLevelLocalScore(currentLevel, qizScore);
-            }
-            router.push({
-              pathname: "/user/results",
-              params: {
-                highestLevelReached: highestLevelReached,
-                quizScore: qizScore,
-                maxLevel: maxLevel,
-                correctAnswers: correctAnswers,
-                totalQuestions: questions.length,
-                currentLevel,
-                levelComplete: levelComplete as any,
-              },
-            });
-          }}
-        >
-          <Text style={styles.continueButtonText}>Continue</Text>
-        </TouchableOpacity>
       </View>
     );
   };
@@ -1799,26 +1773,8 @@ export default function QuizScreen() {
             fontFamily: "Poppins-Regular",
           }}
         >
-          {" "}
-          🎉 Congratulations You just Completed this level!!!{" "}
+          🎉 Congratulations! You just completed Level {currentLevel}!
         </Text>
-
-        <TouchableOpacity
-          style={styles.continueButton}
-          onPress={() => {
-            router.push({
-              pathname: "/user/results",
-              params: {
-                correctAnswers: correctAnswers,
-                totalQuestions: questions.length,
-                currentLevel,
-                isLevelComplete: false as any,
-              },
-            });
-          }}
-        >
-          <Text style={styles.continueButtonText}>Continue</Text>
-        </TouchableOpacity>
       </View>
     );
   };
@@ -1831,166 +1787,180 @@ export default function QuizScreen() {
     );
   }
 
+  const handleTestSkip = async () => {
+    console.log("TEST SKIP pressed"); // ← add this
+    if (timerRef.current) {
+      clearInterval(timerRef.current as any);
+      setIsPlaying(false);
+    }
+    await markLevelAsCompleted(currentLevel);
+    router.push({
+      pathname: "/user/results",
+      params: {
+        highestLevelReached,
+        quizScore: 9999,
+        correctAnswers: questions.length,
+        totalQuestions: questions.length,
+        currentLevel,
+        isLevelComplete: true,
+        maxLevel,
+        isSelectedLevel,
+        level: currentLevel,
+      },
+    });
+  };
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
-      {!showLottie && (
-        <View style={styles.contentContainer}>
-          <View style={styles.header}>
-            <View style={{ display: "flex", flexDirection: "column" }}>
-              <Text style={styles.questionCounter}>Level: {currentLevel}</Text>
-              <Text style={styles.questionCounter}>
-                Question {currentQuestionIndex + 1} / {questions.length}
-              </Text>
-            </View>
-            <View
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "flex-start",
-                gap: 20,
-              }}
-            >
-              <CountdownCircleTimer
-                key={timeLeft} // Ensures re-render when time limit changes
-                isPlaying={isPlaying}
-                duration={timeLeft}
-                size={80}
-                colors={["#004777", "#F7B801", "#A30000", "#FF0000"]}
-                colorsTime={[15, 10, 5, 0]}
-                onComplete={() => {
-                  return { shouldRepeat: false };
+      <TouchableOpacity style={styles.testButton} onPress={handleTestSkip}>
+        <Text style={styles.testText}>TEST SKIP</Text>
+      </TouchableOpacity>
+
+      <View style={styles.contentContainer}>
+        {showFeedback && (
+          <View style={styles.feedbackCard}>
+            <Text style={styles.feedbackText}>{feedbackMessage}</Text>
+          </View>
+        )}
+        {!showFeedback && (
+          <>
+            <View style={styles.header}>
+              <View style={{ display: "flex", flexDirection: "column" }}>
+                <Text style={styles.questionCounter}>
+                  Level: {currentLevel}
+                </Text>
+                <Text style={styles.questionCounter}>
+                  Question {currentQuestionIndex + 1} / {questions.length}
+                </Text>
+              </View>
+              <View
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-start",
+                  gap: 20,
                 }}
               >
-                {({ remainingTime }) => (
-                  <Text style={styles.timer}>{remainingTime}s</Text>
-                )}
-              </CountdownCircleTimer>
-            </View>
-          </View>
-
-          <View style={styles.questionCard}>
-            {currentQuestion?.questionText && (
-              <Text style={styles.questionText}>
-                {currentQuestion?.questionText ||
-                  questionsCache.current[currentQuestionIndex]?.questionText}
-              </Text>
-            )}
-            {currentQuestion?.options && (
-              <ScrollView
-                style={{ maxHeight: 150 }}
-                showsVerticalScrollIndicator={true} // Hide default
-              >
-                {currentQuestion.options.map((option: any, index: number) => (
-                  <View
-                    key={index}
-                    style={{ display: "flex", flexDirection: "row", gap: 20 }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 16,
-                        color: "#333",
-                        borderRadius: 100,
-                        height: 20,
-                        width: 20,
-                        borderWidth: 10,
-                        fontFamily: "Poppins-Bold",
-                        textAlign: "center",
-                        marginBottom: 5,
-                      }}
-                    ></Text>
-                    <Text
-                      style={{
-                        fontSize: 16,
-                        color: "#333",
-                        fontFamily: "Poppins-Bold",
-                        textAlign: "center",
-                        marginBottom: 10,
-                      }}
-                    >
-                      {option}
-                    </Text>
-                  </View>
-                ))}
-              </ScrollView>
-            )}
-            {!showExplanation && (
-              <>
-                <TextInput
-                  style={[
-                    styles.answerInput,
-                    isAnswerWrong && styles.wrongAnswer,
-                  ]}
-                  value={userAnswer}
-                  onChangeText={(text) =>
-                    handleInputChange(
-                      text,
-                      questionsCache.current[
-                        currentQuestionIndex
-                      ]?.correctAnswer.trim()
-                    )
-                  }
-                  onSubmitEditing={() =>
-                    handleSubmitAnswer(
-                      questionsCache.current[
-                        currentQuestionIndex
-                      ]?.correctAnswer.trim()
-                    )
-                  }
-                  placeholder={userAnswer ? userAnswer : "Type your answer..."}
-                  keyboardType="numeric"
-                  autoFocus={true}
-                  maxLength={10}
-                  editable={!showExplanation}
-                  returnKeyType="done"
-                  // blurOnSubmit={false}
-                />
-                {userAnswer &&
-                  questionsCache.current[
-                    currentQuestionIndex
-                  ]?.correctAnswer.trim() === userAnswer && (
-                    <Image
-                      source={require("../../assets/images/markCorrect.png")}
-                      style={{ width: 20, height: 20 }}
-                    />
+                <CountdownCircleTimer
+                  key={timeLeft}
+                  isPlaying={isPlaying}
+                  duration={timeLeft}
+                  size={80}
+                  colors={["#004777", "#F7B801", "#A30000", "#FF0000"]}
+                  colorsTime={[15, 10, 5, 0]}
+                  onComplete={() => ({ shouldRepeat: false })}
+                >
+                  {({ remainingTime }) => (
+                    <Text style={styles.timer}>{remainingTime}s</Text>
                   )}
-              </>
-            )}
+                </CountdownCircleTimer>
+              </View>
+            </View>
 
-            {isAnswerWrong && (
-              <Text style={styles.errorText}>Incorrect. Try again!</Text>
-            )}
-            {isTimeOut && <Text style={styles.errorText}>Time Out !😞 😔</Text>}
-          </View>
+            <View style={styles.questionCard}>
+              {currentQuestion?.questionText && (
+                <Text style={styles.questionText}>
+                  {currentQuestion.questionText ||
+                    questionsCache.current[currentQuestionIndex]?.questionText}
+                </Text>
+              )}
+              {currentQuestion?.options && (
+                <ScrollView
+                  style={{ maxHeight: 150 }}
+                  showsVerticalScrollIndicator={true}
+                >
+                  {currentQuestion.options.map((option: any, index: number) => (
+                    <View
+                      key={index}
+                      style={{ display: "flex", flexDirection: "row", gap: 20 }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 16,
+                          color: "#333",
+                          borderRadius: 100,
+                          height: 20,
+                          width: 20,
+                          borderWidth: 10,
+                          fontFamily: "Poppins-Bold",
+                          textAlign: "center",
+                          marginBottom: 5,
+                        }}
+                      ></Text>
+                      <Text
+                        style={{
+                          fontSize: 16,
+                          color: "#333",
+                          fontFamily: "Poppins-Bold",
+                          textAlign: "center",
+                          marginBottom: 10,
+                        }}
+                      >
+                        {option}
+                      </Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+              {!showExplanation && (
+                <>
+                  <TextInput
+                    style={[
+                      styles.answerInput,
+                      isAnswerWrong && styles.wrongAnswer,
+                    ]}
+                    value={userAnswer}
+                    onChangeText={(text) =>
+                      handleInputChange(
+                        text,
+                        questionsCache.current[
+                          currentQuestionIndex
+                        ]?.correctAnswer.trim()
+                      )
+                    }
+                    onSubmitEditing={() =>
+                      handleSubmitAnswer(
+                        questionsCache.current[
+                          currentQuestionIndex
+                        ]?.correctAnswer.trim()
+                      )
+                    }
+                    placeholder={
+                      userAnswer ? userAnswer : "Type your answer..."
+                    }
+                    keyboardType="numeric"
+                    autoFocus={true}
+                    maxLength={10}
+                    editable={!showExplanation}
+                    returnKeyType="done"
+                  />
+                  {userAnswer &&
+                    questionsCache.current[
+                      currentQuestionIndex
+                    ]?.correctAnswer.trim() === userAnswer && (
+                      <Image
+                        source={require("../../assets/images/markCorrect.png")}
+                        style={{ width: 20, height: 20 }}
+                      />
+                    )}
+                </>
+              )}
 
-          {showExplanation && renderExplanation()}
-        </View>
-      )}
+              {isAnswerWrong && (
+                <Text style={styles.errorText}>Incorrect. Try again!</Text>
+              )}
+              {isTimeOut && (
+                <Text style={styles.errorText}>Time Out! 😞 😔</Text>
+              )}
+            </View>
 
-      {showLottie && (
-        <View
-          style={{
-            width: "100%",
-            height: "100%",
-            justifyContent: "flex-start",
-            alignItems: "center",
-            flexDirection: "column",
-          }}
-        >
-          <Player
-            autoPlay
-            style={{
-              width: "100%",
-              height: "50%",
-              marginTop: 50,
-            }}
-            source={require("./../../assets/icons/congrate.json")}
-          />
-          {congratulationPage()}
-        </View>
-      )}
+            {showExplanation && renderExplanation()}
+          </>
+        )}
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -2086,36 +2056,32 @@ const styles = StyleSheet.create({
     height: 200,
     marginBottom: 30,
   },
-  nextButton: {
-    backgroundColor: "#FF5A5F",
-    padding: 15,
-    borderRadius: 10,
+  feedbackCard: {
+    backgroundColor: "#FFF",
+    padding: 20,
+    borderRadius: 15,
     alignItems: "center",
+    marginVertical: windowHeight * 0.2,
   },
-  nextButtonText: {
+  feedbackText: {
     fontSize: 24,
-    color: "#FFF",
+    color: "#333",
     fontFamily: "Poppins-Bold",
-  },
-  explanationTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 10,
     textAlign: "center",
   },
-  continueButton: {
-    backgroundColor: "#F7C948",
-    paddingVertical: 12,
-    paddingHorizontal: 30,
+  testButton: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    zIndex: 999,
+    pointerEvents: "auto",
+    backgroundColor: "red",
+    padding: 10,
     borderRadius: 10,
-    marginTop: 20,
   },
-  continueButtonText: {
-    color: "#333",
-    fontSize: 18,
+  testText: {
+    color: "white",
     fontWeight: "bold",
-    textAlign: "center",
   },
 });
 
@@ -2331,3 +2297,666 @@ const styles = StyleSheet.create({
     },
 });
 
+=== FILE: .\app\user\FinishedQuizzes.tsx ===
+// app/user/FinishedQuizzes.tsx
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, BackHandler, ActivityIndicator, TextInput } from 'react-native';
+import { ref, get } from 'firebase/database';
+import { auth, database } from '../../firebase/firebaseConfig';
+import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
+
+export default function FinishedQuizzes() {
+    const router = useRouter();
+    const [quizzes, setQuizzes] = useState([]);
+    const [filteredQuizzes, setFilteredQuizzes] = useState([]);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [loading, setLoading] = useState(true);
+
+    // Fetch completed quizzes for the user
+    useEffect(() => {
+        const fetchCompletedQuizzes = async () => {
+            setLoading(true);
+            const userId = auth.currentUser?.uid;
+            if (userId) {
+                const userCompletedRef = ref(database, `users/${userId}/completedQuizzes`);
+                const completedSnapshot = await get(userCompletedRef);
+                const completedQuizzes = completedSnapshot.exists() ? completedSnapshot.val() : {};
+
+                // Fetch all quizzes and filter to only show completed quizzes
+                const quizzesRef = ref(database, 'quizzes');
+                const quizzesSnapshot = await get(quizzesRef);
+                const allQuizzes = quizzesSnapshot.exists() ? quizzesSnapshot.val() : {};
+
+                // Filter and map quizzes to only show completed ones, sorted by most recent completion date
+                const finishedQuizzesList = Object.keys(allQuizzes)
+                    .filter(key => completedQuizzes[key]?.completed)
+                    .map(key => ({
+                        id: key,
+                        ...allQuizzes[key],
+                        completedAt: completedQuizzes[key].completedAt || 0
+                    }))
+                    .sort((a, b) => b.completedAt - a.completedAt); // Sort by newest first
+
+                setQuizzes(finishedQuizzesList);
+                setFilteredQuizzes(finishedQuizzesList);
+            }
+            setLoading(false);
+        };
+        fetchCompletedQuizzes();
+    }, []);
+
+    // Handle hardware back button
+    useFocusEffect(
+        useCallback(() => {
+            const onBackPress = () => {
+                router.replace('/dashboard'); // Replace current screen with the Dashboard
+                return true;
+            };
+            BackHandler.addEventListener('hardwareBackPress', onBackPress);
+            return () => BackHandler.removeEventListener('hardwareBackPress', onBackPress);
+        }, [])
+    );
+
+    // Filter quizzes by name
+    const handleSearch = (query) => {
+        setSearchQuery(query);
+        const filtered = quizzes.filter(quiz =>
+            quiz.name.toLowerCase().includes(query.toLowerCase())
+        );
+        setFilteredQuizzes(filtered);
+    };
+
+    // Render each quiz card
+    const renderQuizCard = ({ item }) => (
+        <TouchableOpacity style={styles.quizCard} onPress={() => router.push({ pathname: '/user/QuizScreen', params: { id: item.id } })}>
+            <Text style={styles.quizName}>{item.name}</Text>
+            <Text style={styles.quizDescription}>{item.description}</Text>
+            <View style={styles.quizInfo}>
+                <Text style={styles.quizDetails}>Questions: {item.questions.length}</Text>
+                <Text style={styles.quizDetails}>Points: {item.points}</Text>
+            </View>
+        </TouchableOpacity>
+    );
+
+    return (
+        <View style={styles.container}>
+            <Text style={styles.heading}>Your Completed Quizzes</Text>
+            
+            <TextInput
+                style={styles.searchBar}
+                placeholder="Search completed quizzes by name"
+                placeholderTextColor="#7a7a7a"
+                value={searchQuery}
+                onChangeText={handleSearch}
+            />
+
+            <Text style={styles.quizCountText}>Completed Quizzes: {filteredQuizzes.length}</Text>
+
+            {loading ? (
+                <View style={styles.loaderContainer}>
+                    <ActivityIndicator size="large" color="#FFDB74" />
+                    <Text style={styles.loadingText}>Loading Completed Quizzes...</Text>
+                </View>
+            ) : (
+                filteredQuizzes.length > 0 ? (
+                    <FlatList
+                        data={filteredQuizzes}
+                        keyExtractor={(item) => item.id}
+                        renderItem={renderQuizCard}
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={styles.listContainer}
+                    />
+                ) : (
+                    <View style={styles.noQuizzesContainer}>
+                        <Text style={styles.noQuizzesText}>No completed quizzes yet!</Text>
+                        <Text style={styles.noQuizzesSubtext}>Start exploring quizzes to see your progress here.</Text>
+                    </View>
+                )
+            )}
+        </View>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#FFF2CC',
+        paddingHorizontal: 20,
+        paddingTop: 20,
+    },
+    heading: {
+        fontSize: 26,
+        color: '#333',
+        fontFamily: 'Poppins-Bold',
+        fontWeight: '600',
+        textAlign: 'center',
+        marginBottom: 15,
+    },
+    searchBar: {
+        height: 45,
+        backgroundColor: '#FFDB74',
+        color: '#333',
+        paddingVertical: 8,
+        paddingHorizontal: 15,
+        borderRadius: 20,
+        fontFamily: 'Poppins-Regular',
+        fontSize: 16,
+        marginBottom: 10,
+    },
+    quizCountText: {
+        fontSize: 16,
+        color: '#333',
+        fontFamily: 'Poppins-Regular',
+        marginBottom: 20,
+        textAlign: 'center',
+    },
+    listContainer: {
+        paddingHorizontal: 10,
+    },
+    quizCard: {
+        backgroundColor: '#FFDB74',
+        width: '100%',
+        padding: 20,
+        borderRadius: 15,
+        marginBottom: 15,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    quizName: {
+        fontSize: 18,
+        color: '#333',
+        fontFamily: 'Poppins-Bold',
+        marginBottom: 5,
+    },
+    quizDescription: {
+        fontSize: 14,
+        color: '#333',
+        fontFamily: 'Poppins-Regular',
+        marginBottom: 10,
+    },
+    quizInfo: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
+    quizDetails: {
+        fontSize: 14,
+        color: '#333',
+        fontFamily: 'Poppins-Regular',
+    },
+    loaderContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingText: {
+        fontSize: 16,
+        color: '#333',
+        fontFamily: 'Poppins-Regular',
+        marginTop: 10,
+    },
+    noQuizzesContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    noQuizzesText: {
+        fontSize: 18,
+        fontFamily: 'Poppins-Bold',
+        color: '#333',
+        textAlign: 'center',
+        marginBottom: 5,
+    },
+    noQuizzesSubtext: {
+        fontSize: 14,
+        fontFamily: 'Poppins-Regular',
+        color: '#333',
+        textAlign: 'center',
+    },
+});
+
+=== FILE: .\app\user\results.tsx ===
+import React, { useState, useEffect, useRef } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Alert, BackHandler, ScrollView } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
+import { ref, get, update } from "firebase/database";
+import { database, auth } from "../../firebase/firebaseConfig";
+
+import { Player } from "@lottiefiles/react-lottie-player";
+import SoundManager from "./components/souund/soundManager";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+export default function ResultsScreen() {
+  const [showScore, setShowScore] = useState(false);
+  const params = useLocalSearchParams();
+  const {
+    highestLevelReached,
+    quizScore,
+    correctAnswers,
+    totalQuestions,
+    isLevelComplete,
+    currentLevel,
+    maxLevel,
+    isSelectedLevel,
+    level: level
+
+  } = params;
+
+
+
+  useEffect(() => {
+    const playLevelSound = async () => {
+      if ((isLevelComplete && maxLevel !== currentLevel) || (isLevelComplete && maxLevel === currentLevel)) {
+        await SoundManager.playSound('clappingSoundEffect', { isLooping: false });
+        await SoundManager.playSound('victorySoundEffect', { isLooping: false });
+
+      }
+      else if (!isLevelComplete) {
+        await SoundManager.playSound('failSoundEffect', { isLooping: false });
+      }
+      console.log("state of me now 200", isLevelComplete);
+      console.log("maxlevel 2343", maxLevel, currentLevel);
+    };
+
+
+    playLevelSound();
+  }, [isLevelComplete, maxLevel, currentLevel]); // Add dependencies to re-run effect only when values change
+
+
+
+  const getAllLevelScores = async (maxLevel: number) => {
+    let scores: { [key: string]: number } = {}; // Ensure object keys are strings
+    try {
+      for (let level = 1; level <= maxLevel; level++) {
+        const key = `levelScore_${level}`;
+        const score = await AsyncStorage.getItem(key);
+
+        if (score !== null) { // Only store if a value exists
+          scores[`Level${level}`] = Number(score);
+        }
+      }
+      console.log("Stored level scores:", scores);
+      return scores;
+    } catch (error) {
+      console.error("Error retrieving stored level scores:", error);
+      return {};
+    }
+  };
+
+
+  const [scores, setScores] = useState<{ [key: string]: number } | null>(null);
+
+  useEffect(() => {
+    const fetchScores = async () => {
+      const retrievedScores = await getAllLevelScores(Number(currentLevel));
+      setScores(retrievedScores);
+
+    };
+
+    fetchScores();
+  }, []);
+
+
+  const clearAllLevelScores = async () => {
+    try {
+      const keys = await AsyncStorage.getAllKeys(); // Get all stored keys
+      const levelKeys = keys.filter((key) => key.startsWith("levelScore_")); // Filter only level score keys
+
+      if (levelKeys.length > 0) {
+        await AsyncStorage.multiRemove(levelKeys); // Remove all level score keys
+        console.log("All level scores removed successfully!");
+      } else {
+        console.log("No level scores found to remove.");
+      }
+    } catch (error) {
+      console.error("Error clearing level scores:", error);
+    }
+  };
+
+
+  useEffect(() => {
+    const backAction = () => {
+
+      Alert.alert(
+        "Are you sure you want to quit the quiz?",
+        ``,
+        [
+          {
+            text: "Resume Quiz",
+            style: "cancel",
+            onPress: () => { }, // Just cancels the alert
+          },
+          {
+            text: "Quit anyway!",
+            onPress: async () => {
+              await clearAllLevelScores()
+              await SoundManager.stopSound('clappingSoundEffect');
+              await SoundManager.stopSound('victorySoundEffect');
+              await SoundManager.stopSound('failSoundEffect');
+
+              router.push({ pathname: "/dashboard", params: { openLevelPopup: true as any } })
+            },
+          },
+        ],
+        { cancelable: true }
+      );
+
+      return true; // Prevent default back action
+    };
+
+    const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction as any);
+
+    return () => backHandler.remove(); // Cleanup on unmount
+  }, []); // ✅ Add resumeTimer as a dependency
+
+  const [isAllLevelsComplete, setIsAllLevelsComplete] = useState(false);
+
+
+
+  useEffect(() => {
+    if (showScore) {
+      checkAllLevelsCompletion();
+    }
+    // updateUserProgress();
+  }, [showScore]);
+
+  const checkAllLevelsCompletion = async () => {
+    const userId = auth.currentUser?.uid;
+    if (!userId) return;
+
+    try {
+      const userRef = ref(database, `users/${userId}`);
+      const snapshot = await get(userRef);
+      const userData = snapshot.val() || {};
+
+      // Get max level from quizzes
+      const quizzesRef = ref(database, 'quizzes');
+      const quizzesSnapshot = await get(quizzesRef);
+      let maxLevel = 1;
+
+      if (quizzesSnapshot.exists()) {
+        quizzesSnapshot.forEach((childSnapshot) => {
+          const quiz = childSnapshot.val();
+          if (quiz.level > maxLevel) {
+            maxLevel = quiz.level;
+          }
+        });
+      }
+
+      if (userData.currentLevel >= maxLevel) {
+        setIsAllLevelsComplete(true);
+      }
+    } catch (error) {
+      console.error("Error checking levels completion:", error);
+    }
+  };
+
+
+  const handleContinue = async () => {
+    await SoundManager.stopSound('clappingSoundEffect');
+    await SoundManager.stopSound('victorySoundEffect');
+    await SoundManager.stopSound('failSoundEffect');
+    if (isSelectedLevel && level !== maxLevel) {
+      router.push({
+        pathname: "/user/QuizScreen",
+        params: {
+          level: Number(level) + 1
+
+        },
+      });
+
+
+    }
+
+    else {
+      if ((maxLevel != currentLevel) && isLevelComplete) {
+        router.push("/user/QuizScreen")
+
+      } else if ((maxLevel != currentLevel) && !isLevelComplete) {
+        router.push({ pathname: "/dashboard", params: { openLevelPopup: true as any } })
+        await clearAllLevelScores()
+      }
+
+      else if (maxLevel === currentLevel) {
+        router.push({ pathname: "/dashboard", params: { openLevelPopup: true as any } })
+        await clearAllLevelScores()
+      }
+    }
+
+  };
+
+  return (
+    <View style={styles.container}>
+      {!showScore ? (
+        <TouchableOpacity
+          style={styles.scoreButton}
+          onPress={() => setShowScore(true)}
+        >
+          <Text style={styles.buttonText}>Know Your Score</Text>
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.scoreCard}>
+          <Text style={styles.scoreText}>
+            Total score for this attempt: {Object.values(scores ?? {}).reduce((sum, score) => sum + score, 0)}
+          </Text>
+
+          <View style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <ScrollView style={{ maxHeight: 200 }} contentContainerStyle={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderColor: 'gray', borderWidth: 3, padding: 5, borderRadius: 22,
+            }}>
+              <Text style={{
+                fontSize: 14,
+                color: "#333",
+                fontFamily: "Poppins-Bold",
+                marginBottom: 10,
+                textDecorationStyle: 'dotted',
+                textDecorationLine: 'underline'
+              }}>
+                Your Score For this attempt
+              </Text>
+              <View>
+                {scores &&
+                  Object.entries(scores).map(([level, score]) => (
+                    <Text key={level} style={{ fontSize: 16, marginVertical: 4 }}>
+                      {level}: {score}
+                    </Text>
+                  ))}
+              </View>
+              <Text style={{
+                fontSize: 14,
+                color: "#333",
+                fontFamily: "Poppins-Bold",
+                marginBottom: 10,
+                textDecorationStyle: 'dotted',
+                textDecorationLine: 'underline'
+              }}>
+                level:{currentLevel} Quiz Statistics
+              </Text>
+              <Text style={{
+                fontSize: 14,
+                color: "#333",
+                fontFamily: "Poppins-Bold",
+                marginBottom: 10,
+                maxWidth: 160
+              }}>
+                Number of Correctly Answered question in level {currentLevel}:{correctAnswers}
+              </Text>
+              <Text style={{
+                fontSize: 14,
+                color: "#333",
+                fontFamily: "Poppins-Bold",
+                marginBottom: 10,
+              }}>
+                Total Question in level {currentLevel} :{totalQuestions}
+              </Text>
+              <Text style={{
+                fontSize: 14,
+                color: "#333",
+                fontFamily: "Poppins-Bold",
+                marginBottom: 10,
+              }}>
+                Total Miss/UnAnswered question in level {currentLevel}: {Number(totalQuestions) - Number(correctAnswers)}
+              </Text>
+            </ScrollView>
+
+          </View>
+          {isLevelComplete && maxLevel != currentLevel && (
+            <View style={styles.completionMessage}>
+              <Text style={styles.congratsText}>
+                🎉 Congratulations on completing  level:{currentLevel} of the math quiz!
+              </Text>
+            </View>
+          )}
+
+          {!isLevelComplete && (
+            <View style={styles.completionMessage}>
+              <Text style={styles.congratsText}>
+                😞 😔 unfortunately you didn't  complete this level press continue to select a level and try again!
+              </Text>
+            </View>
+          )}
+
+          {isLevelComplete && maxLevel === currentLevel && (
+            <View style={styles.completionMessage}>
+              <Text style={styles.congratsText}>
+                🎉 Congratulations you have successfully completed all level of the quiz!.
+              </Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={styles.continueButton}
+            onPress={handleContinue}
+          >
+            <Text style={styles.buttonText}>Continue</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      {isLevelComplete &&
+        <Player
+          autoPlay
+          style={{
+            width: '100%',
+            height: '30%',
+            marginTop: 30,
+            top: 45,
+            position: 'absolute'
+          }}
+          source={require('./../../assets/icons/congrate.json')}
+        />}
+      {!isLevelComplete &&
+        <Player
+          autoPlay
+          style={{
+            width: '100%',
+            height: '15%',
+            marginTop: 30,
+            top: 10,
+            position: 'absolute'
+          }}
+          source={require('./../../assets/icons/faliure.json')}
+        />}
+
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#FFF2CC",
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scoreButton: {
+    backgroundColor: "#F7C948",
+    paddingVertical: 15,
+    paddingHorizontal: 40,
+    borderRadius: 10,
+    marginBottom: 20,
+  },
+  buttonText: {
+    color: "#333",
+    fontSize: 18,
+    fontFamily: "Poppins-Bold",
+  },
+  scoreCard: {
+    backgroundColor: "#FFF",
+    padding: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    width: "90%",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  scoreText: {
+    fontSize: 24,
+    color: "#333",
+    fontFamily: "Poppins-Bold",
+    marginBottom: 10,
+  },
+  percentageText: {
+    fontSize: 36,
+    color: "#F7C948",
+    fontFamily: "Poppins-Bold",
+    marginBottom: 30,
+  },
+  continueButton: {
+    backgroundColor: "#F7C948",
+    paddingVertical: 15,
+    paddingHorizontal: 40,
+    borderRadius: 10,
+  },
+  completionMessage: {
+    backgroundColor: "#FFF",
+    padding: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  congratsText: {
+    fontSize: 18,
+    color: "#333",
+    fontFamily: "Poppins-Bold",
+    textAlign: "center",
+  },
+});
+
+implement this features
+
+Scorecard with Share Option
+ • Show detailed score summary after each quiz.
+ • Add share button (WhatsApp, social, etc.).
+
+ make sure the working things should be working at end of updates to add these features.
+
+ and this is the user in firebase.
+
+  const userId = auth.currentUser?.uid;
+      if (!userId) {
+        throw new Error("User ID is missing.");
+      }
+      const userRef = ref(database, `users/${userId}`);
+      await set(userRef, {
+        fullName,
+        username,
+        phoneNumber,
+        gender,
+        email: email,
+        age,
+        isnewuser: false,
+        streak: 0, // Initialize streak to 0
+        lastCompletionDate: null, // Initialize lastCompletionDate to null
+        highestCompletedLevelCompleted: 0,
+        levelsScores: [],
+      });
+      await set(usernameRef, true);
+
+      display the user id in the result screen too.

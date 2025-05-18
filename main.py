@@ -10,7 +10,9 @@ FILES_TO_DUMP = [
     "quizService.ts",
     "home.tsx",
     "QuizScreen.tsx",
-    "AllQuizzes.tsx"
+    "AllQuizzes.tsx",
+    "FinishedQuizzes.tsx",
+    "results.tsx",
 ]
 # =====================
 

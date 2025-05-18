@@ -13,7 +13,7 @@
 5. Continuous Quiz Levels - TO BE CHECKED
  • No manual action unless user loses — keeps quiz flow smooth.
 
-6. Scorecard with Share Option
+6. Scorecard with Share Option - TO BE CHECKED
  • Show detailed score summary after each quiz.
  • Add share button (WhatsApp, social, etc.).
 
