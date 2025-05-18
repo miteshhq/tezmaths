@@ -1,13 +1,13 @@
 # Updates to Make
 
-1. Feature Task List for Quiz App
+1. Feature Task List for Quiz App - TO BE CHECKED
 
 2. Refresh the entire app new colors, fonts, icons, and layouts for a clean, modern look.
 
 3. Google Authentication
  • Integrate Google Sign-Up/Login for faster access and user convenience.
 
-4. Streak System
+4. Streak System - TO BE CHECKED
  • Add daily quiz streak tracking with visual indicator on the dashboard.
 
 5. Continuous Quiz Levels
