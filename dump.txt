@@ -1032,742 +1032,1076 @@ const styles = StyleSheet.create({
   },
 });
 
-=== FILE: .\app\user\profile.tsx ===
-// app/user/profile.tsx
-import React, { useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-} from "react-native";
-import { auth, database } from "../../firebase/firebaseConfig";
-import { ref, get, update } from "firebase/database";
-import { signOut } from "firebase/auth";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Clipboard from "expo-clipboard";
-import { useRouter } from "expo-router";
-import SoundManager from "./components/souund/soundManager";
-
-export default function ProfileScreen() {
-  const router = useRouter();
-  const [userData, setUserData] = useState<any>({
-    fullName: "Unavailable",
-    username: "Unavailable",
-    email: "Unavailable",
-    referrals: 0,
-    points: 0,
-    totalPoints: 0,
-    highestCompletedLevelCompleted: 0,
-  });
-  const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    loadUserData();
-  }, []);
-
-  const loadUserData = async () => {
-    try {
-      setLoading(true);
-
-      const userId = auth.currentUser?.uid;
-      if (!userId) {
-        console.warn("No authenticated user found.");
-        setLoading(false);
-        return;
-      }
-
-      const userRef = ref(database, `users/${userId}`);
-      const snapshot = await get(userRef);
-
-      if (snapshot.exists()) {
-        // ✅ Get the latest data from Firebase
-        const data = snapshot.val();
-        const formattedData = {
-          fullName: data.fullName || "Unavailable",
-          username: data.username || "Unavailable",
-          referrals: data.referrals ?? 0,
-          points: data.points ?? 0,
-          totalPoints: data.totalPoints ?? 0,
-          highestCompletedLevelCompleted:
-            data.highestCompletedLevelCompleted ?? 0,
-        };
-
-        console.log("Fetched latest user data from database:", formattedData);
-
-        // ✅ Update state with the latest data
-        setUserData(formattedData);
-
-        // ✅ Overwrite AsyncStorage with the latest data
-        await AsyncStorage.setItem("userData", JSON.stringify(formattedData));
-      } else {
-        console.warn("User data not found in the database.");
-      }
-
-      setLoading(false);
-    } catch (error) {
-      console.error("Failed to load user data:", error);
-      setLoading(false);
-    }
-  };
-
-  const handleCopyReferralLink = async () => {
-    const referralLink = `https://trivia.com/${userData.username}`;
-    await Clipboard.setStringAsync(referralLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleLogout = async () => {
-    const LEVEL_STORAGE_KEY = "highestLevelReached";
-    await SoundManager.stopSound("levelSoundEffect");
-    await SoundManager.stopSound("clappingSoundEffect");
-    await SoundManager.stopSound("victorySoundEffect");
-    await SoundManager.stopSound("failSoundEffect");
-    try {
-      console.log("Logging out...");
-      const userId = auth.currentUser?.uid;
-      if (userId) {
-        const userRef = ref(database, `users/${userId}`);
-        // Get the stored level before clearing AsyncStorage
-        const storedLevel = await AsyncStorage.getItem(LEVEL_STORAGE_KEY);
-        const highestCompletedLevel = Number(storedLevel) || 0;
-
-        // Update user data with the highest completed level
-        await update(userRef, {
-          highestCompletedLevelCompleted: highestCompletedLevel,
-        });
-
-        // Clear AsyncStorage
-        await AsyncStorage.clear();
-      }
-
-      await signOut(auth);
-
-      Alert.alert("Logged out", "You have successfully logged out.");
-      router.push("/login");
-    } catch (error: any) {
-      console.error("Logout failed:", error);
-      Alert.alert("Logout failed", error.message);
-    }
-  };
-
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
-      {loading ? (
-        <ActivityIndicator size="large" color="#F7C948" />
-      ) : (
-        <>
-          {/* User Information */}
-          <Text style={styles.fullName}>{userData.fullName}</Text>
-          <Text style={styles.username}>@{userData.username}</Text>
-          {/* Referrals and Points */}
-          <View style={styles.infoContainer}>
-            <Text style={styles.infoTitle}>Referrals</Text>
-            <Text style={styles.infoValue}>{userData.referrals}</Text>
-          </View>
-          <View style={styles.infoContainer}>
-            <Text style={styles.infoTitle}>Points</Text>
-            <Text style={styles.infoValue}>
-              {userData.totalPoints.toFixed()}
-            </Text>
-          </View>
-          {/* Referral Link Section */}
-          <Text style={styles.referralTitle}>Refer friends</Text>
-          <View style={styles.referralContainer}>
-            <Text style={styles.referralLink}>
-              https://trivia.com/{userData.username}
-            </Text>
-            <TouchableOpacity onPress={handleCopyReferralLink}>
-              <Text style={styles.copyButton}>📋</Text>
-            </TouchableOpacity>
-          </View>
-          {copied && <Text style={styles.copiedText}>Copied</Text>}
-          {/* Logout Button */}
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Text style={styles.logoutText}>Log Out</Text>
-          </TouchableOpacity>
-        </>
-      )}
-    </ScrollView>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    backgroundColor: "#FFF2CC",
-    paddingHorizontal: 0,
-    alignItems: "flex-start",
-    paddingVertical: 20,
-  },
-  fullName: {
-    fontSize: 26,
-    color: "#333",
-    fontFamily: "Poppins-Bold",
-    marginLeft: 20,
-  },
-  username: {
-    fontSize: 16,
-    color: "#666",
-    fontFamily: "Poppins-Regular",
-    marginLeft: 20,
-    marginBottom: 15,
-  },
-  infoContainer: {
-    backgroundColor: "#F5E3B8",
-    borderRadius: 10,
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    marginVertical: 5,
-    width: "100%",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  infoTitle: {
-    fontSize: 16,
-    color: "#333",
-    fontFamily: "Poppins-Bold",
-  },
-  infoValue: {
-    fontSize: 16,
-    color: "#333",
-    fontFamily: "Poppins-Regular",
-  },
-  referralTitle: {
-    fontSize: 18,
-    color: "#333",
-    fontFamily: "Poppins-Bold",
-    marginVertical: 10,
-    marginLeft: 20,
-  },
-  referralContainer: {
-    backgroundColor: "#F5E3B8",
-    borderRadius: 10,
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    width: "100%",
-  },
-  referralLink: {
-    fontSize: 16,
-    color: "#333",
-    fontFamily: "Poppins-Regular",
-  },
-  copyButton: {
-    fontSize: 18,
-    color: "#333",
-    fontFamily: "Poppins-Bold",
-  },
-  copiedText: {
-    fontSize: 14,
-    color: "#000",
-    fontFamily: "Poppins-Bold",
-    marginTop: 5,
-    marginLeft: 20,
-  },
-  logoutButton: {
-    backgroundColor: "#FF5A5F",
-    borderRadius: 10,
-    paddingVertical: 15,
-    alignItems: "center",
-    width: "100%",
-    marginTop: 20,
-  },
-  logoutText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontFamily: "Poppins-Bold",
-  },
-});
-
-=== FILE: .\app\admin\ReferralPoints.tsx ===
-// app/dashboard.tsx
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-export default function DashboardScreen() {
-    return (
-        <View style={styles.container}>
-            <Text style={styles.title}>Dashboard</Text>
-        </View>
-    );
-}
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#1a1a1a',
-    },
-    title: {
-        fontSize: 28,
-        color: '#ffffff',
-        fontWeight: 'bold',
-    },
-});
-
-=== FILE: .\app\admin\UserManagement.tsx ===
-// app/admin/UserManagement.tsx
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, Alert } from 'react-native';
-import { ref, get, remove, onValue } from 'firebase/database';
-import { auth } from '../../firebase/firebaseConfig';
-import { database } from '../../firebase/firebaseConfig';
-
-export default function UserManagement() {
-    const [users, setUsers] = useState([]);
-    const [filteredUsers, setFilteredUsers] = useState([]);
-    const [searchQuery, setSearchQuery] = useState('');
-
-    // Fetch users from Firebase Database and Authentication
-    useEffect(() => {
-        const fetchUsers = async () => {
-            const usersRef = ref(database, 'users');
-            onValue(usersRef, async (snapshot) => {
-                const data = snapshot.val();
-                const userList = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
-                console.log(userList);
-
-
-
-                setUsers(userList as any); // Newest users at the top
-                setFilteredUsers(userList as any);
-            });
-        };
-
-        fetchUsers();
-    }, []);
-
-    // Handle search functionality
-    const handleSearch = (query: string) => {
-        setSearchQuery(query);
-        if (query === '') {
-            setFilteredUsers(users);
-        } else {
-            const filtered = users.filter((user: any) =>
-                (user.username && user.username.toLowerCase().includes(query.toLowerCase())) ||
-                (user.fullName && user.fullName.toLowerCase().includes(query.toLowerCase()))
-            );
-            setFilteredUsers(filtered);
-        }
-    };
-
-    // Handle user deletion
-    const handleDeleteUser = (userId: any) => {
-        Alert.alert("Delete User", "Are you sure you want to delete this user?", [
-            { text: "Cancel", style: "cancel" },
-            {
-                text: "Delete",
-                style: "destructive",
-                onPress: async () => {
-                    const userRef = ref(database, `users/${userId}`);
-                    await remove(userRef);
-                    Alert.alert("User deleted successfully.");
-                },
-            },
-        ]);
-    };
-
-    return (
-        <View style={styles.container}>
-            <Text style={styles.title}>All Users</Text>
-            <TextInput
-                style={styles.input}
-                placeholder="Search by name or username"
-                value={searchQuery}
-                onChangeText={handleSearch}
-            />
-            <FlatList
-                data={filteredUsers}
-                keyExtractor={(item: any) => item.id}
-                renderItem={({ item }: any) => (
-                    <View style={styles.userItem}>
-                        <Text style={styles.userDetail}><Text style={styles.detailLabel}>Full Name:</Text> {item.fullName || 'N/A'}</Text>
-                        <Text style={styles.userDetail}><Text style={styles.detailLabel}>Username:</Text> {item.username || 'N/A'}</Text>
-                        <Text style={styles.userDetail}><Text style={styles.detailLabel}>Email:</Text> {item.email}</Text>
-                        <Text style={styles.userDetail}><Text style={styles.detailLabel}>Phone:</Text> {item.phoneNumber || 'N/A'}</Text>
-                        <Text style={styles.userDetail}><Text style={styles.detailLabel}>Points:</Text> {item.totalPoints || 0}</Text>
-                        <Text style={styles.userDetail}><Text style={styles.detailLabel}>Referrals:</Text> {item.referrals || 0}</Text>
-                        <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeleteUser(item.id)}>
-                            <Text style={styles.deleteButtonText}>Delete</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
-                contentContainerStyle={styles.flatListContent} // Add bottom padding here
-            />
-        </View>
-    );
-}
-
-// Styling similar to Quiz Management screen for consistency
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#F4F6F8',
-        paddingHorizontal: 20,
-    },
-    title: {
-        fontSize: 26,
-        color: '#333',
-        fontFamily: 'Poppins-Bold',
-        textAlign: 'center',
-        marginVertical: 20,
-    },
-    input: {
-        backgroundColor: '#fff',
-        color: '#333',
-        paddingVertical: 12,
-        paddingHorizontal: 15,
-        borderRadius: 10,
-        marginBottom: 15,
-        width: '100%',
-        fontFamily: 'Poppins-Regular',
-        fontSize: 15,
-    },
-    userItem: {
-        backgroundColor: '#fff',
-        padding: 15,
-        borderRadius: 10,
-        marginBottom: 10,
-        borderColor: '#ddd',
-        borderWidth: 1,
-    },
-    userDetail: {
-        fontSize: 14,
-        color: '#555',
-        fontFamily: 'Poppins-Regular',
-        marginBottom: 5,
-    },
-    detailLabel: {
-        fontFamily: 'Poppins-Bold',
-        color: '#333',
-    },
-    deleteButton: {
-        backgroundColor: '#FF5A5F',
-        padding: 8,
-        borderRadius: 10,
-        alignItems: 'center',
-        marginTop: 10,
-    },
-    deleteButtonText: {
-        color: '#fff',
-        fontFamily: 'Poppins-Bold',
-        fontSize: 14,
-    },
-    flatListContent: {
-        paddingBottom: 30, // Extra padding at the bottom for spacing
-    },
-});
-
-=== FILE: adminDashbaord.tsx ===
-[Not found anywhere]
-
-=== FILE: .\app\register.tsx ===
-// app/register.tsx
-import React, { useState } from "react";
+=== FILE: .\app\user\QuizScreen.tsx ===
+// app/user/QuizScreen.tsx
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
+  Alert,
   StyleSheet,
+  Platform,
+  KeyboardAvoidingView,
   Dimensions,
+  Image,
   ScrollView,
+  BackHandler,
+  TouchableOpacity,
 } from "react-native";
-import { database } from "../firebase/firebaseConfig";
-import { ref, set, get } from "firebase/database";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { auth } from "../firebase/firebaseConfig";
-import { Picker } from "@react-native-picker/picker";
+import { Player } from "@lottiefiles/react-lottie-player";
+import { CountdownCircleTimer } from "react-native-countdown-circle-timer";
+import { router, useLocalSearchParams } from "expo-router";
+import { ref, get, update } from "firebase/database";
+import { database, auth } from "../../firebase/firebaseConfig";
 
-export default function RegisterScreen() {
-  const router = useRouter();
+import * as Haptics from "expo-haptics";
+import SoundManager from "./components/souund/soundManager";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const windowHeight = Dimensions.get("window").height;
+
+interface Explanation {
+  text?: string;
+  image?: string;
+}
+
+interface Question {
+  id: string;
+  question: string;
+  correctAnswer: string;
+  explanation?: string;
+  answerImage?: string;
+  timeLimit?: number;
+  points?: number;
+}
+
+interface CurrentQuestion {
+  questionText: string;
+  timeLimit: number;
+  explanation: string;
+  image?: string;
+  correctAnswer: string;
+  options?: [];
+}
+
+const getMaxLevel = async () => {
+  try {
+    const quizzesRef = ref(database, "quizzes");
+    const snapshot = await get(quizzesRef);
+    if (!snapshot.exists()) return 1;
+
+    let maxLvl = 1;
+    snapshot.forEach((childSnapshot) => {
+      const quiz = childSnapshot.val();
+      if (quiz.level > maxLvl) {
+        maxLvl = quiz.level;
+      }
+    });
+    return maxLvl;
+  } catch (error) {
+    console.error("Error getting max level:", error);
+    return 1;
+  }
+};
+
+export default function QuizScreen() {
   const params = useLocalSearchParams();
-  const { email } = params;
+  const { level, isSelectedLevel } = params;
 
-  const [fullName, setFullName] = useState("");
-  const [username, setUsername] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [phoneError, setPhoneError] = useState("");
-  const [gender, setGender] = useState("");
-  const [age, setAge] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [agreeToTerms, setAgreeToTerms] = useState(false);
-  const [focusField, setFocusField] = useState(null);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [feedbackType, setFeedbackType] = useState(""); // e.g., "correct", "incorrect", "levelStart"
 
-  const validatePhoneNumber = () => {
-    if (
-      !phoneNumber ||
-      phoneNumber.length > 11 ||
-      phoneNumber.length < 10 ||
-      !/^\d+$/.test(phoneNumber)
-    ) {
-      setPhoneError("Please enter a valid phone number.");
-      return false;
+  const [loading, setLoading] = useState(true);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [userAnswer, setUserAnswer] = useState("");
+  const [qizScore, setQuizScore] = useState(0);
+  const [isAnswerWrong, setIsAnswerWrong] = useState(false);
+  const [showExplanation, setShowExplanation] = useState(false);
+  const [correctAnswers, setCorrectAnswers] = useState(0);
+  const [correctAnswer, setCorrectAnswer] = useState("");
+  const [currentLevel, setCurrentLevel] = useState(0);
+  const [maxLevel, setMaxLevel] = useState<number>(0);
+  const [currentExplanation, setCurrentExplanation] =
+    useState<Explanation | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const [nextQuestion, setNextQuestion] = useState(null);
+  const [currentQuestion, setCurrentQuestion] =
+    useState<CurrentQuestion | null>(null);
+  const questionsCache = useRef<any>({});
+  const [questionsLocked, setQuestionsLocked] = useState(false);
+  const [isTimeOut, setIsTimeOut] = useState(false);
+
+  const LEVEL_STORAGE_KEY = "highestLevelReached";
+  const [highestLevelReached, setHighestLevelReached] = useState(1);
+
+  useEffect(() => {
+    const loadHighestLevel = async () => {
+      try {
+        const storedLevel = await AsyncStorage.getItem(LEVEL_STORAGE_KEY);
+        if (storedLevel !== null) {
+          setHighestLevelReached(Number(storedLevel));
+          return;
+        }
+        const userId = auth.currentUser?.uid;
+        if (!userId) return;
+
+        const userRef = ref(database, `users/${userId}`);
+        const userSnapshot = await get(userRef);
+        const userData = userSnapshot.val() || {};
+
+        const userCurrentLevel = userData.currentLevel || 1;
+        console.log("Fetched level from database:", userCurrentLevel);
+
+        setHighestLevelReached(userCurrentLevel);
+        await AsyncStorage.setItem(
+          LEVEL_STORAGE_KEY,
+          userCurrentLevel.toString()
+        );
+      } catch (error) {
+        console.error("Error loading highest level:", error);
+      }
+    };
+
+    loadHighestLevel();
+  }, []);
+
+  async function updateStreak() {
+    const userId = auth.currentUser?.uid;
+    if (!userId) return;
+    try {
+      const userRef = ref(database, `users/${userId}`);
+      const currentDate = new Date();
+      const currentDateString = currentDate.toISOString().split("T")[0];
+      const snapshot = await get(userRef);
+      const userData = snapshot.val() || {};
+      const lastCompletionDate = userData.lastCompletionDate;
+      const currentStreak = userData.streak || 0;
+
+      if (lastCompletionDate) {
+        const lastDate = new Date(lastCompletionDate + "T00:00:00");
+        const nextDay = new Date(lastDate);
+        nextDay.setDate(lastDate.getDate() + 1);
+        const nextDayString = nextDay.toISOString().split("T")[0];
+
+        if (currentDateString === lastCompletionDate) {
+          return;
+        } else if (currentDateString === nextDayString) {
+          await update(userRef, {
+            streak: currentStreak + 1,
+            lastCompletionDate: currentDateString,
+          });
+        } else {
+          await update(userRef, {
+            streak: 1,
+            lastCompletionDate: currentDateString,
+          });
+        }
+      } else {
+        await update(userRef, {
+          streak: 1,
+          lastCompletionDate: currentDateString,
+        });
+      }
+    } catch (error) {
+      console.error("Error updating streak:", error);
     }
-    setPhoneError("");
-    return true;
+  }
+
+  const updateUserPoints = async (points: number) => {
+    const userId = auth.currentUser?.uid;
+    if (!userId) return;
+
+    try {
+      const userRef = ref(database, `users/${userId}`);
+      const snapshot = await get(userRef);
+      const userData = snapshot.val() || {};
+
+      if (currentLevel > highestLevelReached) {
+        await update(userRef, {
+          totalPoints: (Number(userData.totalPoints) || 0) + points,
+        });
+      }
+    } catch (error) {
+      console.error("Error updating user points:", error);
+    }
   };
 
-  const handleRegister = async () => {
-    setErrorMessage("");
-    const usernameRegex = /^[a-zA-Z0-9]{1,15}$/;
-    if (!fullName || !username || !gender || !age || !phoneNumber) {
-      setErrorMessage("All fields are required.");
-      return;
-    }
-    if (!usernameRegex.test(username)) {
-      setErrorMessage(
-        "Username must be alphanumeric and within 15 characters."
-      );
-      return;
-    }
-    if (isNaN(parseInt(age)) || parseInt(age) <= 0 || parseInt(age) > 120) {
-      setErrorMessage("Age must be a valid number between 1 and 120.");
-      return;
-    }
-    if (!agreeToTerms) {
-      setErrorMessage("You must agree to the terms and conditions.");
-      return;
-    }
-    if (!validatePhoneNumber()) {
-      setErrorMessage("Please correct the errors before submitting.");
-      return;
-    }
+  const saveLevelLocalScore = async (currentLevel: number, points: number) => {
     try {
-      const usernameRef = ref(database, `usernames/${username}`);
-      const usernameSnapshot = await get(usernameRef);
-      if (usernameSnapshot.exists()) {
-        setErrorMessage("Username is already taken. Please choose another.");
-        return;
-      }
-      const userId = auth.currentUser?.uid;
-      if (!userId) {
-        throw new Error("User ID is missing.");
-      }
-      const userRef = ref(database, `users/${userId}`);
-      await set(userRef, {
-        fullName,
-        username,
-        phoneNumber,
-        gender,
-        email: email,
-        age,
-        isnewuser: false,
-        streak: 0, // Initialize streak to 0
-        lastCompletionDate: null, // Initialize lastCompletionDate to null
-        highestCompletedLevelCompleted: 0,
-        levelsScores: [],
-      });
-      await set(usernameRef, true);
-      router.push("/dashboard");
+      const key = `levelScore_${currentLevel}`;
+      await AsyncStorage.setItem(key, points.toString());
+      console.log(`Saved score for Level ${currentLevel}: ${points}`);
     } catch (error) {
-      console.error("Registration failed:", error);
-      setErrorMessage("Registration failed. Please try again.");
+      console.error("Error saving level score:", error);
     }
+  };
+
+  const clearAllLevelScores = async () => {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const levelKeys = keys.filter((key) => key.startsWith("levelScore_"));
+      if (levelKeys.length > 0) {
+        await AsyncStorage.multiRemove(levelKeys);
+        console.log("All level scores removed successfully!");
+      } else {
+        console.log("No level scores found to remove.");
+      }
+    } catch (error) {
+      console.error("Error clearing level scores:", error);
+    }
+  };
+
+  const handleLevelChange = async (newLevel: number) => {
+    if (newLevel < highestLevelReached && newLevel !== 1) {
+      console.log(`User selected a lower level (${newLevel}), ignoring...`);
+      return;
+    }
+
+    console.log(`Updating level to ${newLevel}`);
+    setCurrentLevel(newLevel);
+
+    if (newLevel > highestLevelReached) {
+      setHighestLevelReached(newLevel);
+      await AsyncStorage.setItem(LEVEL_STORAGE_KEY, newLevel.toString());
+    }
+  };
+
+  useEffect(() => {
+    if (level) {
+      questionsCache.current = {};
+      setCurrentLevel(Number(level));
+      setQuestionsLocked(false);
+      setQuestions([]);
+      setCurrentQuestion(null);
+    }
+  }, [level]);
+
+  const startTimer = useCallback(() => {
+    if (!currentQuestion) return;
+
+    clearInterval(timerRef.current as any);
+    setIsPlaying(true);
+
+    timerRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current as any);
+          handleTimeUp();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, [currentQuestion]);
+
+  useEffect(() => {
+    if (loading || showExplanation || showFeedback) return;
+    startTimer();
+    return () => clearInterval(timerRef.current as any);
+  }, [
+    currentQuestionIndex,
+    showExplanation,
+    showFeedback,
+    loading,
+    startTimer,
+  ]);
+
+  useEffect(() => {
+    const preloadQuestions = async () => {
+      if (questionsLocked) return;
+
+      try {
+        const initialQuestions = await getRandomQuestions(currentLevel);
+        if (initialQuestions.length > 0) {
+          const questionsMap = {};
+          initialQuestions.forEach((q: any, index: number) => {
+            questionsMap[index] = q;
+          });
+          questionsCache.current = questionsMap;
+
+          setQuestions(initialQuestions as any);
+          setCurrentQuestion(initialQuestions[0]);
+          setTimeLeft(initialQuestions[0]?.timeLimit || 30);
+          setQuestionsLocked(true);
+        }
+      } catch (error) {
+        console.error("Error loading questions:", error);
+      }
+    };
+
+    preloadQuestions();
+  }, [currentLevel, questionsLocked]);
+
+  const preloadNextQuestion = useCallback(() => {
+    if (currentQuestionIndex < questions.length - 1) {
+      const next = questionsCache.current[currentQuestionIndex + 1];
+      setNextQuestion(next);
+    }
+  }, [currentQuestionIndex, questions.length]);
+
+  useEffect(() => {
+    if (!loading && questions.length > 0) {
+      preloadNextQuestion();
+    }
+  }, [currentQuestionIndex, questions, loading, preloadNextQuestion]);
+
+  const initializeQuiz = useCallback(async () => {
+    try {
+      setLoading(true);
+      const userId = auth.currentUser?.uid;
+      const userRef = ref(database, `users/${userId}`);
+      const userSnapshot = await get(userRef);
+      const userData = userSnapshot.val() || {};
+
+      const userCurrentLevel = level
+        ? Number(level)
+        : userData.currentLevel || 1;
+      setCurrentLevel(userCurrentLevel);
+
+      const [maxLvl, initialQuestions] = await Promise.all([
+        getMaxLevel(),
+        getRandomQuestions(userCurrentLevel),
+      ]);
+
+      setMaxLevel(maxLvl);
+      if (initialQuestions.length > 0) {
+        setQuestions(initialQuestions as any);
+        setCurrentQuestionIndex(0);
+      } else {
+        Alert.alert("No Questions", "No questions available for this level.", [
+          { text: "OK", onPress: () => router.back() },
+        ]);
+      }
+    } catch (error) {
+      console.error("Error initializing quiz:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleError = (error: string) => {
+      console.error("Quiz Error:", error);
+      setLoading(false);
+      Alert.alert(
+        "Error",
+        "There was an error loading the quiz. Please try again.",
+        [{ text: "OK", onPress: () => router.back() }]
+      );
+    };
+
+    initializeQuiz().catch(handleError);
+  }, [initializeQuiz]);
+
+  const getRandomQuestions = async (level: number) => {
+    try {
+      const quizzesRef = ref(database, "quizzes");
+      const snapshot = await get(quizzesRef);
+      if (!snapshot.exists()) return [];
+
+      const userId = auth.currentUser?.uid;
+      const userRef = ref(database, `users/${userId}/completedLevels`);
+      const userSnapshot = await get(userRef);
+      const completedLevels = userSnapshot.val() || {};
+
+      const levelQuizzes: any[] = [];
+      snapshot.forEach((childSnapshot) => {
+        const quiz = childSnapshot.val();
+        if (quiz.level === level && !completedLevels[quiz.id]) {
+          quiz.questions.forEach((q: any) => {
+            levelQuizzes.push(q);
+          });
+        }
+      });
+      const shuffled = JSON.parse(JSON.stringify(levelQuizzes)).sort(
+        () => 0.5 - Math.random()
+      );
+      return shuffled;
+    } catch (error) {
+      console.error("Error getting random questions:", error);
+      return [];
+    }
+  };
+
+  useEffect(() => {
+    if (userAnswer.trim() === correctAnswer.trim()) {
+      handleSubmitAnswer(correctAnswer);
+    }
+  }, [userAnswer, correctAnswer]);
+
+  const handleInputChange = (text: string, correctAnswer: string) => {
+    setUserAnswer(text);
+    setCorrectAnswer(correctAnswer);
+  };
+
+  const handleCorrectAnswer = async () => {
+    const currentQuestion = questionsCache.current[currentQuestionIndex];
+    if (!currentQuestion) return;
+
+    clearInterval(timerRef.current as any);
+    setIsPlaying(false);
+    setIsAnswerWrong(false);
+    setCorrectAnswers((prev) => prev + 1);
+    setQuizScore((prev) => prev + (currentQuestion.points || 10));
+
+    setFeedbackMessage("Correct!");
+    setFeedbackType("correct");
+    setShowFeedback(true);
+
+    setTimeout(async () => {
+      setShowFeedback(false);
+      if (currentQuestionIndex < questions.length - 1) {
+        const nextIndex = currentQuestionIndex + 1;
+        const nextQuestion = questionsCache.current[nextIndex];
+        setCurrentQuestion(nextQuestion);
+        setCurrentQuestionIndex(nextIndex);
+        setTimeLeft(nextQuestion?.timeLimit || 30);
+        setUserAnswer("");
+        startTimer();
+      } else {
+        await handleLevelCompletion();
+      }
+    }, 500);
+  };
+
+  const handleIncorrectAnswer = async () => {
+    setIsAnswerWrong(true);
+    setIsPlaying(false);
+    if (Platform.OS !== "web") {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+    setShowExplanation(true);
+    setCurrentExplanation({
+      text: questions[currentQuestionIndex]?.explanation,
+      image: questions[currentQuestionIndex]?.answerImage,
+    });
+
+    setTimeout(() => {
+      setShowExplanation(false);
+      setCurrentExplanation(null);
+      setIsAnswerWrong(false);
+      if (currentQuestionIndex < questions.length - 1) {
+        const nextIndex = currentQuestionIndex + 1;
+        const nextQuestion = questionsCache.current[nextIndex];
+        setCurrentQuestion(nextQuestion);
+        setCurrentQuestionIndex(nextIndex);
+        setTimeLeft(nextQuestion?.timeLimit || 30);
+        setUserAnswer("");
+        startTimer();
+      } else {
+        handleLevelCompletion();
+      }
+    }, 5000);
+  };
+
+  const handleSubmitAnswer = async (correctAnswer: string) => {
+    if (!userAnswer) return;
+
+    if (userAnswer.trim() === correctAnswer.trim()) {
+      await SoundManager.playSound("rightAnswerSoundEffect", {
+        isLooping: false,
+      });
+      await handleCorrectAnswer();
+    } else {
+      await SoundManager.playSound("wrongAnswerSoundEffect", {
+        isLooping: false,
+      });
+      handleIncorrectAnswer();
+    }
+  };
+
+  const markLevelAsCompleted = async (level: number) => {
+    const userId = auth.currentUser?.uid;
+    if (!userId) return;
+
+    try {
+      const userRef = ref(database, `users/${userId}`);
+      const nextLevel = level + 1 > maxLevel ? maxLevel : level + 1;
+
+      if (
+        !isSelectedLevel ||
+        (isSelectedLevel && level >= highestLevelReached)
+      ) {
+        await update(userRef, {
+          currentLevel: nextLevel,
+          [`completedLevels/${level}`]: true,
+        });
+      }
+    } catch (error) {
+      console.error("Error marking level as completed:", error);
+    }
+  };
+
+  const handleLevelCompletion = async () => {
+    await markLevelAsCompleted(currentLevel);
+    if (qizScore > 0) {
+      await saveLevelLocalScore(currentLevel, qizScore);
+      await updateUserPoints(qizScore);
+    }
+    await updateStreak();
+
+    if (currentLevel < maxLevel) {
+      const nextLevel = currentLevel + 1;
+      const nextQuestions = await getRandomQuestions(nextLevel);
+
+      if (nextQuestions.length > 0) {
+        questionsCache.current = {};
+        setQuestions(nextQuestions as any);
+        setCurrentQuestionIndex(0);
+        setCurrentQuestion(nextQuestions[0]);
+        setTimeLeft(nextQuestions[0]?.timeLimit || 30);
+        setUserAnswer("");
+        setCurrentLevel(nextLevel);
+        setQuizScore(0);
+        setCorrectAnswers(0);
+        setQuestionsLocked(false);
+
+        setFeedbackMessage(`Moving to Level ${nextLevel}`);
+        setFeedbackType("levelStart");
+        setShowFeedback(true);
+        setTimeout(() => {
+          setShowFeedback(false);
+          startTimer();
+        }, 500);
+      } else {
+        router.push({
+          pathname: "/user/results",
+          params: {
+            highestLevelReached,
+            quizScore: qizScore,
+            correctAnswers,
+            totalQuestions: questions.length,
+            currentLevel,
+            isLevelComplete: true,
+            maxLevel,
+            isSelectedLevel,
+            level,
+          },
+        });
+      }
+    } else {
+      router.push({
+        pathname: "/user/results",
+        params: {
+          highestLevelReached,
+          quizScore: qizScore,
+          correctAnswers,
+          totalQuestions: questions.length,
+          currentLevel,
+          isLevelComplete: true,
+          maxLevel,
+          isSelectedLevel,
+          level,
+        },
+      });
+    }
+  };
+
+  const handleTimeUp = async () => {
+    await SoundManager.playSound("wrongAnswerSoundEffect", {
+      isLooping: false,
+    });
+    setIsTimeOut(true); // Ascertain if the user loses by quitting (back button) or completes all levels, requiring manual navigation to results.
+
+    setIsPlaying(false);
+    if (Platform.OS !== "web") {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+    setShowExplanation(true);
+    setCurrentExplanation({
+      text: questions[currentQuestionIndex]?.explanation,
+      image: questions[currentQuestionIndex]?.answerImage,
+    });
+
+    setTimeout(() => {
+      setShowExplanation(false);
+      setCurrentExplanation(null);
+      setIsTimeOut(false);
+      if (currentQuestionIndex < questions.length - 1) {
+        const nextIndex = currentQuestionIndex + 1;
+        const nextQuestion = questionsCache.current[nextIndex];
+        setCurrentQuestion(nextQuestion);
+        setCurrentQuestionIndex(nextIndex);
+        setTimeLeft(nextQuestion?.timeLimit || 30);
+        setUserAnswer("");
+        startTimer();
+      } else {
+        handleLevelCompletion();
+      }
+    }, 5000);
+  };
+
+  const resumeTimer = useCallback(() => {
+    if (!currentQuestion || timeLeft <= 0 || isAnswerWrong || isTimeOut) return;
+
+    clearInterval(timerRef.current as any);
+    setIsPlaying(true);
+
+    timerRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current as any);
+          handleTimeUp();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, [currentQuestion, timeLeft, isAnswerWrong, isTimeOut]);
+
+  useEffect(() => {
+    const backAction = async () => {
+      await SoundManager.stopSound("clappingSoundEffect");
+      await SoundManager.stopSound("victorySoundEffect");
+      await SoundManager.stopSound("failSoundEffect");
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        setIsPlaying(false);
+      }
+
+      Alert.alert(
+        "Are you sure you want to quit the quiz?",
+        "",
+        [
+          {
+            text: "Resume Quiz",
+            style: "cancel",
+            onPress: () => resumeTimer(),
+          },
+          {
+            text: "Quit anyway!",
+            onPress: async () => {
+              await clearAllLevelScores();
+              if (qizScore > 0) {
+                await saveLevelLocalScore(currentLevel, qizScore);
+                await markLevelAsCompleted(currentLevel);
+              }
+              router.push({
+                pathname: "/dashboard",
+                params: { openLevelPopup: true },
+              });
+            },
+          },
+        ],
+        { cancelable: true }
+      );
+
+      return true;
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      backAction as any
+    );
+    return () => backHandler.remove();
+  }, [resumeTimer, qizScore, currentLevel]);
+
+  const renderExplanation = () => {
+    return (
+      <View style={styles.explanationCard}>
+        <Text style={styles.explanationText}>
+          {currentExplanation?.text || "No explanation available"}
+        </Text>
+        {currentExplanation?.image && (
+          <Image
+            source={{ uri: currentExplanation.image }}
+            style={styles.explanationImage}
+            resizeMode="contain"
+          />
+        )}
+      </View>
+    );
+  };
+
+  const congratulationPage = () => {
+    return (
+      <View
+        style={{
+          padding: 25,
+          borderRadius: 15,
+          alignItems: "center",
+          display: "flex",
+          justifyContent: "center",
+          height: "20%",
+        }}
+      >
+        <Text
+          style={{
+            textAlign: "center",
+            fontSize: 18,
+            color: "#333",
+            fontFamily: "Poppins-Regular",
+          }}
+        >
+          🎉 Congratulations! You just completed Level {currentLevel}!
+        </Text>
+      </View>
+    );
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Loading questions...</Text>
+      </View>
+    );
+  }
+
+  const handleTestSkip = async () => {
+    console.log("TEST SKIP pressed"); // ← add this
+    if (timerRef.current) {
+      clearInterval(timerRef.current as any);
+      setIsPlaying(false);
+    }
+    await markLevelAsCompleted(currentLevel);
+    router.push({
+      pathname: "/user/results",
+      params: {
+        highestLevelReached,
+        quizScore: 9999,
+        correctAnswers: questions.length,
+        totalQuestions: questions.length,
+        currentLevel,
+        isLevelComplete: true,
+        maxLevel,
+        isSelectedLevel,
+        level: currentLevel,
+      },
+    });
   };
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      showsVerticalScrollIndicator={false}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={styles.container}
     >
-      <Text style={styles.title}>Complete Registration</Text>
-      <TextInput
-        style={[styles.input, focusField === "fullName" && styles.inputFocused]}
-        placeholder="Full Name"
-        placeholderTextColor="#7a7a7a"
-        onChangeText={setFullName}
-        value={fullName}
-        onFocus={() => setFocusField("fullName" as any)}
-        onBlur={() => setFocusField(null)}
-      />
-      <TextInput
-        style={[styles.input, focusField === "username" && styles.inputFocused]}
-        placeholder="Username"
-        placeholderTextColor="#7a7a7a"
-        onChangeText={(value) => {
-          const sanitizedValue = value
-            .replace(/[^a-zA-Z0-9]/g, "")
-            .slice(0, 15);
-          setUsername(sanitizedValue);
-        }}
-        value={username}
-        onFocus={() => setFocusField("username" as any)}
-        onBlur={() => setFocusField(null)}
-      />
-      <TextInput
-        style={[
-          styles.input,
-          focusField === "phoneNumber" && styles.inputFocused,
-        ]}
-        placeholder="Phone Number"
-        placeholderTextColor="#7a7a7a"
-        keyboardType="numeric"
-        onChangeText={setPhoneNumber}
-        value={phoneNumber}
-        onFocus={() => setFocusField("phoneNumber" as any)}
-        onBlur={() => {
-          setFocusField(null);
-          validatePhoneNumber();
-        }}
-      />
-      {phoneError ? <Text style={styles.errorText}>{phoneError}</Text> : null}
-      <View
-        style={[
-          styles.pickerWrapper,
-          focusField === "gender" && styles.inputFocused,
-        ]}
-      >
-        <Picker
-          selectedValue={gender}
-          style={styles.picker}
-          onValueChange={(itemValue) => {
-            setGender(itemValue);
-            setFocusField("gender" as any);
-          }}
-          onFocus={() => setFocusField("gender" as any)}
-          onBlur={() => setFocusField(null)}
-        >
-          <Picker.Item label="Select Gender" value="" />
-          <Picker.Item label="Male" value="Male" />
-          <Picker.Item label="Female" value="Female" />
-        </Picker>
-      </View>
-      <TextInput
-        style={[styles.input, focusField === "age" && styles.inputFocused]}
-        placeholder="Age"
-        placeholderTextColor="#7a7a7a"
-        keyboardType="numeric"
-        maxLength={3}
-        onChangeText={(value) => {
-          const cleanValue = value.replace(/[^0-9]/g, "");
-          setAge(cleanValue);
-        }}
-        value={age}
-        onFocus={() => setFocusField("age" as any)}
-        onBlur={() => setFocusField(null)}
-      />
-      <View style={styles.checkboxContainer}>
-        <TouchableOpacity
-          onPress={() => setAgreeToTerms(!agreeToTerms)}
-          style={styles.customCheckbox}
-        >
-          {agreeToTerms ? <View style={styles.checkedSquare} /> : null}
-        </TouchableOpacity>
-        <Text style={styles.checkboxText}>
-          I agree to the terms and conditions
-        </Text>
-      </View>
-      {errorMessage ? (
-        <Text style={styles.errorText}>{errorMessage}</Text>
-      ) : null}
-      <TouchableOpacity style={styles.button} onPress={handleRegister}>
-        <Text style={styles.buttonText}>Continue</Text>
+      <TouchableOpacity style={styles.testButton} onPress={handleTestSkip}>
+        <Text style={styles.testText}>TEST SKIP</Text>
       </TouchableOpacity>
-    </ScrollView>
+
+      <View style={styles.contentContainer}>
+        {showFeedback && (
+          <View style={styles.feedbackCard}>
+            <Text style={styles.feedbackText}>{feedbackMessage}</Text>
+          </View>
+        )}
+        {!showFeedback && (
+          <>
+            <View style={styles.header}>
+              <View style={{ display: "flex", flexDirection: "column" }}>
+                <Text style={styles.questionCounter}>
+                  Level: {currentLevel}
+                </Text>
+                <Text style={styles.questionCounter}>
+                  Question {currentQuestionIndex + 1} / {questions.length}
+                </Text>
+              </View>
+              <View
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-start",
+                  gap: 20,
+                }}
+              >
+                <CountdownCircleTimer
+                  key={timeLeft}
+                  isPlaying={isPlaying}
+                  duration={timeLeft}
+                  size={80}
+                  colors={["#004777", "#F7B801", "#A30000", "#FF0000"]}
+                  colorsTime={[15, 10, 5, 0]}
+                  onComplete={() => ({ shouldRepeat: false })}
+                >
+                  {({ remainingTime }) => (
+                    <Text style={styles.timer}>{remainingTime}s</Text>
+                  )}
+                </CountdownCircleTimer>
+              </View>
+            </View>
+
+            <View style={styles.questionCard}>
+              {currentQuestion?.questionText && (
+                <Text style={styles.questionText}>
+                  {currentQuestion.questionText ||
+                    questionsCache.current[currentQuestionIndex]?.questionText}
+                </Text>
+              )}
+              {currentQuestion?.options && (
+                <ScrollView
+                  style={{ maxHeight: 150 }}
+                  showsVerticalScrollIndicator={true}
+                >
+                  {currentQuestion.options.map((option: any, index: number) => (
+                    <View
+                      key={index}
+                      style={{ display: "flex", flexDirection: "row", gap: 20 }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 16,
+                          color: "#333",
+                          borderRadius: 100,
+                          height: 20,
+                          width: 20,
+                          borderWidth: 10,
+                          fontFamily: "Poppins-Bold",
+                          textAlign: "center",
+                          marginBottom: 5,
+                        }}
+                      ></Text>
+                      <Text
+                        style={{
+                          fontSize: 16,
+                          color: "#333",
+                          fontFamily: "Poppins-Bold",
+                          textAlign: "center",
+                          marginBottom: 10,
+                        }}
+                      >
+                        {option}
+                      </Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+              {!showExplanation && (
+                <>
+                  <TextInput
+                    style={[
+                      styles.answerInput,
+                      isAnswerWrong && styles.wrongAnswer,
+                    ]}
+                    value={userAnswer}
+                    onChangeText={(text) =>
+                      handleInputChange(
+                        text,
+                        questionsCache.current[
+                          currentQuestionIndex
+                        ]?.correctAnswer.trim()
+                      )
+                    }
+                    onSubmitEditing={() =>
+                      handleSubmitAnswer(
+                        questionsCache.current[
+                          currentQuestionIndex
+                        ]?.correctAnswer.trim()
+                      )
+                    }
+                    placeholder={
+                      userAnswer ? userAnswer : "Type your answer..."
+                    }
+                    keyboardType="numeric"
+                    autoFocus={true}
+                    maxLength={10}
+                    editable={!showExplanation}
+                    returnKeyType="done"
+                  />
+                  {userAnswer &&
+                    questionsCache.current[
+                      currentQuestionIndex
+                    ]?.correctAnswer.trim() === userAnswer && (
+                      <Image
+                        source={require("../../assets/images/markCorrect.png")}
+                        style={{ width: 20, height: 20 }}
+                      />
+                    )}
+                </>
+              )}
+
+              {isAnswerWrong && (
+                <Text style={styles.errorText}>Incorrect. Try again!</Text>
+              )}
+              {isTimeOut && (
+                <Text style={styles.errorText}>Time Out! 😞 😔</Text>
+              )}
+            </View>
+
+            {showExplanation && renderExplanation()}
+          </>
+        )}
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
-const { width } = Dimensions.get("window");
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#F0F4F8",
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    flex: 1,
+    backgroundColor: "#FFF2CC",
   },
-  title: {
+  contentContainer: {
+    flex: 1,
+    padding: 20,
+    justifyContent: "center",
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 30,
+  },
+  questionCounter: {
+    fontSize: 24,
+    color: "#333",
+    fontFamily: "Poppins-Bold",
+  },
+  timer: {
+    fontSize: 24,
+    color: "#333",
+    fontFamily: "Poppins-Bold",
+  },
+  questionCard: {
+    backgroundColor: "#FFF",
+    padding: 25,
+    borderRadius: 15,
+    alignItems: "center",
+    marginVertical: windowHeight * 0.1,
+  },
+  questionText: {
     fontSize: 26,
     color: "#333",
     fontFamily: "Poppins-Bold",
-    fontWeight: "600",
     textAlign: "center",
-    marginBottom: 20,
+    marginBottom: 30,
   },
-  input: {
-    backgroundColor: "#fff",
-    color: "#333",
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-    borderRadius: 30,
-    marginBottom: 15,
-    width: "90%",
-    fontFamily: "Poppins-Regular",
-    fontSize: 15,
-  },
-  inputFocused: {
-    borderWidth: 2,
-    borderColor: "#333",
-  },
-  pickerWrapper: {
-    backgroundColor: "#fff",
-    borderRadius: 30,
-    width: "90%",
-    marginBottom: 15,
-    overflow: "hidden",
-  },
-  picker: {
+  answerInput: {
+    backgroundColor: "#F5F5F5",
+    padding: 15,
+    borderRadius: 10,
+    fontSize: 24,
     width: "100%",
-    height: 40,
-    fontFamily: "Poppins-Regular",
-    color: "#333",
+    textAlign: "center",
+    borderWidth: 1,
+    borderColor: "#DDD",
+  },
+  wrongAnswer: {
+    borderColor: "#FF5A5F",
+    backgroundColor: "#FFF0F0",
   },
   errorText: {
     color: "#FF5A5F",
-    fontSize: 14,
-    textAlign: "center",
+    marginTop: 15,
+    fontSize: 18,
     fontFamily: "Poppins-Regular",
-    marginBottom: 10,
   },
-  button: {
-    backgroundColor: "#F7C948",
-    paddingVertical: 15,
-    borderRadius: 30,
-    alignItems: "center",
-    width: "75%",
+  loadingContainer: {
+    flex: 1,
     justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#FFF2CC",
+  },
+  loadingText: {
     marginTop: 10,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 18,
+    color: "#333",
     fontFamily: "Poppins-Regular",
+  },
+  explanationCard: {
+    backgroundColor: "#FFF",
+    padding: 25,
+    borderRadius: 15,
+    alignItems: "center",
+    marginVertical: windowHeight * 0.1,
+  },
+  explanationText: {
+    fontSize: 26,
+    color: "#333",
+    fontFamily: "Poppins-Bold",
+    textAlign: "center",
+    marginBottom: 30,
+  },
+  explanationImage: {
+    width: "100%",
+    height: 200,
+    marginBottom: 30,
+  },
+  feedbackCard: {
+    backgroundColor: "#FFF",
+    padding: 20,
+    borderRadius: 15,
+    alignItems: "center",
+    marginVertical: windowHeight * 0.2,
+  },
+  feedbackText: {
+    fontSize: 24,
+    color: "#333",
+    fontFamily: "Poppins-Bold",
     textAlign: "center",
   },
-  checkboxContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 15,
+  testButton: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    zIndex: 999,
+    pointerEvents: "auto",
+    backgroundColor: "red",
+    padding: 10,
+    borderRadius: 10,
   },
-  customCheckbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: "#333",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 8,
-  },
-  checkedSquare: {
-    width: 12,
-    height: 12,
-    backgroundColor: "#333",
-  },
-  checkboxText: {
-    fontSize: 14,
-    fontFamily: "Poppins-Regular",
-    color: "#333",
+  testText: {
+    color: "white",
+    fontWeight: "bold",
   },
 });
 
+
+see these files from my react native and expo project. we need to implement this feature.
+
+Multiplayer Modes
+ • Option to play:
+ • With friends (from app list)
+ • With random players (same score range)
+ • By joining via room code
+
+Multiplayer Mode Selection Page
+ • Add a separate screen to choose multiplayer option before starting.
+
+ but we also ned to make sure the currently functionalit yshould work as it it is now, along with these additions. analyze the files and tell me if any other file you need to see.
+
+ i am also giving you outline of my whole project.
+
+ === FILE: C:\Users\Pc\Downloads\tezmaths\.gitignore ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app.json ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\eas.json ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\firebase.json ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\new-ui-implementations.pdf ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\package.json ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\readme.md ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\tezmaths.zip ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\tsconfig.json ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\adminDashboard.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\dashboard.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\index.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\login.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\register.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\resetPassword.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\signup.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\test.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\admin\Analytics.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\admin\PaymentSettings.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\admin\QuestionManagement.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\admin\ReferralPoints.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\admin\UserManagement.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\admin\VideoManagement.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\user\AllQuizzes.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\user\FinishedQuizzes.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\user\home.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\user\leaderboard.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\user\learn.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\user\levels.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\user\notification.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\user\profile.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\user\QuizScreen.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\user\results.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\user\TasksScreen.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\user\components\quitQuize.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\app\user\components\souund\soundManager.tsx ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\firebase\firebaseConfig.ts ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\firebase\firebaseStorage.ts ===
+=== FILE: C:\Users\Pc\Downloads\tezmaths\firebase\quizService.ts ===

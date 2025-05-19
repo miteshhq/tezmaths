@@ -4,15 +4,12 @@ import argparse
 import sys
 
 # === CONFIGURATION ===
-DUMP_ALL_FILES = False  # Set to False to dump only specific files
+DUMP_ALL_FILES = True  # Set to False to dump only specific files
+WITH_CONTENTS = False
 FILES_TO_DUMP = [
     # Filenames to search and dump
     "home.tsx",
-    "profile.tsx",
-    "ReferralPoints.tsx",
-    "UserManagement.tsx",
-    "adminDashbaord.tsx",
-    "register.tsx",
+    "QuizScreen.tsx",
 ]
 # =====================
 
@@ -37,15 +34,16 @@ def dump_files_with_contents(root_dir: str, exclude_dirs: set, exclude_files: se
                 if os.path.abspath(output_path) == file_path:
                     continue
                 out_f.write(f"=== FILE: {file_path} ===\n")
-                if is_text_file(file_path):
-                    try:
-                        with open(file_path, 'r', encoding='utf-8', errors='replace') as in_f:
-                            out_f.write(in_f.read())
-                    except Exception as e:
-                        out_f.write(f"[Error reading file: {e}]\n")
-                else:
-                    out_f.write("[Binary or non-text file — contents omitted]\n")
-                out_f.write("\n")
+                if WITH_CONTENTS:
+                    if is_text_file(file_path):
+                        try:
+                            with open(file_path, 'r', encoding='utf-8', errors='replace') as in_f:
+                                out_f.write(in_f.read())
+                        except Exception as e:
+                            out_f.write(f"[Error reading file: {e}]\n")
+                    else:
+                        out_f.write("[Binary or non-text file — contents omitted]\n")
+                    out_f.write("\n")
 
 
 def dump_selected_files(root_dir: str, files_to_dump: list, exclude_dirs: set, output_path: str):
@@ -62,15 +60,16 @@ def dump_selected_files(root_dir: str, files_to_dump: list, exclude_dirs: set, o
                 continue
             for file_path in matches:
                 out_f.write(f"=== FILE: {file_path} ===\n")
-                if is_text_file(file_path):
-                    try:
-                        with open(file_path, 'r', encoding='utf-8', errors='replace') as in_f:
-                            out_f.write(in_f.read())
-                    except Exception as e:
-                        out_f.write(f"[Error reading file: {e}]\n")
-                else:
-                    out_f.write("[Binary or non-text file — contents omitted]\n")
-                out_f.write("\n")
+                if WITH_CONTENTS:
+                    if is_text_file(file_path):
+                        try:
+                            with open(file_path, 'r', encoding='utf-8', errors='replace') as in_f:
+                                out_f.write(in_f.read())
+                        except Exception as e:
+                            out_f.write(f"[Error reading file: {e}]\n")
+                    else:
+                        out_f.write("[Binary or non-text file — contents omitted]\n")
+                    out_f.write("\n")
 
 
 def main():
@@ -97,7 +96,8 @@ def main():
     )
     args = parser.parse_args()
 
-    output_file = os.path.join(args.root, "dump.txt")
+    output_file =  os.path.join(args.root, "dump.txt") if WITH_CONTENTS else  os.path.join(args.root, "dump_paths.txt")
+    
     try:
         if DUMP_ALL_FILES:
             dump_files_with_contents(

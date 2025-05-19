@@ -1,6 +1,6 @@
 # Updates to Make
 
-1. Feature Task List for Quiz App - TO BE CHECKED
+1. Feature Task List for Quiz App - FAULTY
 
 2. Refresh the entire app new colors, fonts, icons, and layouts for a clean, modern look.
 
@@ -13,7 +13,7 @@
 5. Continuous Quiz Levels - TO BE CHECKED
  • No manual action unless user loses — keeps quiz flow smooth.
 
-6. Scorecard with Share Option - TO BE CHECKED
+6. Scorecard with Share Option - FAULTY
  • Show detailed score summary after each quiz.
  • Add share button (WhatsApp, social, etc.).
 
