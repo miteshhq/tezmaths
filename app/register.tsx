@@ -12,7 +12,16 @@ import {
   Switch,
 } from "react-native";
 import { database } from "../firebase/firebaseConfig";
-import { ref, set, get, update, onValue } from "firebase/database";
+import {
+  ref,
+  set,
+  get,
+  update,
+  onValue,
+  query,
+  orderByChild,
+  equalTo,
+} from "firebase/database";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { auth } from "../firebase/firebaseConfig";
 import { Picker } from "@react-native-picker/picker";
@@ -49,6 +58,52 @@ export default function RegisterScreen() {
     return true;
   };
 
+  const findUserByUsername = async (searchUsername) => {
+    console.log(
+      `[REFERRAL] Searching for user with username: ${searchUsername}`
+    );
+
+    if (!searchUsername) return null;
+
+    try {
+      // Fetch all users and filter client-side
+      const usersRef = ref(database, "users");
+      const snapshot = await get(usersRef);
+
+      if (!snapshot.exists()) {
+        console.log(`[REFERRAL] No users in database`);
+        return null;
+      }
+
+      let userData = null;
+      let userId = null;
+
+      snapshot.forEach((childSnapshot) => {
+        const user = childSnapshot.val();
+        if (
+          user.username &&
+          user.username.toLowerCase() === searchUsername.toLowerCase()
+        ) {
+          userData = user;
+          userId = childSnapshot.key;
+        }
+      });
+
+      if (!userData) {
+        console.log(
+          `[REFERRAL] No user found with username: ${searchUsername}`
+        );
+        return null;
+      }
+
+      console.log(`[REFERRAL] Found user with ID: ${userId}`);
+      return { userId, userData };
+    } catch (error) {
+      console.error(`[REFERRAL] Error finding user:`, error);
+      return null;
+    }
+  };
+
   const processReferral = async (referralUsername) => {
     console.log(`[REFERRAL] Processing referral code: ${referralUsername}`);
 
@@ -59,58 +114,21 @@ export default function RegisterScreen() {
         return false;
       }
 
-      // Step 1: Find the user ID associated with the referral username
-      const referralUsernameRef = ref(
-        database,
-        `usernames/${referralUsername.toLowerCase()}`
+      // Find the referrer by username
+      const referrerResult = await findUserByUsername(
+        referralUsername.toLowerCase()
       );
-      console.log(
-        `[REFERRAL] Looking up username:`,
-        referralUsernameRef.toString()
-      );
-      const referralSnapshot = await get(referralUsernameRef);
 
-      // Debug the exact value and type
-      const referralValue = referralSnapshot.val();
-      console.log(
-        `[REFERRAL] Username lookup result type:`,
-        typeof referralValue
-      );
-      console.log(`[REFERRAL] Username lookup result:`, referralValue);
-
-      if (!referralSnapshot.exists()) {
+      if (!referrerResult || !referrerResult.userData) {
         console.log(
-          `[REFERRAL] No user found with username: ${referralUsername}`
+          `[REFERRAL] No valid referrer found for username: ${referralUsername}`
         );
         return false;
       }
 
-      // If the value is "true" (as string or boolean), we need to handle this differently
-      let referrerId;
-      if (referralValue === true || referralValue === "true") {
-        // The username itself might be the ID in your database structure
-        referrerId = referralUsername.toLowerCase();
-        console.log(
-          `[REFERRAL] Using username as ID because lookup returned true: ${referrerId}`
-        );
-      } else {
-        referrerId = referralValue;
-        console.log(`[REFERRAL] Found referrer ID: ${referrerId}`);
-      }
+      const { userId: referrerId, userData: referrerData } = referrerResult;
 
-      // Step 2: Get the referrer's current data - Use the actual userId here, not the username
-      const referrerRef = ref(database, `users/${referrerId}`);
-      const referrerSnapshot = await get(referrerRef);
-
-      if (!referrerSnapshot.exists()) {
-        console.log(`[REFERRAL] No user data found for ID: ${referrerId}`);
-        return false;
-      }
-
-      const referrerData = referrerSnapshot.val();
-      console.log(`[REFERRAL] Current referrer data:`, referrerData);
-
-      // Step 3: Calculate new values
+      // Calculate new values
       const currentReferrals =
         typeof referrerData.referrals === "number" ? referrerData.referrals : 0;
       const updatedReferrals = currentReferrals + 1;
@@ -126,7 +144,8 @@ export default function RegisterScreen() {
         `[REFERRAL] Updating: referrals ${currentReferrals} → ${updatedReferrals}, totalPoints ${currentTotalPoints} → ${updatedTotalPoints}`
       );
 
-      // Step 4: Update the referrer's data in the database using the correct ID
+      // Update the referrer's data
+      const referrerRef = ref(database, `users/${referrerId}`);
       await update(referrerRef, {
         referrals: updatedReferrals,
         totalPoints: updatedTotalPoints,
@@ -149,6 +168,44 @@ export default function RegisterScreen() {
     }
   };
 
+  const checkUsernameAvailability = async (usernameToCheck) => {
+    try {
+      const usernameToCheckLower = usernameToCheck.toLowerCase();
+
+      // Instead of using a query with orderByChild, fetch all users and check client-side
+      // This is less efficient but works without adding an index
+      const usersRef = ref(database, "users");
+      const snapshot = await get(usersRef);
+
+      if (!snapshot.exists()) {
+        console.log("[USERNAME] No users in database, username is available");
+        return true;
+      }
+
+      let isAvailable = true;
+      snapshot.forEach((childSnapshot) => {
+        const userData = childSnapshot.val();
+        if (
+          userData.username &&
+          userData.username.toLowerCase() === usernameToCheckLower
+        ) {
+          isAvailable = false;
+        }
+      });
+
+      console.log(
+        `[USERNAME] Availability check for ${usernameToCheckLower}: ${
+          isAvailable ? "Available" : "Taken"
+        }`
+      );
+      return isAvailable;
+    } catch (error) {
+      console.error("Error checking username availability:", error);
+      // In case of error, allow the registration to proceed
+      return true;
+    }
+  };
+
   const handleRegister = async () => {
     if (isProcessing) return; // Prevent multiple submissions
 
@@ -156,38 +213,13 @@ export default function RegisterScreen() {
       setIsProcessing(true);
       setErrorMessage("");
 
-      // In test mode, only process referral without registration validation
-      if (testMode) {
-        if (referralCode && referralCode.trim() !== "") {
-          const referralSuccess = await processReferral(referralCode.trim());
+      console.log("[REGISTER] Starting registration process");
 
-          if (referralSuccess) {
-            Alert.alert(
-              "Referral Test Success",
-              `Referral code ${referralCode} was processed successfully.`,
-              [{ text: "OK" }]
-            );
-          } else {
-            Alert.alert(
-              "Referral Test Failed",
-              `Failed to process referral code: ${referralCode}`,
-              [{ text: "OK" }]
-            );
-          }
-        } else {
-          Alert.alert(
-            "Referral Test Error",
-            "Please enter a referral code to test.",
-            [{ text: "OK" }]
-          );
-        }
-        setIsProcessing(false);
-        return;
-      }
-
-      // Validation checks for normal registration
+      // Validation checks
+      console.log("[REGISTER] Validating input fields");
       const usernameRegex = /^[a-zA-Z0-9]{1,15}$/;
       if (!fullName || !username || !gender || !age || !phoneNumber) {
+        console.log("[REGISTER] Missing required fields");
         setErrorMessage("All fields are required.");
         setIsProcessing(false);
         return;
@@ -219,27 +251,29 @@ export default function RegisterScreen() {
         return;
       }
 
-      // Convert username to lowercase for consistency
+      // Check username availability
+      console.log("[REGISTER] Checking username availability");
       const usernameLowercase = username.toLowerCase();
+      const isUsernameAvailable = await checkUsernameAvailability(
+        usernameLowercase
+      );
 
-      // Check if username is available - using lowercase to ensure case insensitivity
-      const usernameRef = ref(database, `usernames/${usernameLowercase}`);
-      const usernameSnapshot = await get(usernameRef);
-
-      if (usernameSnapshot.exists()) {
+      if (!isUsernameAvailable) {
+        console.log("[REGISTER] Username already taken");
         setErrorMessage("Username is already taken. Please choose another.");
         setIsProcessing(false);
         return;
       }
 
       // Get current user ID
+      console.log("[REGISTER] Getting current user ID");
       const userId = auth.currentUser?.uid;
       if (!userId) {
+        console.log("[REGISTER] No current user ID found");
         throw new Error("User ID is missing.");
       }
 
-      // Create user entry with initial default values
-      const userRef = ref(database, `users/${userId}`);
+      console.log(`[REGISTER] Current user ID: ${userId}`);
 
       // Process referral first if provided
       let referralSuccess = false;
@@ -257,10 +291,12 @@ export default function RegisterScreen() {
         }
       }
 
-      // Initialize with default values to prevent undefined errors
+      // Create user entry
+      console.log("[REGISTER] Creating user entry in database");
+      const userRef = ref(database, `users/${userId}`);
       await set(userRef, {
         fullName,
-        username,
+        username: usernameLowercase,
         phoneNumber,
         gender,
         email: email,
@@ -270,23 +306,14 @@ export default function RegisterScreen() {
         lastCompletionDate: null,
         highestCompletedLevelCompleted: 0,
         levelsScores: [],
-        referrals: 0, // Explicitly initialize referrals to 0
-        totalPoints: referralSuccess ? 5 : 0, // Bonus points if referral was successful
+        referrals: 0,
+        totalPoints: referralSuccess ? 5 : 0,
       });
 
-      // Register username for referral lookup - use lowercase for consistency
-      await set(usernameRef, userId);
-
-      // Show success and navigate
-      Alert.alert(
-        "Registration Successful",
-        referralSuccess
-          ? `Account created! Referral code ${referralCode} was applied successfully.`
-          : "Account created successfully!",
-        [{ text: "OK", onPress: () => router.push("/dashboard") }]
-      );
+      console.log("[REGISTER] User successfully created in database");
+      router.push("/dashboard");
     } catch (error) {
-      console.error("Registration failed:", error);
+      console.error("[REGISTER] Registration failed:", error);
       setErrorMessage(
         `Registration failed: ${error.message || "Please try again."}`
       );
@@ -303,7 +330,7 @@ export default function RegisterScreen() {
       <Text style={styles.title}>Complete Registration</Text>
 
       {/* Test Mode Toggle */}
-      <View style={styles.testModeContainer}>
+      {/* <View style={styles.testModeContainer}>
         <Text style={styles.testModeText}>Test Mode (Referrals Only)</Text>
         <Switch
           value={testMode}
@@ -311,7 +338,7 @@ export default function RegisterScreen() {
           trackColor={{ false: "#767577", true: "#81b0ff" }}
           thumbColor={testMode ? "#f5dd4b" : "#f4f3f4"}
         />
-      </View>
+      </View> */}
 
       <TextInput
         style={[styles.input, focusField === "fullName" && styles.inputFocused]}

@@ -137,15 +137,15 @@ export default function ProfileScreen() {
 
   const handleCopyReferralLink = async () => {
     try {
-      const referralLink = `https://trivia.com/${userData.username}`;
+      const referralLink = `${userData.username}`;
       await Clipboard.setStringAsync(referralLink);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
 
       // Show alert to confirm copy
       Alert.alert(
-        "Link Copied!",
-        `Share your referral link: ${referralLink} with friends to earn points!`
+        "Referral Code Copied!",
+        `Share your referral code: ${referralLink} with friends to earn points!`
       );
     } catch (error) {
       console.error("[PROFILE] Failed to copy referral link:", error);
@@ -153,67 +153,67 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
+//   const handleRefresh = async () => {
+//     setRefreshing(true);
 
-    try {
-      const userId = auth.currentUser?.uid;
-      if (!userId) {
-        console.warn("[PROFILE] No authenticated user found for refresh.");
-        setRefreshing(false);
-        return;
-      }
+//     try {
+//       const userId = auth.currentUser?.uid;
+//       if (!userId) {
+//         console.warn("[PROFILE] No authenticated user found for refresh.");
+//         setRefreshing(false);
+//         return;
+//       }
 
-      // Force a fresh read from the database
-      const userRef = ref(database, `users/${userId}`);
-      const snapshot = await get(userRef);
+//       // Force a fresh read from the database
+//       const userRef = ref(database, `users/${userId}`);
+//       const snapshot = await get(userRef);
 
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        console.log("[PROFILE] Fresh data loaded on refresh:", data);
+//       if (snapshot.exists()) {
+//         const data = snapshot.val();
+//         console.log("[PROFILE] Fresh data loaded on refresh:", data);
 
-        // Ensure referrals and totalPoints are numbers
-        const referrals =
-          typeof data.referrals === "number" ? data.referrals : 0;
-        const totalPoints =
-          typeof data.totalPoints === "number" ? data.totalPoints : 0;
+//         // Ensure referrals and totalPoints are numbers
+//         const referrals =
+//           typeof data.referrals === "number" ? data.referrals : 0;
+//         const totalPoints =
+//           typeof data.totalPoints === "number" ? data.totalPoints : 0;
 
-        // Update the UI with fresh data
-        const formattedData = {
-          fullName: data.fullName || "Unavailable",
-          username: data.username || "Unavailable",
-          email: data.email || "Unavailable",
-          referrals: referrals,
-          points: data.points ?? 0,
-          totalPoints: totalPoints,
-          highestCompletedLevelCompleted:
-            data.highestCompletedLevelCompleted ?? 0,
-        };
+//         // Update the UI with fresh data
+//         const formattedData = {
+//           fullName: data.fullName || "Unavailable",
+//           username: data.username || "Unavailable",
+//           email: data.email || "Unavailable",
+//           referrals: referrals,
+//           points: data.points ?? 0,
+//           totalPoints: totalPoints,
+//           highestCompletedLevelCompleted:
+//             data.highestCompletedLevelCompleted ?? 0,
+//         };
 
-        // If data is missing these fields, repair them
-        const updates: any = {};
-        if (data.referrals === undefined) updates.referrals = 0;
-        if (data.totalPoints === undefined) updates.totalPoints = 0;
+//         // If data is missing these fields, repair them
+//         const updates: any = {};
+//         if (data.referrals === undefined) updates.referrals = 0;
+//         if (data.totalPoints === undefined) updates.totalPoints = 0;
 
-        if (Object.keys(updates).length > 0) {
-          console.log("[PROFILE] Repairing missing fields:", updates);
-          await update(userRef, updates);
-        }
+//         if (Object.keys(updates).length > 0) {
+//           console.log("[PROFILE] Repairing missing fields:", updates);
+//           await update(userRef, updates);
+//         }
 
-        setUserData(formattedData);
-        await AsyncStorage.setItem("userData", JSON.stringify(formattedData));
+//         setUserData(formattedData);
+//         await AsyncStorage.setItem("userData", JSON.stringify(formattedData));
 
-        Alert.alert("Data Refreshed", "Your profile data has been updated.");
-      } else {
-        Alert.alert("Error", "Could not find your user data.");
-      }
-    } catch (error) {
-      console.error("[PROFILE] Error refreshing data:", error);
-      Alert.alert("Refresh Failed", "Could not refresh your profile data.");
-    } finally {
-      setRefreshing(false);
-    }
-  };
+//         Alert.alert("Data Refreshed", "Your profile data has been updated.");
+//       } else {
+//         Alert.alert("Error", "Could not find your user data.");
+//       }
+//     } catch (error) {
+//       console.error("[PROFILE] Error refreshing data:", error);
+//       Alert.alert("Refresh Failed", "Could not refresh your profile data.");
+//     } finally {
+//       setRefreshing(false);
+//     }
+//   };
 
   const handleLogout = async () => {
     const LEVEL_STORAGE_KEY = "highestLevelReached";
@@ -276,10 +276,10 @@ export default function ProfileScreen() {
           </View>
 
           {/* Referral Link Section */}
-          <Text style={styles.referralTitle}>Refer friends</Text>
+          <Text style={styles.referralTitle}>Your Referral Code</Text>
           <View style={styles.referralContainer}>
             <Text style={styles.referralLink}>
-              https://trivia.com/{userData.username}
+              {userData.username}
             </Text>
             <TouchableOpacity onPress={handleCopyReferralLink}>
               <Text style={styles.copyButton}>📋</Text>
@@ -288,7 +288,7 @@ export default function ProfileScreen() {
           {copied && <Text style={styles.copiedText}>Copied</Text>}
 
           {/* Refresh Button */}
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={[styles.refreshButton, refreshing && styles.buttonDisabled]}
             onPress={handleRefresh}
             disabled={refreshing}
@@ -296,7 +296,7 @@ export default function ProfileScreen() {
             <Text style={styles.refreshText}>
               {refreshing ? "Refreshing..." : "Refresh Data"}
             </Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
 
           {/* Logout Button */}
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>

@@ -17,7 +17,7 @@
  • Show detailed score summary after each quiz.
  • Add share button (WhatsApp, social, etc.).
 
-7. Refer & Earn System
+7. Refer & Earn System - TO BE CHECKED
  • Unique code-based referrals with join count tracking.
  • Display successful invites and rewards on a simple dashboard.
 
