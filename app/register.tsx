@@ -8,9 +8,11 @@ import {
   StyleSheet,
   Dimensions,
   ScrollView,
+  Alert,
+  Switch,
 } from "react-native";
 import { database } from "../firebase/firebaseConfig";
-import { ref, set, get } from "firebase/database";
+import { ref, set, get, update, onValue } from "firebase/database";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { auth } from "../firebase/firebaseConfig";
 import { Picker } from "@react-native-picker/picker";
@@ -26,9 +28,12 @@ export default function RegisterScreen() {
   const [phoneError, setPhoneError] = useState("");
   const [gender, setGender] = useState("");
   const [age, setAge] = useState("");
+  const [referralCode, setReferralCode] = useState(""); // State for referral code
   const [errorMessage, setErrorMessage] = useState("");
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [focusField, setFocusField] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [testMode, setTestMode] = useState(false); // Test mode toggle
 
   const validatePhoneNumber = () => {
     if (
@@ -44,43 +49,215 @@ export default function RegisterScreen() {
     return true;
   };
 
-  const handleRegister = async () => {
-    setErrorMessage("");
-    const usernameRegex = /^[a-zA-Z0-9]{1,15}$/;
-    if (!fullName || !username || !gender || !age || !phoneNumber) {
-      setErrorMessage("All fields are required.");
-      return;
-    }
-    if (!usernameRegex.test(username)) {
-      setErrorMessage(
-        "Username must be alphanumeric and within 15 characters."
-      );
-      return;
-    }
-    if (isNaN(parseInt(age)) || parseInt(age) <= 0 || parseInt(age) > 120) {
-      setErrorMessage("Age must be a valid number between 1 and 120.");
-      return;
-    }
-    if (!agreeToTerms) {
-      setErrorMessage("You must agree to the terms and conditions.");
-      return;
-    }
-    if (!validatePhoneNumber()) {
-      setErrorMessage("Please correct the errors before submitting.");
-      return;
-    }
+  const processReferral = async (referralUsername) => {
+    console.log(`[REFERRAL] Processing referral code: ${referralUsername}`);
+
     try {
-      const usernameRef = ref(database, `usernames/${username}`);
-      const usernameSnapshot = await get(usernameRef);
-      if (usernameSnapshot.exists()) {
-        setErrorMessage("Username is already taken. Please choose another.");
+      // Skip processing if user is referring themselves
+      if (username.toLowerCase() === referralUsername.toLowerCase()) {
+        console.log(`[REFERRAL] Self-referral detected, skipping`);
+        return false;
+      }
+
+      // Step 1: Find the user ID associated with the referral username
+      const referralUsernameRef = ref(
+        database,
+        `usernames/${referralUsername.toLowerCase()}`
+      );
+      console.log(
+        `[REFERRAL] Looking up username:`,
+        referralUsernameRef.toString()
+      );
+      const referralSnapshot = await get(referralUsernameRef);
+
+      // Debug the exact value and type
+      const referralValue = referralSnapshot.val();
+      console.log(
+        `[REFERRAL] Username lookup result type:`,
+        typeof referralValue
+      );
+      console.log(`[REFERRAL] Username lookup result:`, referralValue);
+
+      if (!referralSnapshot.exists()) {
+        console.log(
+          `[REFERRAL] No user found with username: ${referralUsername}`
+        );
+        return false;
+      }
+
+      // If the value is "true" (as string or boolean), we need to handle this differently
+      let referrerId;
+      if (referralValue === true || referralValue === "true") {
+        // The username itself might be the ID in your database structure
+        referrerId = referralUsername.toLowerCase();
+        console.log(
+          `[REFERRAL] Using username as ID because lookup returned true: ${referrerId}`
+        );
+      } else {
+        referrerId = referralValue;
+        console.log(`[REFERRAL] Found referrer ID: ${referrerId}`);
+      }
+
+      // Step 2: Get the referrer's current data - Use the actual userId here, not the username
+      const referrerRef = ref(database, `users/${referrerId}`);
+      const referrerSnapshot = await get(referrerRef);
+
+      if (!referrerSnapshot.exists()) {
+        console.log(`[REFERRAL] No user data found for ID: ${referrerId}`);
+        return false;
+      }
+
+      const referrerData = referrerSnapshot.val();
+      console.log(`[REFERRAL] Current referrer data:`, referrerData);
+
+      // Step 3: Calculate new values
+      const currentReferrals =
+        typeof referrerData.referrals === "number" ? referrerData.referrals : 0;
+      const updatedReferrals = currentReferrals + 1;
+
+      const referralPoints = 10; // Points earned per referral
+      const currentTotalPoints =
+        typeof referrerData.totalPoints === "number"
+          ? referrerData.totalPoints
+          : 0;
+      const updatedTotalPoints = currentTotalPoints + referralPoints;
+
+      console.log(
+        `[REFERRAL] Updating: referrals ${currentReferrals} → ${updatedReferrals}, totalPoints ${currentTotalPoints} → ${updatedTotalPoints}`
+      );
+
+      // Step 4: Update the referrer's data in the database using the correct ID
+      await update(referrerRef, {
+        referrals: updatedReferrals,
+        totalPoints: updatedTotalPoints,
+      });
+
+      console.log(`[REFERRAL] Successfully updated referrer data`);
+
+      // Verify the update
+      const verifySnapshot = await get(referrerRef);
+      const verifyData = verifySnapshot.val();
+      console.log(
+        `[REFERRAL] Verification - Updated referrer data:`,
+        verifyData
+      );
+
+      return true;
+    } catch (error) {
+      console.error(`[REFERRAL] Error processing referral:`, error);
+      return false;
+    }
+  };
+
+  const handleRegister = async () => {
+    if (isProcessing) return; // Prevent multiple submissions
+
+    try {
+      setIsProcessing(true);
+      setErrorMessage("");
+
+      // In test mode, only process referral without registration validation
+      if (testMode) {
+        if (referralCode && referralCode.trim() !== "") {
+          const referralSuccess = await processReferral(referralCode.trim());
+
+          if (referralSuccess) {
+            Alert.alert(
+              "Referral Test Success",
+              `Referral code ${referralCode} was processed successfully.`,
+              [{ text: "OK" }]
+            );
+          } else {
+            Alert.alert(
+              "Referral Test Failed",
+              `Failed to process referral code: ${referralCode}`,
+              [{ text: "OK" }]
+            );
+          }
+        } else {
+          Alert.alert(
+            "Referral Test Error",
+            "Please enter a referral code to test.",
+            [{ text: "OK" }]
+          );
+        }
+        setIsProcessing(false);
         return;
       }
+
+      // Validation checks for normal registration
+      const usernameRegex = /^[a-zA-Z0-9]{1,15}$/;
+      if (!fullName || !username || !gender || !age || !phoneNumber) {
+        setErrorMessage("All fields are required.");
+        setIsProcessing(false);
+        return;
+      }
+
+      if (!usernameRegex.test(username)) {
+        setErrorMessage(
+          "Username must be alphanumeric and within 15 characters."
+        );
+        setIsProcessing(false);
+        return;
+      }
+
+      if (isNaN(parseInt(age)) || parseInt(age) <= 0 || parseInt(age) > 120) {
+        setErrorMessage("Age must be a valid number between 1 and 120.");
+        setIsProcessing(false);
+        return;
+      }
+
+      if (!agreeToTerms) {
+        setErrorMessage("You must agree to the terms and conditions.");
+        setIsProcessing(false);
+        return;
+      }
+
+      if (!validatePhoneNumber()) {
+        setErrorMessage("Please correct the errors before submitting.");
+        setIsProcessing(false);
+        return;
+      }
+
+      // Convert username to lowercase for consistency
+      const usernameLowercase = username.toLowerCase();
+
+      // Check if username is available - using lowercase to ensure case insensitivity
+      const usernameRef = ref(database, `usernames/${usernameLowercase}`);
+      const usernameSnapshot = await get(usernameRef);
+
+      if (usernameSnapshot.exists()) {
+        setErrorMessage("Username is already taken. Please choose another.");
+        setIsProcessing(false);
+        return;
+      }
+
+      // Get current user ID
       const userId = auth.currentUser?.uid;
       if (!userId) {
         throw new Error("User ID is missing.");
       }
+
+      // Create user entry with initial default values
       const userRef = ref(database, `users/${userId}`);
+
+      // Process referral first if provided
+      let referralSuccess = false;
+      if (referralCode && referralCode.trim() !== "") {
+        referralSuccess = await processReferral(referralCode.trim());
+
+        if (referralSuccess) {
+          console.log(
+            `[REFERRAL] Successfully processed referral for code: ${referralCode}`
+          );
+        } else {
+          console.log(
+            `[REFERRAL] Referral processing failed or invalid code: ${referralCode}`
+          );
+        }
+      }
+
+      // Initialize with default values to prevent undefined errors
       await set(userRef, {
         fullName,
         username,
@@ -89,16 +266,32 @@ export default function RegisterScreen() {
         email: email,
         age,
         isnewuser: false,
-        streak: 0, // Initialize streak to 0
-        lastCompletionDate: null, // Initialize lastCompletionDate to null
+        streak: 0,
+        lastCompletionDate: null,
         highestCompletedLevelCompleted: 0,
         levelsScores: [],
+        referrals: 0, // Explicitly initialize referrals to 0
+        totalPoints: referralSuccess ? 5 : 0, // Bonus points if referral was successful
       });
-      await set(usernameRef, true);
-      router.push("/dashboard");
+
+      // Register username for referral lookup - use lowercase for consistency
+      await set(usernameRef, userId);
+
+      // Show success and navigate
+      Alert.alert(
+        "Registration Successful",
+        referralSuccess
+          ? `Account created! Referral code ${referralCode} was applied successfully.`
+          : "Account created successfully!",
+        [{ text: "OK", onPress: () => router.push("/dashboard") }]
+      );
     } catch (error) {
       console.error("Registration failed:", error);
-      setErrorMessage("Registration failed. Please try again.");
+      setErrorMessage(
+        `Registration failed: ${error.message || "Please try again."}`
+      );
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -108,6 +301,18 @@ export default function RegisterScreen() {
       showsVerticalScrollIndicator={false}
     >
       <Text style={styles.title}>Complete Registration</Text>
+
+      {/* Test Mode Toggle */}
+      <View style={styles.testModeContainer}>
+        <Text style={styles.testModeText}>Test Mode (Referrals Only)</Text>
+        <Switch
+          value={testMode}
+          onValueChange={setTestMode}
+          trackColor={{ false: "#767577", true: "#81b0ff" }}
+          thumbColor={testMode ? "#f5dd4b" : "#f4f3f4"}
+        />
+      </View>
+
       <TextInput
         style={[styles.input, focusField === "fullName" && styles.inputFocused]}
         placeholder="Full Name"
@@ -148,6 +353,18 @@ export default function RegisterScreen() {
         }}
       />
       {phoneError ? <Text style={styles.errorText}>{phoneError}</Text> : null}
+      <TextInput
+        style={[
+          styles.input,
+          focusField === "referralCode" && styles.inputFocused,
+        ]}
+        placeholder="Referral Code (optional)"
+        placeholderTextColor="#7a7a7a"
+        onChangeText={setReferralCode}
+        value={referralCode}
+        onFocus={() => setFocusField("referralCode" as any)}
+        onBlur={() => setFocusField(null)}
+      />
       <View
         style={[
           styles.pickerWrapper,
@@ -197,8 +414,18 @@ export default function RegisterScreen() {
       {errorMessage ? (
         <Text style={styles.errorText}>{errorMessage}</Text>
       ) : null}
-      <TouchableOpacity style={styles.button} onPress={handleRegister}>
-        <Text style={styles.buttonText}>Continue</Text>
+      <TouchableOpacity
+        style={[styles.button, isProcessing && styles.buttonDisabled]}
+        onPress={handleRegister}
+        disabled={isProcessing}
+      >
+        <Text style={styles.buttonText}>
+          {isProcessing
+            ? "Processing..."
+            : testMode
+            ? "Test Referral"
+            : "Continue"}
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -221,6 +448,21 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
     marginBottom: 20,
+  },
+  testModeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "90%",
+    marginBottom: 20,
+    backgroundColor: "#e0e0e0",
+    padding: 10,
+    borderRadius: 10,
+  },
+  testModeText: {
+    fontSize: 14,
+    fontFamily: "Poppins-Regular",
+    color: "#333",
   },
   input: {
     backgroundColor: "#fff",
@@ -265,6 +507,10 @@ const styles = StyleSheet.create({
     width: "75%",
     justifyContent: "center",
     marginTop: 10,
+  },
+  buttonDisabled: {
+    backgroundColor: "#cccccc",
+    opacity: 0.7,
   },
   buttonText: {
     color: "#fff",

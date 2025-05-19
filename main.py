@@ -7,12 +7,12 @@ import sys
 DUMP_ALL_FILES = False  # Set to False to dump only specific files
 FILES_TO_DUMP = [
     # Filenames to search and dump
-    "quizService.ts",
     "home.tsx",
-    "QuizScreen.tsx",
-    "AllQuizzes.tsx",
-    "FinishedQuizzes.tsx",
-    "results.tsx",
+    "profile.tsx",
+    "ReferralPoints.tsx",
+    "UserManagement.tsx",
+    "adminDashbaord.tsx",
+    "register.tsx",
 ]
 # =====================
 
