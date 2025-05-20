@@ -583,6 +583,13 @@ export default function HomeScreen() {
             <Text style={styles.tasksButtonText}>View Tasks</Text>
           </TouchableOpacity>
 
+          <TouchableOpacity
+            style={styles.multiplayerButton}
+            onPress={() => router.push("/user/MultiplayerSelection")}
+          >
+            <Text style={styles.multiplayerButtonText}>Multiplayer Quiz</Text>
+          </TouchableOpacity>
+
           <Modal
             visible={handleStart}
             transparent
@@ -1025,6 +1032,19 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   tasksButtonText: {
+    color: "#333333",
+    fontFamily: "Poppins-Bold",
+    fontSize: 16,
+  },
+  multiplayerButton: {
+    backgroundColor: "#F7C948",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  multiplayerButtonText: {
     color: "#333333",
     fontFamily: "Poppins-Bold",
     fontSize: 16,

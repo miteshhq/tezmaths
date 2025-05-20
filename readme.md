@@ -21,7 +21,7 @@
  • Unique code-based referrals with join count tracking.
  • Display successful invites and rewards on a simple dashboard.
 
-8. Multiplayer Modes
+8. Multiplayer Modes - WAS IN PROGRESS
  • Option to play:
  • With friends (from app list)
  • With random players (same score range)
