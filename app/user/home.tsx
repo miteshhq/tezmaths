@@ -258,7 +258,9 @@ export default function HomeScreen() {
     setUserName(userData.fullName || userData.username);
     setFullName(userData.fullName);
     setReferrals(userData.referrals || 0);
-    setUserPoints(userData.totalPoints || 0);
+    setUserPoints(userData.totalPoints % 1 !== 0 
+      ? Math.round(userData.totalPoints * 10) / 10 
+      : userData.totalPoints || 0);
     setUserStreak(userData.streak || 0);
     setCurrentLevel(userData.currentLevel || 1);
   };
@@ -536,38 +538,17 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Continue Card */}
-        <TouchableOpacity
-          className="bg-primary rounded-2xl p-6 mb-4 items-center"
-          onPress={() => handleQuizChoice(currentLevel, false)}
-        >
-          <View className="bg-white rounded-full p-4 mb-4">
-            {/* <Image
-              source={require("../../assets/icons/continue.png")}
-              style={{ width: 48, height: 48 }}
-              tintColor="#FF6B35"
-            /> */}
-          </View>
-          <Text className="text-black text-xl font-bold mb-2">Continue</Text>
-          <Text className="text-black text-sm text-center">
-            Resume at Level {currentLevel}
-          </Text>
-          <View className="bg-black rounded-full px-6 py-3 mt-4">
-            <Text className="text-white font-bold">Continue</Text>
-          </View>
-        </TouchableOpacity>
-
         {/* Level Select Card */}
         <TouchableOpacity
           className="bg-primary rounded-2xl p-6 mb-4 items-center"
           onPress={handleLevelSelect}
         >
           <View className="bg-white rounded-full p-4 mb-4">
-            {/* <Image
-              source={require("../../assets/icons/levels.png")}
+            <Image
+              source={require("../../assets/icons/quiz.png")}
               style={{ width: 48, height: 48 }}
               tintColor="#FF6B35"
-            /> */}
+            />
           </View>
           <Text className="text-black text-xl font-bold mb-2">
             Select Level

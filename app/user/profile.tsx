@@ -303,7 +303,9 @@ export default function ProfileScreen() {
             <View className="flex-row justify-between">
               <View className="items-center">
                 <Text className="text-2xl font-bold text-primary">
-                  {userData.totalPoints}
+                  {userData.totalPoints % 1 !== 0
+                    ? Math.round(userData.totalPoints * 10) / 10
+                    : userData.totalPoints || 0}
                 </Text>
                 <Text className="text-gray-600 text-sm">Score</Text>
               </View>
