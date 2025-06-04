@@ -258,9 +258,11 @@ export default function HomeScreen() {
     setUserName(userData.fullName || userData.username);
     setFullName(userData.fullName);
     setReferrals(userData.referrals || 0);
-    setUserPoints(userData.totalPoints % 1 !== 0 
-      ? Math.round(userData.totalPoints * 10) / 10 
-      : userData.totalPoints || 0);
+    setUserPoints(
+      userData.totalPoints % 1 !== 0
+        ? Math.round(userData.totalPoints * 10) / 10
+        : userData.totalPoints || 0
+    );
     setUserStreak(userData.streak || 0);
     setCurrentLevel(userData.currentLevel || 1);
   };
@@ -519,114 +521,146 @@ export default function HomeScreen() {
 
   return (
     <ScrollView
-      className="flex-1 bg-gray-50"
+      className="flex-1 bg-white"
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
-      {/* Welcome Section */}
-      <View className="px-4 py-6">
-        <View className="flex-row justify-between items-center py-4">
-          <Text className="text-purple-600 text-2xl font-bold mb-2">
-            Let's Practice Today!
-          </Text>
-          <View className="flex-row items-center bg-primary px-3 py-1 rounded-full">
-            <Text className="text-black text-sm font-bold">
-              Day {userStreak}
-            </Text>
-            <Text className="text-black text-lg ml-1">🔥</Text>
+      {/* HEADER HERE */}
+      <ImageBackground
+        source={require("../../assets/gradient.jpg")}
+        style={{ overflow: "hidden", marginTop: 20 }}
+      >
+        <View className="px-4 py-4">
+          <View className="flex-row justify-between items-center">
+            <Text className="text-white text-3xl font-black">TezMaths</Text>
+            <View className="flex-row items-center gap-4">
+              <View className="flex-row items-center bg-primary px-3 py-1 rounded-full">
+                <Text className="text-white text-sm font-black">
+                  Day {userStreak}
+                </Text>
+                <Text className="text-white text-lg ml-1">🔥</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => router.push("/user/achievements")}
+              >
+                <Image
+                  source={require("../../assets/icons/ribbon-badge.png")}
+                  style={{ width: 28, height: 28 }}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
+      </ImageBackground>
 
-        {/* Level Select Card */}
-        <TouchableOpacity
-          className="bg-primary rounded-2xl p-6 mb-4 items-center"
-          onPress={handleLevelSelect}
-        >
-          <View className="bg-white rounded-full p-4 mb-4">
+      {/* Welcome Section */}
+      <View className="px-4 py-4">
+        <View className="flex-row justify-center items-center">
+          <Text className="text-purple-800 text-3xl mt-4 font-black">
+            Let's Practice Today!
+          </Text>
+        </View>
+      </View>
+
+      <View className="px-4 py-6 flex flex-col gap-4">
+        <View className="border border-black rounded-2xl overflow-hidden">
+          <View className=" w-full h-8 bg-primary"></View>
+          <View className=" w-full p-4 flex flex-col items-center gap-4">
             <Image
               source={require("../../assets/icons/quiz.png")}
               style={{ width: 48, height: 48 }}
               tintColor="#FF6B35"
             />
+
+            <View className="flex flex-col items-center gap-1">
+              <Text className="text-2xl text-purple-800 font-black">
+                Quiz Time
+              </Text>
+              <Text className="text-sm text-center text-purple-800">
+                Test your maths skills with our interactive quizzes!
+              </Text>
+            </View>
+            <TouchableOpacity onPress={handleLevelSelect}>
+              <ImageBackground
+                source={require("../../assets/gradient.jpg")} // Replace with your actual image path
+                style={{ borderRadius: 8, overflow: "hidden" }}
+                imageStyle={{ borderRadius: 12 }}
+              >
+                <View className="py-3">
+                  <Text className="text-white font-bold text-xl w-72 text-center">
+                    Start Quiz
+                  </Text>
+                </View>
+              </ImageBackground>
+            </TouchableOpacity>
           </View>
-          <Text className="text-black text-xl font-bold mb-2">
-            Select Level
-          </Text>
-          <Text className="text-black text-sm text-center">
-            Choose a level to practice
-          </Text>
-          <View className="bg-black rounded-full px-6 py-3 mt-4">
-            <Text className="text-white font-bold">Select Level</Text>
-          </View>
-        </TouchableOpacity>
+        </View>
 
         {/* Battle with Friends Card */}
-        <TouchableOpacity
-          className="bg-primary rounded-2xl p-6 items-center"
-          onPress={() => router.push("/user/MultiplayerSelection")}
-        >
-          <View className="bg-white rounded-full p-4 mb-4">
-            <Text className="text-4xl">⚔️</Text>
+        <View className="border border-black rounded-2xl overflow-hidden">
+          <View className=" w-full h-8 bg-primary"></View>
+          <View className=" w-full p-4 flex flex-col items-center gap-4">
+            <Image
+              source={require("../../assets/icons/swords.png")}
+              style={{ width: 48, height: 48 }}
+              tintColor="#FF6B35"
+            />
+
+            <View className="flex flex-col items-center gap-1">
+              <Text className="text-2xl text-purple-800 font-black">
+                Battle With Friends
+              </Text>
+              <Text className="text-sm text-center text-purple-800">
+                Challenge friends to real-time maths battles!
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => router.push("/user/MultiplayerSelection")}
+            >
+              <ImageBackground
+                source={require("../../assets/gradient.jpg")} // Replace with your actual image path
+                style={{ borderRadius: 8, overflow: "hidden" }}
+                imageStyle={{ borderRadius: 12 }}
+              >
+                <View className="py-3">
+                  <Text className="text-white font-bold text-xl w-72 text-center">
+                    Start Battle
+                  </Text>
+                </View>
+              </ImageBackground>
+            </TouchableOpacity>
           </View>
-          <Text className="text-black text-xl font-bold mb-2">
-            Battle with Friends
-          </Text>
-          <Text className="text-black text-sm text-center mb-4">
-            Challenge friends to real-time math battles
-          </Text>
-          <View className="bg-black rounded-full px-6 py-3">
-            <Text className="text-white font-bold">Start Battle</Text>
-          </View>
-        </TouchableOpacity>
+        </View>
       </View>
+
       {/* Stats Section */}
       <View className="px-4 pb-4 flex-row justify-around">
         <TouchableOpacity className="items-center" onPress={showStreakInfo}>
-          <View className="bg-gray-800 rounded-full p-3 mb-2">
+          <View className="bg-gray-100 rounded-full w-16 h-16 flex justify-center items-center mb-2">
             <Text className="text-2xl">🔥</Text>
           </View>
-          <Text className="text-white text-sm">Streak</Text>
+          <Text className="text-sm">Streak</Text>
           <Text className="text-primary text-lg font-bold">{userStreak}</Text>
         </TouchableOpacity>
 
         <View className="items-center">
-          <View className="bg-gray-800 rounded-full p-3 mb-2">
+          <View className="bg-gray-100 rounded-full w-16 h-16 flex justify-center items-center mb-2">
             <Text className="text-2xl">💎</Text>
           </View>
-          <Text className="text-white text-sm">Points</Text>
+          <Text className="text-sm">Points</Text>
           <Text className="text-primary text-lg font-bold">{userPoints}</Text>
         </View>
 
         <View className="items-center">
-          <View className="bg-gray-800 rounded-full p-3 mb-2">
+          <View className="bg-gray-100 rounded-full w-16 h-16 flex justify-center items-center mb-2">
             <Text className="text-2xl">👥</Text>
           </View>
-          <Text className="text-white text-sm">Referrals</Text>
+          <Text className="text-sm">Referrals</Text>
           <Text className="text-primary text-lg font-bold">{referrals}</Text>
         </View>
       </View>
-      {/* Quiz Code Section */}
-      <View className="px-4 pb-6">
-        <Text className="text-white text-lg font-bold mb-3">
-          Enter Quiz Code
-        </Text>
-        <View className="flex-row gap-3">
-          <TextInput
-            className="flex-1 bg-gray-800 text-white px-4 py-3 rounded-xl"
-            placeholder="Enter Quiz Code"
-            placeholderTextColor="#9CA3AF"
-            value={quizCode}
-            onChangeText={setQuizCode}
-          />
-          <TouchableOpacity
-            className="bg-primary px-6 py-3 rounded-xl justify-center"
-            onPress={handleEnterQuizCode}
-          >
-            <Text className="text-black font-bold">Enter</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+
       {/* Streak Popup */}
       <Modal visible={showStreakPopup} transparent animationType="fade">
         <View className="flex-1 justify-center items-center bg-black bg-opacity-50">
@@ -644,6 +678,7 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+
       {/* Level Select Modal */}
       <Modal visible={showLevelSelect} transparent animationType="fade">
         <View className="flex-1 bg-black bg-opacity-70 justify-center items-center p-4">

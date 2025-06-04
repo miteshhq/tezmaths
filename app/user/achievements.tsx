@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
+  ImageBackground,
+  Image,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
@@ -78,18 +80,27 @@ export default function Achievements() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-[#FFF2CC]">
-      {/* Header */}
-      <View className="h-16 bg-primary flex-row items-center px-5">
-        <TouchableOpacity onPress={() => router.push("/user/home")}>
-          <FontAwesome name="arrow-left" size={24} color="white" />
-        </TouchableOpacity>
-        <Text className="text-xl color-white font-bold ml-4">Achievements</Text>
-      </View>
+    <ScrollView className="flex-1 bg-white">
+      {/* HEADER HERE */}
+      <ImageBackground
+        source={require("../../assets/gradient.jpg")}
+        style={{ overflow: "hidden", marginTop: 20 }}
+      >
+        <View className="px-4 py-4">
+          <View className="flex-row justify-center items-center gap-2">
+            <Image
+              source={require("../../assets/icons/ribbon-badge.png")}
+              style={{ width: 24, height: 24 }}
+              tintColor="#FF6B35"
+            />
+            <Text className="text-white text-3xl font-black">Achievements</Text>
+          </View>
+        </View>
+      </ImageBackground>
 
       {/* User Stats Summary */}
-      <View className="bg-white mx-4 my-4 p-4 rounded-lg shadow-md">
-        <Text className="text-lg font-bold text-center mb-2">
+      <View className="bg-orange-50 mx-4 my-4 p-6 rounded-2xl">
+        <Text className="text-2xl font-black text-purple-800 text-center mb-4">
           Your Progress
         </Text>
         <View className="flex-row justify-between">
@@ -102,7 +113,9 @@ export default function Achievements() {
           <View className="items-center">
             <Text className="text-sm text-gray-500">Score</Text>
             <Text className="text-xl font-bold text-primary">
-              {userData?.totalPoints || 0}
+              {userData.totalPoints % 1 !== 0
+                ? Math.round(userData.totalPoints * 10) / 10
+                : userData.totalPoints || 0}
             </Text>
           </View>
           <View className="items-center">
@@ -132,20 +145,10 @@ export default function Achievements() {
           return (
             <View
               key={achievement.id}
-              className={`flex-row items-center p-4 mb-4 rounded-lg ${
-                isCompleted ? "bg-white border border-primary" : "bg-gray-100"
-              } shadow-md`}
+              className={`flex-row items-center gap-4 p-6 mb-4 rounded-2xl ${
+                isCompleted ? "bg-white border border-primary" : "bg-orange-50"
+              }`}
             >
-              {isCompleted ? (
-                <View className="bg-primary rounded-full p-3">
-                  <FontAwesome name="trophy" size={32} color="white" />
-                </View>
-              ) : (
-                <View className="bg-gray-300 rounded-full p-3">
-                  <FontAwesome name="lock" size={32} color="white" />
-                </View>
-              )}
-
               <View className="ml-4 flex-1">
                 <Text
                   className={`text-lg font-bold ${
@@ -180,35 +183,15 @@ export default function Achievements() {
                 )}
               </View>
 
-              <View>
-                <Text
-                  className={`font-bold ${
-                    isCompleted ? "text-primary" : "text-gray-500"
-                  }`}
-                >
-                  {isCompleted ? "Unlocked" : "Locked"}
-                </Text>
-
-                {!isCompleted && achievement.type === "score" && (
-                  <Text className="text-xs text-gray-500 text-right mt-1">
-                    {Math.max(
-                      0,
-                      achievement.value - (userData?.totalPoints || 0)
-                    )}{" "}
-                    points to go
-                  </Text>
-                )}
-
-                {!isCompleted && achievement.type === "level" && (
-                  <Text className="text-xs text-gray-500 text-right mt-1">
-                    {Math.max(
-                      0,
-                      achievement.value - (userData?.currentLevel || 0)
-                    )}{" "}
-                    levels to go
-                  </Text>
-                )}
-              </View>
+              {isCompleted ? (
+                <View className="bg-primary w-12 h-12 rounded-full flex items-center justify-center">
+                  <FontAwesome name="trophy" size={24} color="white" />
+                </View>
+              ) : (
+                <View className="bg-gray-300 w-12 h-12 rounded-full flex items-center justify-center">
+                  <FontAwesome name="lock" size={24} color="white" />
+                </View>
+              )}
             </View>
           );
         })}

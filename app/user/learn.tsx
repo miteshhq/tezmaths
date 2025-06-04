@@ -9,6 +9,8 @@ import {
   Platform,
   TouchableOpacity,
   ActivityIndicator,
+  Image,
+  ImageBackground,
 } from "react-native";
 import { ref, get } from "firebase/database";
 import { database } from "../../firebase/firebaseConfig";
@@ -195,19 +197,24 @@ export default function LearnScreen() {
 
   const renderHeader = () => (
     <View className="mb-6">
-      <View className="bg-primary rounded-2xl p-6 mx-4 mb-4">
-        <View className="items-center">
-          <MaterialIcons name="school" size={32} color="white" />
-          <Text className="text-white text-2xl font-bold text-center mt-2">
-            Educational Videos
-          </Text>
-          <Text className="text-white/80 text-sm text-center mt-1">
-            Learn with engaging video content
-          </Text>
+      {/* HEADER HERE */}
+      <ImageBackground
+        source={require("../../assets/gradient.jpg")}
+        style={{ overflow: "hidden", marginTop: 20 }}
+      >
+        <View className="px-4 py-4">
+          <View className="flex-row justify-center items-center gap-2">
+            <Image
+              source={require("../../assets/icons/learn.png")}
+              style={{ width: 24, height: 24 }}
+              tintColor="#FF6B35"
+            />
+            <Text className="text-white text-3xl font-black">Learning</Text>
+          </View>
         </View>
-      </View>
+      </ImageBackground>
 
-      <View className="mx-4">
+      <View className="mx-4 mt-4">
         <View className="relative">
           <TextInput
             className="bg-white text-gray-800 py-3 pl-12 pr-4 rounded-xl text-base border border-gray-200"
@@ -229,24 +236,24 @@ export default function LearnScreen() {
   );
 
   const renderVideoItem = ({ item, index }) => (
-    <View className="bg-white rounded-2xl p-4 mx-4 mb-4 shadow-sm border border-gray-100">
-      <View className="flex-row items-start mb-3">
-        <View className="w-10 h-10 rounded-full bg-primary justify-center items-center mr-3">
+    <View className="bg-white rounded-3xl p-4 mx-4 mb-4 shadow-sm border border-primary">
+      <View className="flex-row items-start">
+        {/* <View className="w-10 h-10 rounded-full bg-primary justify-center items-center mr-3">
           <Text className="text-white text-sm font-bold">{index + 1}</Text>
-        </View>
-        <View className="flex-1">
-          <Text className="text-gray-800 text-lg font-bold mb-1">
+        </View> */}
+        <View className="flex-1 flex items-center">
+          <Text className="text-purple-800 text-2xl font-black text-center">
             {item.name}
           </Text>
-          <Text className="text-gray-600 text-sm leading-5">
+          {/* <Text className="text-gray-600 text-sm leading-5">
             {item.description}
-          </Text>
+          </Text> */}
         </View>
       </View>
 
       <View className="mt-3">{renderVideoContent(item)}</View>
 
-      <View className="flex-row items-center justify-between mt-3 pt-3 border-t border-gray-100">
+      {/* <View className="flex-row items-center justify-between mt-3 pt-3 border-t border-gray-100">
         <View className="flex-row items-center">
           <FontAwesome name="play-circle" size={16} color="#6B7280" />
           <Text className="text-gray-500 text-sm ml-2">
@@ -260,7 +267,7 @@ export default function LearnScreen() {
           <FontAwesome name="external-link" size={12} color="#primary" />
           <Text className="text-primary text-xs font-medium ml-1">Open</Text>
         </TouchableOpacity>
-      </View>
+      </View> */}
     </View>
   );
 
@@ -277,7 +284,7 @@ export default function LearnScreen() {
   );
 
   return (
-    <View className="flex-1 bg-gray-50">
+    <View className="flex-1 bg-white">
       {loading ? (
         <View className="flex-1 justify-center items-center">
           <ActivityIndicator size="large" color="#primary" />

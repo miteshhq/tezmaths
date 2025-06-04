@@ -29,16 +29,6 @@ export default function TabsLayout() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
       <View style={styles.root}>
-        {/* ——— your shared header ——— */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push("/user/home")}>
-            <Text style={styles.headerText}>Tez Maths</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => router.push("/user/achievements")}>
-            <FontAwesome name="trophy" size={24} color="black" />
-          </TouchableOpacity>
-        </View>
 
         {/* ——— expo-router Tabs ——— */}
         <Tabs
