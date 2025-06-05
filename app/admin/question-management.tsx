@@ -277,10 +277,10 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
 
           if (!questionText || !correctAnswer) {
             // console.log(
-              `Skipping row ${
-                index + 2
-              }: missing question text or correct answer`
-            );
+            //   `Skipping row ${
+            //     index + 2
+            //   }: missing question text or correct answer`
+            // );
             return;
           }
 
@@ -302,10 +302,10 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
 
           if (validAnswerType === "mcq" && !options) {
             // console.log(
-              `Row ${
-                index + 2
-              }: MCQ question missing options, defaulting to manual`
-            );
+            //   `Row ${
+            //     index + 2
+            //   }: MCQ question missing options, defaulting to manual`
+            // );
             validAnswerType = "manual";
           }
 
