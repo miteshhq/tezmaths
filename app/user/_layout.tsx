@@ -29,7 +29,6 @@ export default function TabsLayout() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
       <View style={styles.root}>
-
         {/* ——— expo-router Tabs ——— */}
         <Tabs
           screenOptions={{
@@ -48,12 +47,19 @@ export default function TabsLayout() {
           }}
         >
           <Tabs.Screen
-            name="results"
+            name="level-select"
             options={{
               href: null, // removes from tab bar
             }}
                   />
                   
+          <Tabs.Screen
+            name="results"
+            options={{
+              href: null, // removes from tab bar
+            }}
+          />
+
           <Tabs.Screen
             name="edit-profile"
             options={{

@@ -35,9 +35,6 @@ interface Question {
 }
 
 export default function QuestionManagement() {
-  const [quizName, setQuizName] = useState("");
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("");
   const [level, setLevel] = useState("");
   const [points, setPoints] = useState("");
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -470,9 +467,6 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
         numQuestions > 0 ? totalPoints / numQuestions : 0;
 
       const quizData = {
-        name: quizName,
-        description,
-        category,
         level: Number(level),
         points: totalPoints,
         questions: questions.map((q) => ({
@@ -513,18 +507,6 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
   };
 
   const areQuizFieldsValid = () => {
-    if (!quizName.trim()) {
-      Alert.alert("Validation Error", "Quiz title is required");
-      return false;
-    }
-    if (!description.trim()) {
-      Alert.alert("Validation Error", "Description is required");
-      return false;
-    }
-    if (!category.trim()) {
-      Alert.alert("Validation Error", "Category is required");
-      return false;
-    }
     if (!level) {
       Alert.alert("Validation Error", "Level is required");
       return false;
@@ -617,9 +599,6 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
           }))
         : [];
 
-      setQuizName(quizData.name || "");
-      setDescription(quizData.description || "");
-      setCategory(quizData.category || "");
       setLevel(quizData.level?.toString() || "");
       setPoints(quizData.points?.toString() || "");
       setQuestions(formattedQuestions);
@@ -635,9 +614,6 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
   };
 
   const resetForm = () => {
-    setQuizName("");
-    setDescription("");
-    setCategory("");
     setLevel("");
     setPoints("");
     setQuestions([]);
@@ -679,26 +655,7 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
       </Text>
       <TextInput
         className="bg-white border border-gray-300 rounded-lg p-3 mb-4"
-        placeholder="Quiz Title"
-        value={quizName}
-        onChangeText={setQuizName}
-      />
-      <TextInput
-        className="bg-white border border-gray-300 rounded-lg p-3 mb-4"
-        placeholder="Description"
-        value={description}
-        onChangeText={setDescription}
-        multiline
-      />
-      <TextInput
-        className="bg-white border border-gray-300 rounded-lg p-3 mb-4"
-        placeholder="Category"
-        value={category}
-        onChangeText={setCategory}
-      />
-      <TextInput
-        className="bg-white border border-gray-300 rounded-lg p-3 mb-4"
-        placeholder="Level (1-4)"
+        placeholder="Level (1-6)"
         value={level}
         onChangeText={setLevel}
         keyboardType="numeric"

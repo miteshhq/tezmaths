@@ -55,7 +55,6 @@ export default function HomeScreen() {
   const [streakPopupMessage, setStreakPopupMessage] = useState("");
   const [isAllLevelsComplete, setIsAllLevelsComplete] = useState(false);
   const [completedLevels, setCompletedLevels] = useState<number[]>([]);
-  const [showLevelSelect, setShowLevelSelect] = useState(false); // Added missing state
 
   // Animation refs
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -439,20 +438,6 @@ export default function HomeScreen() {
     startAnimation();
   }, [animatedValue]);
 
-  // Handle level popup
-  const { openLevelPopup } = params;
-
-  // Added missing level select handlers
-  const handleLevelSelect = async () => {
-    await SoundManager.playSound("levelSoundEffect", { isLooping: true });
-    setShowLevelSelect(true);
-  };
-
-  const closeLevelSelect = async () => {
-    await SoundManager.stopSound("levelSoundEffect");
-    setShowLevelSelect(false);
-  };
-
   const handleQuizChoice = async (level, isManualSelection) => {
     await Promise.all([
       SoundManager.stopSound("levelSoundEffect"),
@@ -581,7 +566,7 @@ export default function HomeScreen() {
                 Test your maths skills with our interactive quizzes!
               </Text>
             </View>
-            <TouchableOpacity onPress={handleLevelSelect}>
+            <TouchableOpacity onPress={() => router.push("/user/level-select")}>
               <ImageBackground
                 source={require("../../assets/gradient.jpg")} // Replace with your actual image path
                 style={{ borderRadius: 8, overflow: "hidden" }}
@@ -636,7 +621,10 @@ export default function HomeScreen() {
 
       {/* Stats Section */}
       <View className="px-4 pb-4 flex-row justify-around">
-        <TouchableOpacity className="items-center" onPress={showStreakInfo}>
+        <TouchableOpacity
+          className="items-center"
+          onPress={() => setShowStreakPopup(true)}
+        >
           <View className="bg-gray-100 rounded-full w-16 h-16 flex justify-center items-center mb-2">
             <Text className="text-2xl">🔥</Text>
           </View>
@@ -663,11 +651,14 @@ export default function HomeScreen() {
 
       {/* Streak Popup */}
       <Modal visible={showStreakPopup} transparent animationType="fade">
-        <View className="flex-1 justify-center items-center bg-black bg-opacity-50">
+        <View className="flex-1 justify-center items-center bg-white bg-opacity-30">
           <View className="bg-primary rounded-2xl p-6 mx-8 items-center">
-            <Text className="text-6xl mb-4">🔥</Text>
-            <Text className="text-black text-xl font-bold text-center">
-              {streakPopupMessage}
+            <Text className="text-3xl font-bold text-center mb-2">
+              Streak Rules 🔥
+            </Text>
+            <Text className="text-black text-xl font-semibold text-center">
+              If you don't play the quiz for two consecutive days, your streak
+              will reset to 0.
             </Text>
             <TouchableOpacity
               className="bg-black rounded-full px-6 py-3 mt-4"
@@ -675,81 +666,6 @@ export default function HomeScreen() {
             >
               <Text className="text-white font-bold">Awesome!</Text>
             </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Level Select Modal */}
-      <Modal visible={showLevelSelect} transparent animationType="fade">
-        <View className="flex-1 bg-black bg-opacity-70 justify-center items-center p-4">
-          <View className="bg-white p-6 rounded-2xl w-full max-w-md">
-            <Text className="text-2xl font-bold text-center mb-6">
-              Select Level
-            </Text>
-
-            <View className="flex-row flex-wrap justify-center">
-              {Array.from({ length: maxLevel }, (_, i) => {
-                const level = i + 1;
-                const isCompleted = completedLevels.includes(level);
-                const isCurrent = level === currentLevel;
-                const isUnlocked = level <= currentLevel;
-
-                return (
-                  <TouchableOpacity
-                    key={level}
-                    className={`w-16 h-16 m-2 rounded-full justify-center items-center ${
-                      isCompleted
-                        ? "bg-green-500"
-                        : isCurrent
-                        ? "bg-orange-500"
-                        : isUnlocked
-                        ? "bg-purple-500"
-                        : "bg-gray-300"
-                    }`}
-                    onPress={() => isUnlocked && handleQuizChoice(level, true)}
-                    disabled={!isUnlocked}
-                  >
-                    {/* {isCompleted ? (
-                      <Image
-                        source={require("../../assets/icons/checkmark.png")}
-                        className="w-6 h-6 absolute top-1 right-1"
-                      />
-                    ) : null} */}
-                    <Text
-                      className={`text-2xl font-bold ${
-                        isCompleted || isCurrent || isUnlocked
-                          ? "text-white"
-                          : "text-gray-500"
-                      }`}
-                    >
-                      {level}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <TouchableOpacity
-              className="bg-gray-500 rounded-full px-6 py-3 mt-6"
-              onPress={closeLevelSelect}
-            >
-              <Text className="text-white font-bold text-center">Close</Text>
-            </TouchableOpacity>
-
-            <View className="mt-4 flex-row justify-center">
-              <View className="flex-row items-center mr-4">
-                <View className="w-4 h-4 bg-green-500 rounded-full mr-1"></View>
-                <Text className="text-xs">Completed</Text>
-              </View>
-              <View className="flex-row items-center mr-4">
-                <View className="w-4 h-4 bg-orange-500 rounded-full mr-1"></View>
-                <Text className="text-xs">Current</Text>
-              </View>
-              <View className="flex-row items-center">
-                <View className="w-4 h-4 bg-gray-300 rounded-full mr-1"></View>
-                <Text className="text-xs">Locked</Text>
-              </View>
-            </View>
           </View>
         </View>
       </Modal>
