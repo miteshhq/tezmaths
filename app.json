@@ -4,7 +4,7 @@
         "slug": "tezmaths",
         "version": "1.0.0",
         "orientation": "portrait",
-        "icon": "./assets/images/icon.png",
+        "icon": "./assets/icon.png",
         "scheme": "tezmaths",
         "userInterfaceStyle": "automatic",
         "newArchEnabled": true,
@@ -13,7 +13,7 @@
         },
         "android": {
             "adaptiveIcon": {
-                "foregroundImage": "./assets/images/adaptive-icon.png",
+                "foregroundImage": "./assets/icon.png",
                 "backgroundColor": "#ffffff"
             },
             "edgeToEdgeEnabled": true
@@ -21,14 +21,14 @@
         "web": {
             "bundler": "metro",
             "output": "static",
-            "favicon": "./assets/images/favicon.png"
+            "favicon": "./assets/icon.png"
         },
         "plugins": [
             "expo-router",
             [
                 "expo-splash-screen",
                 {
-                    "image": "./assets/logo.png",
+                    "image": "./assets/icon.png",
                     "imageWidth": 200,
                     "resizeMode": "contain",
                     "backgroundColor": "#ffffff"
