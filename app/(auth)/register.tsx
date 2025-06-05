@@ -1,13 +1,11 @@
 // app/register.tsx
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { get, ref, set, update } from "firebase/database";
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   Image,
   StatusBar,
   Keyboard,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   TouchableWithoutFeedback,
   Text,
@@ -43,7 +41,7 @@ export default function RegisterScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState(true);
 
-  const validatePhoneNumber = () => {
+  const validatePhoneNumber = useCallback(() => {
     if (
       !phoneNumber ||
       phoneNumber.length > 11 ||
@@ -55,9 +53,9 @@ export default function RegisterScreen() {
     }
     setPhoneError("");
     return true;
-  };
+  }, [phoneNumber]);
 
-  const findUserByUsername = async (searchUsername) => {
+  const findUserByUsername = useCallback(async (searchUsername) => {
     if (!searchUsername) return null;
 
     try {
@@ -86,51 +84,56 @@ export default function RegisterScreen() {
       console.error(`Error finding user:`, error);
       return null;
     }
-  };
+  }, []);
 
-  const processReferral = async (referralUsername) => {
-    try {
-      // Prevent self-referral
-      if (username.toLowerCase() === referralUsername.toLowerCase()) {
+  const processReferral = useCallback(
+    async (referralUsername) => {
+      try {
+        // Prevent self-referral
+        if (username.toLowerCase() === referralUsername.toLowerCase()) {
+          return false;
+        }
+
+        const referrerResult = await findUserByUsername(
+          referralUsername.toLowerCase()
+        );
+
+        if (!referrerResult || !referrerResult.userData) {
+          return false;
+        }
+
+        const { userId: referrerId, userData: referrerData } = referrerResult;
+
+        // Update referrer's stats
+        const currentReferrals =
+          typeof referrerData.referrals === "number"
+            ? referrerData.referrals
+            : 0;
+        const updatedReferrals = currentReferrals + 1;
+
+        const referralPoints = 10;
+        const currentTotalPoints =
+          typeof referrerData.totalPoints === "number"
+            ? referrerData.totalPoints
+            : 0;
+        const updatedTotalPoints = currentTotalPoints + referralPoints;
+
+        const referrerRef = ref(database, `users/${referrerId}`);
+        await update(referrerRef, {
+          referrals: updatedReferrals,
+          totalPoints: updatedTotalPoints,
+        });
+
+        return true;
+      } catch (error) {
+        console.error(`Error processing referral:`, error);
         return false;
       }
+    },
+    [username, findUserByUsername]
+  );
 
-      const referrerResult = await findUserByUsername(
-        referralUsername.toLowerCase()
-      );
-
-      if (!referrerResult || !referrerResult.userData) {
-        return false;
-      }
-
-      const { userId: referrerId, userData: referrerData } = referrerResult;
-
-      // Update referrer's stats
-      const currentReferrals =
-        typeof referrerData.referrals === "number" ? referrerData.referrals : 0;
-      const updatedReferrals = currentReferrals + 1;
-
-      const referralPoints = 10;
-      const currentTotalPoints =
-        typeof referrerData.totalPoints === "number"
-          ? referrerData.totalPoints
-          : 0;
-      const updatedTotalPoints = currentTotalPoints + referralPoints;
-
-      const referrerRef = ref(database, `users/${referrerId}`);
-      await update(referrerRef, {
-        referrals: updatedReferrals,
-        totalPoints: updatedTotalPoints,
-      });
-
-      return true;
-    } catch (error) {
-      console.error(`Error processing referral:`, error);
-      return false;
-    }
-  };
-
-  const checkUsernameAvailability = async () => {
+  const checkUsernameAvailability = useCallback(async () => {
     if (!username) return;
 
     try {
@@ -161,9 +164,14 @@ export default function RegisterScreen() {
       setUsernameAvailable(true);
       return true;
     }
-  };
+  }, [username]);
 
-  const handleRegister = async () => {
+  const handleUsernameChange = useCallback((value) => {
+    const sanitizedValue = value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 15);
+    setUsername(sanitizedValue);
+  }, []);
+
+  const handleRegister = useCallback(async () => {
     if (isProcessing) return;
 
     try {
@@ -227,257 +235,179 @@ export default function RegisterScreen() {
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [
+    isProcessing,
+    fullName,
+    username,
+    phoneNumber,
+    usernameAvailable,
+    validatePhoneNumber,
+    email,
+    selectedAvatar,
+    referralCode,
+    processReferral,
+    router,
+  ]);
+
+  const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
 
   return (
     <SafeAreaView className="flex-1 bg-white">
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <ScrollView
-            contentContainerStyle={{
-              flexGrow: 1,
-              justifyContent: "center",
-              alignItems: "center",
-              paddingHorizontal: 20,
-              paddingVertical: 40,
-            }}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View>
-              <Text
-                style={{
-                  fontSize: 24,
-                  fontWeight: "bold",
-                  textAlign: "center",
-                  marginBottom: 32,
-                }}
-              >
-                Setup Your Profile
+      <TouchableWithoutFeedback onPress={dismissKeyboard}>
+        <ScrollView
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 20,
+            paddingVertical: 40,
+            minHeight: "100%",
+          }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          enableOnAndroid={true}
+          nestedScrollEnabled={true}
+          scrollEnabled={true}
+        >
+          <Text className="text-4xl text-black font-black text-center mb-10 font-['Poppins-Bold']">
+            Setup Your Profile
+          </Text>
+
+          {/* Avatar Selection */}
+          <View className="mb-6 w-full">
+            <Text className="text-lg text-black font-semibold text-center mb-4 font-['Poppins-SemiBold']">
+              Choose your avatar
+            </Text>
+            <View className="flex-row flex-wrap justify-center">
+              {avatarOptions.map((avatar) => (
+                <TouchableOpacity
+                  key={avatar.id}
+                  onPress={() => setSelectedAvatar(avatar.id)}
+                  className={`m-2 p-2 rounded-full border-2 ${
+                    selectedAvatar === avatar.id
+                      ? "border-primary"
+                      : "border-gray-300"
+                  }`}
+                  activeOpacity={0.8}
+                >
+                  <Image
+                    source={avatar.source}
+                    className="w-16 h-16 rounded-full"
+                    resizeMode="cover"
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Name Input */}
+          <View className="mb-4 w-full">
+            <Text className="text-base text-black font-medium mb-2 font-['Poppins-Medium']">
+              Name
+            </Text>
+            <TextInput
+              className="bg-gray-100 text-black py-4 px-5 rounded-xl text-base font-['Poppins-Regular']"
+              placeholder="Enter your full name"
+              placeholderTextColor="#9CA3AF"
+              onChangeText={setFullName}
+              value={fullName}
+              returnKeyType="next"
+              blurOnSubmit={false}
+            />
+          </View>
+
+          {/* Username Input */}
+          <View className="mb-4 w-full">
+            <View className="flex-row justify-between items-center mb-2">
+              <Text className="text-base text-black font-medium font-['Poppins-Medium']">
+                Username
               </Text>
-
-              {/* Avatar Selection */}
-              <View style={{ marginBottom: 24 }}>
+              {username ? (
                 <Text
-                  style={{
-                    fontSize: 16,
-                    fontWeight: "600",
-                    textAlign: "center",
-                    marginBottom: 16,
-                  }}
+                  className={`text-sm font-medium font-['Poppins-Medium'] ${
+                    usernameAvailable ? "text-green-600" : "text-red-500"
+                  }`}
                 >
-                  Choose your avatar
-                </Text>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    flexWrap: "wrap",
-                    justifyContent: "center",
-                  }}
-                >
-                  {avatarOptions.map((avatar) => (
-                    <TouchableOpacity
-                      key={avatar.id}
-                      onPress={() => setSelectedAvatar(avatar.id)}
-                      style={{
-                        margin: 8,
-                        padding: 8,
-                        borderRadius: 50,
-                        borderWidth: 2,
-                        borderColor:
-                          selectedAvatar === avatar.id ? "#3B82F6" : "#E5E7EB",
-                      }}
-                    >
-                      <Image
-                        source={avatar.source}
-                        style={{ width: 64, height: 64, borderRadius: 32 }}
-                        resizeMode="cover"
-                      />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              {/* Name Input */}
-              <View style={{ marginBottom: 16 }}>
-                <Text
-                  style={{
-                    fontSize: 14,
-                    fontWeight: "500",
-                    marginBottom: 8,
-                  }}
-                >
-                  Name
-                </Text>
-                <TextInput
-                  style={{
-                    backgroundColor: "#F3F4F6",
-                    borderRadius: 12,
-                    padding: 16,
-                    fontSize: 16,
-                  }}
-                  placeholder="Enter your full name"
-                  placeholderTextColor="#9CA3AF"
-                  onChangeText={setFullName}
-                  value={fullName}
-                />
-              </View>
-
-              {/* Username Input */}
-              <View style={{ marginBottom: 16 }}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 14,
-                      fontWeight: "500",
-                      marginBottom: 8,
-                    }}
-                  >
-                    Username
-                  </Text>
-                  {username && (
-                    <Text
-                      style={{
-                        fontSize: 14,
-                        color: usernameAvailable ? "#10B981" : "#EF4444",
-                      }}
-                    >
-                      {usernameAvailable ? "Available" : "Taken"}
-                    </Text>
-                  )}
-                </View>
-                <TextInput
-                  style={{
-                    backgroundColor: "#F3F4F6",
-                    borderRadius: 12,
-                    padding: 16,
-                    fontSize: 16,
-                  }}
-                  placeholder="Choose a username"
-                  placeholderTextColor="#9CA3AF"
-                  onChangeText={(value) => {
-                    const sanitizedValue = value
-                      .replace(/[^a-zA-Z0-9]/g, "")
-                      .slice(0, 15);
-                    setUsername(sanitizedValue);
-                  }}
-                  value={username}
-                  onBlur={checkUsernameAvailability}
-                />
-              </View>
-
-              {/* Phone Input */}
-              <View style={{ marginBottom: 16 }}>
-                <Text
-                  style={{
-                    fontSize: 14,
-                    fontWeight: "500",
-                    marginBottom: 8,
-                  }}
-                >
-                  Phone
-                </Text>
-                <TextInput
-                  style={{
-                    backgroundColor: "#F3F4F6",
-                    borderRadius: 12,
-                    padding: 16,
-                    fontSize: 16,
-                    borderColor: phoneError ? "#EF4444" : "transparent",
-                    borderWidth: phoneError ? 1 : 0,
-                  }}
-                  placeholder="Enter your phone number"
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="numeric"
-                  onChangeText={setPhoneNumber}
-                  value={phoneNumber}
-                  onBlur={validatePhoneNumber}
-                />
-                {phoneError && (
-                  <Text
-                    style={{
-                      color: "#EF4444",
-                      fontSize: 12,
-                      marginTop: 4,
-                    }}
-                  >
-                    {phoneError}
-                  </Text>
-                )}
-              </View>
-
-              {/* Referral Code Input */}
-              <View style={{ marginBottom: 24 }}>
-                <Text
-                  style={{
-                    fontSize: 14,
-                    fontWeight: "500",
-                    marginBottom: 8,
-                  }}
-                >
-                  Referral Code (Optional)
-                </Text>
-                <TextInput
-                  style={{
-                    backgroundColor: "#F3F4F6",
-                    borderRadius: 12,
-                    padding: 16,
-                    fontSize: 16,
-                  }}
-                  placeholder="Enter friend's username"
-                  placeholderTextColor="#9CA3AF"
-                  onChangeText={setReferralCode}
-                  value={referralCode}
-                />
-              </View>
-
-              {/* Error Message */}
-              {errorMessage ? (
-                <Text
-                  style={{
-                    color: "#EF4444",
-                    textAlign: "center",
-                    marginBottom: 16,
-                  }}
-                >
-                  {errorMessage}
+                  {usernameAvailable ? "Available" : "Taken"}
                 </Text>
               ) : null}
-
-              {/* Continue Button */}
-              <TouchableOpacity
-                style={{
-                  backgroundColor: "#3B82F6",
-                  borderRadius: 12,
-                  padding: 16,
-                  opacity: isProcessing ? 0.7 : 1,
-                }}
-                onPress={handleRegister}
-                disabled={isProcessing}
-              >
-                <Text
-                  style={{
-                    color: "white",
-                    textAlign: "center",
-                    fontWeight: "600",
-                    fontSize: 16,
-                  }}
-                >
-                  {isProcessing ? "Processing..." : "Complete Registration"}
-                </Text>
-              </TouchableOpacity>
             </View>
-          </ScrollView>
-        </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
+            <TextInput
+              className="bg-gray-100 text-black py-4 px-5 rounded-xl text-base font-['Poppins-Regular']"
+              placeholder="Choose a username"
+              placeholderTextColor="#9CA3AF"
+              onChangeText={handleUsernameChange}
+              value={username}
+              onBlur={checkUsernameAvailability}
+              returnKeyType="next"
+              blurOnSubmit={false}
+            />
+          </View>
+
+          {/* Phone Input */}
+          <View className="mb-4 w-full">
+            <Text className="text-base text-black font-medium mb-2 font-['Poppins-Medium']">
+              Phone
+            </Text>
+            <TextInput
+              className={`bg-gray-100 text-black py-4 px-5 rounded-xl text-base font-['Poppins-Regular'] ${
+                phoneError ? "border border-red-500" : ""
+              }`}
+              placeholder="Enter your phone number"
+              placeholderTextColor="#9CA3AF"
+              keyboardType="numeric"
+              onChangeText={setPhoneNumber}
+              value={phoneNumber}
+              onBlur={validatePhoneNumber}
+              returnKeyType="next"
+              blurOnSubmit={false}
+            />
+            {phoneError ? (
+              <Text className="text-red-500 text-sm mt-1 font-['Poppins-Regular']">
+                {phoneError}
+              </Text>
+            ) : null}
+          </View>
+
+          {/* Referral Code Input */}
+          <View className="mb-6 w-full">
+            <Text className="text-base text-black font-medium mb-2 font-['Poppins-Medium']">
+              Referral Code (Optional)
+            </Text>
+            <TextInput
+              className="bg-gray-100 text-black py-4 px-5 rounded-xl text-base font-['Poppins-Regular']"
+              placeholder="Enter friend's username"
+              placeholderTextColor="#9CA3AF"
+              onChangeText={setReferralCode}
+              value={referralCode}
+              returnKeyType="done"
+              onSubmitEditing={handleRegister}
+            />
+          </View>
+
+          {/* Error Message */}
+          {errorMessage ? (
+            <Text className="text-red-500 text-sm text-center font-['Poppins-Regular'] mb-4">
+              {errorMessage}
+            </Text>
+          ) : null}
+
+          {/* Continue Button */}
+          <TouchableOpacity
+            className={`bg-primary py-3 px-8 rounded-2xl items-center justify-center w-full ${
+              isProcessing ? "opacity-70" : ""
+            }`}
+            onPress={handleRegister}
+            disabled={isProcessing}
+            activeOpacity={0.8}
+          >
+            <Text className="text-white text-xl font-bold font-['Poppins-SemiBold'] text-center">
+              {isProcessing ? "Processing..." : "Complete Registration"}
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </TouchableWithoutFeedback>
     </SafeAreaView>
   );
 }

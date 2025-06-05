@@ -1,6 +1,13 @@
 // app/user/leaderboard.tsx
 import React, { useState, useEffect } from "react";
-import { View, Text, FlatList, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  FlatList,
+  ActivityIndicator,
+  Image,
+  ImageBackground,
+} from "react-native";
 import { ref, query, orderByChild, limitToLast, get } from "firebase/database";
 import { database } from "../../firebase/firebaseConfig";
 import { FontAwesome } from "@expo/vector-icons";
@@ -41,6 +48,7 @@ export default function LeaderboardScreen() {
               id,
               username: user.username || "Unknown",
               totalPoints: user.totalPoints ?? 0,
+              fullName: user.fullName || "Unknown",
             }))
             .sort((a, b) => b.totalPoints - a.totalPoints)
             .map((user, index) => ({ ...user, rank: index + 1 }));
@@ -84,9 +92,9 @@ export default function LeaderboardScreen() {
     };
 
     return (
-      <View className="flex-row items-center bg-white rounded-xl p-4 mb-3 mx-4 shadow-sm border border-gray-100">
-        <View className="w-10 h-10 rounded-full bg-primary justify-center items-center mr-4">
-          <Text className="text-white text-sm font-bold">{item.rank}</Text>
+      <View className="flex-row items-center p-4 mb-0 mx-0">
+        <View className="w-8 h-8 rounded-full bg-primary justify-center items-center mr-4">
+          <Text className="text-white text font-black">{item.rank}</Text>
         </View>
 
         <View className="flex-1">
@@ -98,7 +106,7 @@ export default function LeaderboardScreen() {
               className="mr-2"
             />
             <Text className="text-gray-800 text-base font-semibold">
-              {item.username}
+              {item.fullName}
             </Text>
           </View>
           <View className="flex-row items-center">
@@ -109,7 +117,10 @@ export default function LeaderboardScreen() {
               className="mr-1"
             />
             <Text className="text-gray-600 text-sm">
-              {item.totalPoints ? `${item.totalPoints}` : "0"} points
+              {item.totalPoints % 1 !== 0
+                ? Math.round(item.totalPoints * 10) / 10
+                : item.totalPoints || 0}{" "}
+              points
             </Text>
           </View>
         </View>
@@ -120,17 +131,21 @@ export default function LeaderboardScreen() {
   };
 
   const renderHeader = () => (
-    <View className="bg-primary rounded-t-3xl mx-4 p-6 mb-4">
-      <View className="items-center">
-        <FontAwesome name="trophy" size={32} color="white" className="mb-2" />
-        <Text className="text-white text-2xl font-bold text-center">
-          Top Quiz Masters
-        </Text>
-        <Text className="text-white/80 text-sm text-center mt-1">
-          See how you rank among the best quiz players!
-        </Text>
+    <ImageBackground
+      source={require("../../assets/gradient.jpg")}
+      style={{ overflow: "hidden", marginTop: 20 }}
+    >
+      <View className="px-4 py-4">
+        <View className="flex-row justify-center items-center gap-2">
+          <Image
+            source={require("../../assets/icons/leaderboard.png")}
+            style={{ width: 24, height: 24 }}
+            tintColor="#FF6B35"
+          />
+          <Text className="text-white text-3xl font-black">Leaderboard</Text>
+        </View>
       </View>
-    </View>
+    </ImageBackground>
   );
 
   const renderTopThree = () => {
@@ -193,7 +208,7 @@ export default function LeaderboardScreen() {
   };
 
   return (
-    <View className="flex-1 bg-gray-50">
+    <View className="flex-1 bg-white">
       {loading ? (
         <View className="flex-1 justify-center items-center">
           <ActivityIndicator size="large" color="#primary" />
@@ -202,22 +217,34 @@ export default function LeaderboardScreen() {
           </Text>
         </View>
       ) : (
-        <FlatList
-          data={quizMasters}
-          renderItem={renderQuizMaster}
-          keyExtractor={(item) => item.id}
-          ListHeaderComponent={() => (
-            <>
-              {renderHeader()}
-              {renderTopThree()}
-              <Text className="text-gray-700 font-semibold text-lg mb-3 mx-4">
-                All Rankings
-              </Text>
-            </>
-          )}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 20 }}
-        />
+        <>
+          {renderHeader()}
+          <View className="p-4 flex-1">
+            <FlatList
+              data={quizMasters}
+              renderItem={renderQuizMaster}
+              keyExtractor={(item) => item.id}
+              className="flex-1 py-4 border border-black rounded-2xl"
+              ListHeaderComponent={() => (
+                <>
+                  {/* {renderTopThree()} */}
+                  <View className="flex flex-row items-center gap-1 justify-center pb-4 border-b border-black mb-4">
+                    <Image
+                      source={require("../../assets/icons/ribbon-badge.png")}
+                      style={{ width: 28, height: 28 }}
+                      tintColor={"#FF6B35"}
+                    />
+                    <Text className="font-black text-center text-3xl text-purple-800">
+                      Top Quiz Masters
+                    </Text>
+                  </View>
+                </>
+              )}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 20 }}
+            />
+          </View>
+        </>
       )}
     </View>
   );

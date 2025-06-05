@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { get, ref } from "firebase/database";
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   SafeAreaView,
   StatusBar,
@@ -15,8 +15,12 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Image,
 } from "react-native";
 import { auth, database } from "../../firebase/firebaseConfig";
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const LEVEL_STORAGE_KEY = "highestLevelReached";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -24,12 +28,35 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
-  const isValidEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
+  const isValidEmail = useCallback(
+    (email: string) => EMAIL_REGEX.test(email),
+    []
+  );
 
-  const handleLogin = async () => {
+  const handleUserRedirect = useCallback(
+    async (user: any, userData: any) => {
+      if (userData.isnewuser === true || userData.isnewuser === undefined) {
+        console.log("New user, redirecting to registration.");
+        router.push("/register");
+        return;
+      }
+
+      if (userData.highestCompletedLevelCompleted !== undefined) {
+        await AsyncStorage.setItem(
+          LEVEL_STORAGE_KEY,
+          userData.highestCompletedLevelCompleted.toString()
+        );
+      }
+
+      const now = new Date().getTime().toString();
+      await AsyncStorage.setItem("lastLogin", now);
+      console.log("Redirecting to user home.");
+      router.push("/user/home");
+    },
+    [router]
+  );
+
+  const handleLogin = useCallback(async () => {
     setErrorMessage("");
     console.log("Starting login process...");
 
@@ -59,52 +86,41 @@ export default function LoginScreen() {
       if (isAdmin) {
         console.log("Admin login detected");
         router.push("/admin/dashboard");
-      } else {
-        router.prefetch("/user/home");
-        const userId = user.uid;
-        const userRef = ref(database, `users/${userId}`);
-        const snapshot = await get(userRef);
-
-        if (!snapshot.exists()) {
-          console.log("User data not found, redirecting to register.");
-          router.push({ pathname: "/register", params: { email: email } });
-          return;
-        }
-
-        const userData = snapshot.val();
-        if (userData.isnewuser === true || userData.isnewuser === undefined) {
-          console.log("New user, redirecting to registration.");
-          router.push("/register");
-          return;
-        }
-
-        const LEVEL_STORAGE_KEY = "highestLevelReached";
-        if (userData.highestCompletedLevelCompleted != undefined) {
-          await AsyncStorage.setItem(
-            LEVEL_STORAGE_KEY,
-            userData.highestCompletedLevelCompleted.toString()
-          );
-        }
-
-        const now = new Date().getTime().toString();
-        await AsyncStorage.setItem("lastLogin", now);
-        console.log("Redirecting to user home.");
-        router.push("/user/home");
+        return;
       }
+
+      router.prefetch("/user/home");
+      const userId = user.uid;
+      const userRef = ref(database, `users/${userId}`);
+      const snapshot = await get(userRef);
+
+      if (!snapshot.exists()) {
+        console.log("User data not found, redirecting to register.");
+        router.push({ pathname: "/register", params: { email: email } });
+        return;
+      }
+
+      const userData = snapshot.val();
+      await handleUserRedirect(user, userData);
     } catch (error: any) {
       console.error("Login failed:", error);
       setErrorMessage("Login failed. Please check your credentials.");
     }
-  };
+  }, [email, password, isValidEmail, handleUserRedirect, router]);
+
+  const navigateToSignup = useCallback(() => router.push("/signup"), [router]);
+
+  const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
 
   return (
     <SafeAreaView className="flex-1 bg-white">
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <TouchableWithoutFeedback onPress={dismissKeyboard}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          className="flex-1"
+          keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
+        >
           <ScrollView
             contentContainerStyle={{
               flexGrow: 1,
@@ -112,11 +128,14 @@ export default function LoginScreen() {
               alignItems: "center",
               paddingHorizontal: 20,
               paddingVertical: 40,
+              minHeight: "100%",
             }}
             keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            enableOnAndroid={true}
           >
-            <Text className="text-3xl text-black font-bold text-center mb-10 font-['Poppins-Bold']">
-              Log in
+            <Text className="text-4xl text-black font-black text-center mb-10 font-['Poppins-Bold']">
+              Login to Your Account
             </Text>
 
             <TextInput
@@ -128,6 +147,8 @@ export default function LoginScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              returnKeyType="next"
+              blurOnSubmit={false}
             />
 
             <TextInput
@@ -137,6 +158,8 @@ export default function LoginScreen() {
               onChangeText={setPassword}
               value={password}
               secureTextEntry
+              returnKeyType="done"
+              onSubmitEditing={handleLogin}
             />
 
             {errorMessage ? (
@@ -146,38 +169,58 @@ export default function LoginScreen() {
             ) : null}
 
             <TouchableOpacity
-              className="bg-primary py-4 rounded-xl items-center w-full justify-center mt-5 mb-4"
+              className="bg-primary py-3 px-20 rounded-2xl items-center justify-center mt-5 mb-4"
               onPress={handleLogin}
+              activeOpacity={0.8}
             >
-              <Text className="text-white text-base font-semibold font-['Poppins-SemiBold'] text-center">
+              <Text className="text-white text-xl font-bold font-['Poppins-SemiBold'] text-center">
                 Log in
               </Text>
             </TouchableOpacity>
 
-            <View className="flex-row mb-5">
-              <Text className="text-gray-500 text-sm font-['Poppins-Regular']">
+            <TouchableOpacity
+              className="flex items-center justify-center mb-8"
+              onPress={handleLogin}
+              activeOpacity={0.7}
+            >
+              <Text className="text-purple-800 text-base font-regular font-['Poppins-SemiBold'] text-center">
+                Forgot Password?
+              </Text>
+            </TouchableOpacity>
+
+            <View className="flex-row mb-5 items-center">
+              <Text className="text-gray-800 text-base font-bold font-['Poppins-Regular']">
                 Don't have an account?
               </Text>
-              <TouchableOpacity onPress={() => router.push("/signup")}>
-                <Text className="text-primary text-sm font-['Poppins-SemiBold'] font-semibold">
+              <TouchableOpacity onPress={navigateToSignup} activeOpacity={0.7}>
+                <Text className="text-primary text-base font-['Poppins-SemiBold'] font-bold">
                   {" "}
                   Sign Up
                 </Text>
               </TouchableOpacity>
             </View>
 
-            <Text className="text-gray-400 text-sm font-['Poppins-Regular'] mb-4 text-center">
+            <Text className="text-gray-800 text-sm font-black font-['Poppins-Regular'] mb-4 text-center">
               OR
             </Text>
 
-            <TouchableOpacity className="bg-white border border-gray-300 py-3 px-6 rounded-xl items-center w-full justify-center">
-              <Text className="text-gray-700 text-sm font-['Poppins-Regular']">
-                🔍 Sign in with Google
-              </Text>
+            <TouchableOpacity
+              className="bg-white border border-black py-2 px-8 rounded-full items-center justify-center"
+              activeOpacity={0.8}
+            >
+              <View className="flex flex-row items-center gap-2">
+                <Image
+                  source={require("../../assets/icons/google.png")}
+                  style={{ width: 18, height: 18 }}
+                />
+                <Text className="text-gray-800 text-lg font-bold font-['Poppins-Regular']">
+                  Sign in with Google
+                </Text>
+              </View>
             </TouchableOpacity>
           </ScrollView>
-        </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </TouchableWithoutFeedback>
     </SafeAreaView>
   );
 }
