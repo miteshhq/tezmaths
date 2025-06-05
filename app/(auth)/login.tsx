@@ -1,6 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import {
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+} from "firebase/auth";
 import { get, ref } from "firebase/database";
 import React, { useState, useCallback } from "react";
 import {
@@ -16,6 +19,7 @@ import {
   TouchableOpacity,
   View,
   Image,
+  Alert,
 } from "react-native";
 import { auth, database } from "../../firebase/firebaseConfig";
 
@@ -27,6 +31,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
 
   const isValidEmail = useCallback(
     (email: string) => EMAIL_REGEX.test(email),
@@ -55,6 +60,47 @@ export default function LoginScreen() {
     },
     [router]
   );
+
+  const handleForgotPassword = useCallback(async () => {
+    if (!email || !isValidEmail(email)) {
+      Alert.alert("Invalid Email", "Please enter a valid email address first.");
+      return;
+    }
+
+    try {
+      setIsResettingPassword(true);
+      setErrorMessage("");
+
+      await sendPasswordResetEmail(auth, email);
+
+      Alert.alert(
+        "Password Reset Email Sent",
+        `We've sent a password reset link to ${email}. Please check your email and follow the instructions to reset your password.`,
+        [{ text: "OK" }]
+      );
+    } catch (error: any) {
+      console.error("Password reset failed:", error);
+
+      let errorMsg = "Failed to send password reset email. Please try again.";
+
+      switch (error.code) {
+        case "auth/user-not-found":
+          errorMsg = "No account found with this email address.";
+          break;
+        case "auth/invalid-email":
+          errorMsg = "Please enter a valid email address.";
+          break;
+        case "auth/too-many-requests":
+          errorMsg = "Too many requests. Please try again later.";
+          break;
+      }
+
+      setErrorMessage(errorMsg);
+      Alert.alert("Error", errorMsg);
+    } finally {
+      setIsResettingPassword(false);
+    }
+  }, [email, isValidEmail]);
 
   const handleLogin = useCallback(async () => {
     setErrorMessage("");
@@ -104,7 +150,28 @@ export default function LoginScreen() {
       await handleUserRedirect(user, userData);
     } catch (error: any) {
       console.error("Login failed:", error);
-      setErrorMessage("Login failed. Please check your credentials.");
+
+      let errorMsg = "Login failed. Please check your credentials.";
+
+      switch (error.code) {
+        case "auth/user-not-found":
+          errorMsg = "No account found with this email address.";
+          break;
+        case "auth/wrong-password":
+          errorMsg = "Incorrect password. Please try again.";
+          break;
+        case "auth/invalid-email":
+          errorMsg = "Please enter a valid email address.";
+          break;
+        case "auth/user-disabled":
+          errorMsg = "This account has been disabled.";
+          break;
+        case "auth/too-many-requests":
+          errorMsg = "Too many failed attempts. Please try again later.";
+          break;
+      }
+
+      setErrorMessage(errorMsg);
     }
   }, [email, password, isValidEmail, handleUserRedirect, router]);
 
@@ -180,11 +247,18 @@ export default function LoginScreen() {
 
             <TouchableOpacity
               className="flex items-center justify-center mb-8"
-              onPress={handleLogin}
+              onPress={handleForgotPassword}
               activeOpacity={0.7}
+              disabled={isResettingPassword}
             >
-              <Text className="text-purple-800 text-base font-regular font-['Poppins-SemiBold'] text-center">
-                Forgot Password?
+              <Text
+                className={`text-base font-regular font-['Poppins-SemiBold'] text-center ${
+                  isResettingPassword ? "text-purple-400" : "text-purple-800"
+                }`}
+              >
+                {isResettingPassword
+                  ? "Sending Reset Email..."
+                  : "Forgot Password?"}
               </Text>
             </TouchableOpacity>
 
