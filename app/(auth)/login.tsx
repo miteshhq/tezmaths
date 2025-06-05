@@ -1,25 +1,25 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import {
-  signInWithEmailAndPassword,
   sendPasswordResetEmail,
+  signInWithEmailAndPassword,
 } from "firebase/auth";
 import { get, ref } from "firebase/database";
-import React, { useState, useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import {
-  SafeAreaView,
-  StatusBar,
+  Alert,
+  Image,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
   ScrollView,
-  TouchableWithoutFeedback,
+  StatusBar,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
-  Image,
-  Alert,
 } from "react-native";
 import { auth, database } from "../../firebase/firebaseConfig";
 
@@ -41,7 +41,7 @@ export default function LoginScreen() {
   const handleUserRedirect = useCallback(
     async (user: any, userData: any) => {
       if (userData.isnewuser === true || userData.isnewuser === undefined) {
-        console.log("New user, redirecting to registration.");
+        // console.log("New user, redirecting to registration.");
         router.push("/register");
         return;
       }
@@ -55,7 +55,7 @@ export default function LoginScreen() {
 
       const now = new Date().getTime().toString();
       await AsyncStorage.setItem("lastLogin", now);
-      console.log("Redirecting to user home.");
+      // console.log("Redirecting to user home.");
       router.push("/user/home");
     },
     [router]
@@ -104,7 +104,7 @@ export default function LoginScreen() {
 
   const handleLogin = useCallback(async () => {
     setErrorMessage("");
-    console.log("Starting login process...");
+    // console.log("Starting login process...");
 
     if (!isValidEmail(email)) {
       setErrorMessage("Please enter a valid email address.");
@@ -123,14 +123,14 @@ export default function LoginScreen() {
       );
       const user = userCredential.user;
 
-      console.log("User logged in successfully:", user.email);
+      // console.log("User logged in successfully:", user.email);
 
       // Check admin status using the token
       const tokenResult = await user.getIdTokenResult();
       const isAdmin = tokenResult.claims.admin === true;
 
       if (isAdmin) {
-        console.log("Admin login detected");
+        // console.log("Admin login detected");
         router.push("/admin/dashboard");
         return;
       }
@@ -141,7 +141,7 @@ export default function LoginScreen() {
       const snapshot = await get(userRef);
 
       if (!snapshot.exists()) {
-        console.log("User data not found, redirecting to register.");
+        // console.log("User data not found, redirecting to register.");
         router.push({ pathname: "/register", params: { email: email } });
         return;
       }

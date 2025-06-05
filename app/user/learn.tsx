@@ -1,21 +1,21 @@
 // app/user/learn.tsx
-import React, { useState, useEffect } from "react";
+import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
+import { get, ref } from "firebase/database";
+import React, { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  TextInput,
-  FlatList,
-  Linking,
-  Platform,
-  TouchableOpacity,
   ActivityIndicator,
+  FlatList,
   Image,
   ImageBackground,
+  Linking,
+  Platform,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { ref, get } from "firebase/database";
-import { database } from "../../firebase/firebaseConfig";
 import { WebView } from "react-native-webview";
-import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
+import { database } from "../../firebase/firebaseConfig";
 
 // Mock data for when Firebase returns empty results
 const mockVideosData = [
@@ -85,13 +85,13 @@ export default function LearnScreen() {
           // If no videos found or empty array, use mock data
           // Add to your fetchVideos function
           if (videoList.length === 0) {
-            console.log("No videos found, using mock data");
+            // console.log("No videos found, using mock data");
 
             // Attempt to write mock data to DB for future use
             try {
               const videosRef = ref(database, "videos");
               await set(videosRef, mockVideosData);
-              console.log("Mock videos written to database");
+              // console.log("Mock videos written to database");
 
               // Use the mock data we just wrote
               setVideos(mockVideosData);
@@ -104,10 +104,10 @@ export default function LearnScreen() {
           } else {
             setVideos(videoList);
             setFilteredVideos(videoList);
-            console.log("Fetched videos from Firebase:", videoList);
+            // console.log("Fetched videos from Firebase:", videoList);
           }
         } else {
-          console.log("No videos found in database, using mock data");
+          // console.log("No videos found in database, using mock data");
           setVideos(mockVideosData);
           setFilteredVideos(mockVideosData);
         }
@@ -141,7 +141,7 @@ export default function LearnScreen() {
       if (supported) {
         Linking.openURL(url);
       } else {
-        console.log("Don't know how to open URI: " + url);
+        // console.log("Don't know how to open URI: " + url);
       }
     });
   };
@@ -178,7 +178,7 @@ export default function LearnScreen() {
         </View>
       );
     } catch (error) {
-      console.log("WebView error:", error);
+      // console.log("WebView error:", error);
       return (
         <TouchableOpacity
           className="w-full aspect-video bg-gray-100 justify-center items-center rounded-xl border border-gray-200"

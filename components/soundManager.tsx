@@ -26,7 +26,7 @@ const SoundManager = {
   async loadSound(key: SoundKey) {
     if (!this.soundObjects[key]) {
       try {
-        console.log(`Loading sound: ${key}`); // Debug log
+        // console.log(`Loading sound: ${key}`); // Debug log
         const { sound } = await Audio.Sound.createAsync(this.sounds[key]);
         this.soundObjects[key] = sound;
       } catch (error) {
@@ -40,7 +40,7 @@ const SoundManager = {
     const sound = this.soundObjects[key];
     if (sound) {
       try {
-        console.log(`Playing sound: ${key}`); // Debug log
+        // console.log(`Playing sound: ${key}`); // Debug log
         await sound.stopAsync(); // Stop any currently playing sound
         // Apply options like looping
         // Set the looping status based on the playOptions

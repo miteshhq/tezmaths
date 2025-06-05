@@ -1,28 +1,25 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { get, onValue, ref, set } from "firebase/database";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  Dimensions,
-  Image,
   ActivityIndicator,
-  BackHandler,
   Alert,
-  TextInput,
-  Modal,
-  ImageBackground,
   Animated,
   AppState,
+  BackHandler,
+  Image,
+  ImageBackground,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { auth, database } from "../../firebase/firebaseConfig";
-import { ref, get, set, onValue } from "firebase/database";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useFocusEffect } from "@react-navigation/native";
 import SoundManager from "../../components/soundManager";
-import { RefreshControl } from "react-native";
-import { FontAwesome } from "@expo/vector-icons";
+import { auth, database } from "../../firebase/firebaseConfig";
 
 export default function HomeScreen() {
   const LEVEL_STORAGE_KEY = "highestLevelReached";
@@ -87,7 +84,7 @@ export default function HomeScreen() {
     const unsubscribe = onValue(userRef, async (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        console.log("[HOME] Real-time update received:", data);
+        // console.log("[HOME] Real-time update received:", data);
 
         // Update state with latest data
         const processedUserData = {

@@ -1,4 +1,4 @@
-import { ref, get } from "firebase/database";
+import { get, ref } from "firebase/database";
 import { database } from "./firebaseConfig";
 
 export const getRandomQuestions = async (level: number = 1) => {
@@ -16,11 +16,11 @@ export const getRandomQuestions = async (level: number = 1) => {
     if (quiz.questions && Number(quiz.level) === Number(level)) {
       allQuestions.push(...quiz.questions);
     }
-    console.log(allQuestions);
+    // console.log(allQuestions);
     
   });
 
-  console.log(`Found ${allQuestions.length} questions for level ${level}`);
+  // console.log(`Found ${allQuestions.length} questions for level ${level}`);
 
   // Shuffle questions
   for (let i = allQuestions.length - 1; i > 0; i--) {

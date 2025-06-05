@@ -1,16 +1,16 @@
 // app/user/leaderboard.tsx
-import React, { useState, useEffect } from "react";
+import { FontAwesome } from "@expo/vector-icons";
+import { get, limitToLast, orderByChild, query, ref } from "firebase/database";
+import React, { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  FlatList,
   ActivityIndicator,
+  FlatList,
   Image,
   ImageBackground,
+  Text,
+  View,
 } from "react-native";
-import { ref, query, orderByChild, limitToLast, get } from "firebase/database";
 import { database } from "../../firebase/firebaseConfig";
-import { FontAwesome } from "@expo/vector-icons";
 
 // Mock data for when Firebase returns empty results
 const mockLeaderboardData = [
@@ -55,14 +55,14 @@ export default function LeaderboardScreen() {
 
           // If no users found or empty array, use mock data
           if (users.length === 0) {
-            console.log("No users found, using mock data");
+            // console.log("No users found, using mock data");
             setQuizMasters(mockLeaderboardData);
           } else {
             setQuizMasters(users);
-            console.log("Fetched leaderboard data from Firebase:", users);
+            // console.log("Fetched leaderboard data from Firebase:", users);
           }
         } else {
-          console.log("No users found in the database, using mock data");
+          // console.log("No users found in the database, using mock data");
           setQuizMasters(mockLeaderboardData);
         }
       } catch (error) {

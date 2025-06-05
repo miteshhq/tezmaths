@@ -1,20 +1,20 @@
 // app/signup.tsx
-import React, { useState, useCallback } from "react";
+import { useRouter } from "expo-router";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import React, { useCallback, useState } from "react";
 import {
-  StatusBar,
+  Image,
   Keyboard,
+  SafeAreaView,
   ScrollView,
-  TouchableWithoutFeedback,
+  StatusBar,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
-  SafeAreaView,
-  Image,
 } from "react-native";
-import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../../firebase/firebaseConfig";
-import { useRouter } from "expo-router";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 6;
@@ -60,7 +60,7 @@ export default function SignUpScreen() {
         email,
         password
       );
-      console.log("Account created successfully:", userCredential);
+      // console.log("Account created successfully:", userCredential);
       setErrorMessage("");
       router.push("/login"); // Redirect to login screen after successful sign-up
     } catch (error: any) {

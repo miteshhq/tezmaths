@@ -266,7 +266,7 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
             !row ||
             row.every((cell) => !cell || cell.toString().trim() === "")
           ) {
-            console.log(`Skipping empty row ${index + 2}`);
+            // console.log(`Skipping empty row ${index + 2}`);
             return;
           }
 
@@ -276,7 +276,7 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
             row[headerMap["correct answer"]]?.toString().trim() || "";
 
           if (!questionText || !correctAnswer) {
-            console.log(
+            // console.log(
               `Skipping row ${
                 index + 2
               }: missing question text or correct answer`
@@ -301,7 +301,7 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
               : "manual";
 
           if (validAnswerType === "mcq" && !options) {
-            console.log(
+            // console.log(
               `Row ${
                 index + 2
               }: MCQ question missing options, defaulting to manual`

@@ -1,22 +1,22 @@
-import React, { useEffect, useState, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { useRouter } from "expo-router";
+import { get, ref } from "firebase/database";
+import React, { useCallback, useState } from "react";
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
   ActivityIndicator,
-  BackHandler,
   Alert,
-  SafeAreaView,
-  StatusBar,
+  BackHandler,
   Image,
   ImageBackground,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { auth, database } from "../../firebase/firebaseConfig";
-import { ref, get } from "firebase/database";
-import { useRouter } from "expo-router";
-import { useFocusEffect } from "@react-navigation/native";
 import SoundManager from "../../components/soundManager";
+import { auth, database } from "../../firebase/firebaseConfig";
 
 export default function LevelSelect() {
   const router = useRouter();
@@ -131,7 +131,7 @@ export default function LevelSelect() {
 
   // Handle continue button (for current level)
   const handleContinue = () => {
-    console.log(`Starting current level: ${currentLevel}`);
+    // console.log(`Starting current level: ${currentLevel}`);
     handleLevelSelect(currentLevel);
   };
 

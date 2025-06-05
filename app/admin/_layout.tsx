@@ -1,19 +1,18 @@
-import React, { useState, useEffect } from "react";
-import { Tabs } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
+import { Tabs, useRouter } from "expo-router";
+import { onAuthStateChanged, signOut, User } from "firebase/auth";
+import React, { useEffect, useState } from "react";
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  Dimensions,
-  Alert,
+  View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { auth } from "../../firebase/firebaseConfig";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { onAuthStateChanged, signOut, User } from "firebase/auth";
+import { auth } from "../../firebase/firebaseConfig";
 
 const { width } = Dimensions.get("window");
 const ACTIVE_COLOR = "#F87720";
@@ -27,7 +26,7 @@ export default function AdminTabsLayout() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log("Auth state changed:", user?.email);
+      // console.log("Auth state changed:", user?.email);
       setCurrentUser(user);
 
       if (user) {
@@ -47,13 +46,13 @@ export default function AdminTabsLayout() {
 
   const checkAdminStatus = async (user: User) => {
     try {
-      console.log("Checking admin status for:", user.email);
+      // console.log("Checking admin status for:", user.email);
       const tokenResult = await user.getIdTokenResult();
       const isAdmin = tokenResult.claims.admin === true;
       setIsAdmin(isAdmin);
 
       if (!isAdmin) {
-        console.log("User is not admin, showing access denied");
+        // console.log("User is not admin, showing access denied");
         Alert.alert(
           "Access Denied",
           "Admin privileges required to access this area. Please contact administrator to grant admin access.",
@@ -65,7 +64,7 @@ export default function AdminTabsLayout() {
           ]
         );
       } else {
-        console.log("User is admin, granting access");
+        // console.log("User is admin, granting access");
       }
     } catch (error) {
       console.error("Error checking admin status:", error);
