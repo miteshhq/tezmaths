@@ -12,9 +12,9 @@ export default function ResultsScreen() {
   const totalQuestions = Number(params.totalQuestions) || 1;
   const currentLevel = Number(params.currentLevel) || 1;
   const username = params.username || "Player";
+  const isPassed = params.isPassed === "true";
 
   const percentage = Math.round((correctAnswers / totalQuestions) * 100);
-  const isPassed = percentage >= 70;
 
   // Motivational quotes based on performance
   const motivationalQuotes = [
@@ -33,6 +33,15 @@ export default function ResultsScreen() {
     return motivationalQuotes[4];
   };
 
+  const getResultMessage = () => {
+    if (isPassed) {
+      return currentLevel < 6
+        ? `🎉 Level ${currentLevel + 1} Unlocked!`
+        : "🏆 All Levels Completed!";
+    }
+    return "💪 Keep Practicing!";
+  };
+
   const handleShare = async () => {
     try {
       const shareMessage = `I scored ${quizScore} points on level ${currentLevel} of TezMaths! 🧠\n\n"${getMotivationalQuote()}"\n\nSharpen your speed, master your math!`;
@@ -46,21 +55,54 @@ export default function ResultsScreen() {
     }
   };
 
+  const handleNextLevel = () => {
+    if (isPassed && currentLevel < 6) {
+      router.push({
+        pathname: "/user/quiz-screen",
+        params: { level: currentLevel + 1 },
+      });
+    } else {
+      router.push("/user/home");
+    }
+  };
+
   return (
     <View className="flex-1 bg-primary justify-center items-center p-4">
       <View className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md">
         {/* User Info */}
         <View className="items-center mb-6">
-          <Text className="text-2xl font-bold text-purple-700">{username}</Text>
-          <Text className="text-gray-600">Level {currentLevel} Completed</Text>
+          <Text className="text-2xl font-bold text-purple-800">{username}</Text>
+          <Text className="text-gray-600">Level {currentLevel} Attempted</Text>
+        </View>
+
+        {/* Result Status */}
+        <View
+          className={`p-4 rounded-2xl items-center mb-6 ${
+            isPassed ? "bg-green-100" : "bg-red-100"
+          }`}
+        >
+          <Text
+            className={`text-xl font-bold ${
+              isPassed ? "text-green-600" : "text-red-600"
+            }`}
+          >
+            {isPassed ? "PASSED" : "FAILED"}
+          </Text>
+          <Text
+            className={`text-sm ${
+              isPassed ? "text-green-600" : "text-red-600"
+            }`}
+          >
+            {getResultMessage()}
+          </Text>
         </View>
 
         {/* Score Display */}
-        <View className="bg-gradient-to-r from-orange-400 to-purple-600 p-6 rounded-2xl items-center mb-8">
-          <Text className="text-5xl font-bold text-white mb-2">
-            {quizScore}
+        <View className="bg-gradient-to-r from-orange-400 to-purple-800 p-6 rounded-2xl items-center mb-8">
+          <Text className="text-3xl font-bold text-purple-800 mb-0">
+            +{quizScore}
           </Text>
-          <Text className="text-white text-xl">POINTS</Text>
+          <Text className="text-gray-600 text-sm font-bold">POINTS</Text>
         </View>
 
         {/* Performance */}
@@ -74,7 +116,7 @@ export default function ResultsScreen() {
 
           <View className="items-center">
             <Text className="text-gray-700">Accuracy</Text>
-            <Text className="text-2xl font-bold text-purple-600">
+            <Text className="text-2xl font-bold text-purple-800">
               {percentage}%
             </Text>
           </View>
@@ -82,10 +124,6 @@ export default function ResultsScreen() {
 
         {/* Motivational Section */}
         <View className="items-center mb-8">
-          {/* <Image
-            source={require("../../assets/tezmaths-logo.png")}
-            className="w-24 h-24 mb-4"
-          /> */}
           <Text className="text-xl font-bold text-center text-gray-800 mb-2">
             TezMaths
           </Text>
@@ -107,10 +145,16 @@ export default function ResultsScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            className="bg-orange-500 py-3 px-6 rounded-xl flex-1 ml-2"
-            onPress={handleShare}
+            className={`py-3 px-6 rounded-xl flex-1 ml-2 ${
+              isPassed && currentLevel < 6 ? "bg-green-500" : "bg-orange-500"
+            }`}
+            onPress={
+              isPassed && currentLevel < 6 ? handleNextLevel : handleShare
+            }
           >
-            <Text className="text-white font-bold text-center">Share</Text>
+            <Text className="text-white font-bold text-center">
+              {isPassed && currentLevel < 6 ? "Next Level" : "Share"}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>

@@ -102,7 +102,7 @@ export default function QuizScreen() {
   const params = useLocalSearchParams();
   const { level, isSelectedLevel } = params;
   const currentLevel = Number(level) || 1;
-  console.log("Current Level is:", currentLevel);
+  // console.log("Current Level is:", currentLevel);
 
   // State management
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -155,9 +155,20 @@ export default function QuizScreen() {
     setIsQuizActive(false);
   }, []);
 
-  // Reset quiz state completely
+  const clearLevelCache = useCallback(async () => {
+    try {
+      const cacheKey = `quiz-level-${currentLevel}`;
+      await AsyncStorage.removeItem(cacheKey);
+    } catch (error) {
+      console.error("Error clearing level cache:", error);
+    }
+  }, [currentLevel]);
+
   const resetQuizState = useCallback(() => {
     if (!isMountedRef.current) return;
+
+    // Stop all timers first
+    cleanupQuiz();
 
     setCurrentQuestionIndex(0);
     setUserAnswer("");
@@ -169,7 +180,9 @@ export default function QuizScreen() {
     setTimeLeft(QUIZ_TIME_LIMIT);
     setIsProcessing(false);
     setIsQuizActive(true);
-  }, []);
+    setLoading(true);
+    setNetworkError(false); // Add this line
+  }, [cleanupQuiz]); // Add dependency
 
   // Handle app state changes
   useEffect(() => {
@@ -197,25 +210,37 @@ export default function QuizScreen() {
     return () => subscription?.remove();
   }, [isScreenFocused, isQuizActive, cleanupQuiz]);
 
-  // Handle focus/blur events
   useFocusEffect(
     useCallback(() => {
+      //   console.log(`Screen focused for level ${currentLevel}`);
       setIsScreenFocused(true);
 
-      // Reset quiz when returning to screen
-      if (!initialLoadComplete) {
-        setInitialLoadComplete(true);
-      } else {
-        resetQuizState();
-        loadQuestions();
-      }
+      // Clear any existing questions first
+      setQuestions([]);
+      setLoading(true);
+
+      resetQuizState();
+      loadQuestions();
 
       return () => {
         setIsScreenFocused(false);
         cleanupQuiz();
+        // Clear current level cache when leaving
+        AsyncStorage.removeItem(`quiz-level-${currentLevel}`);
       };
-    }, [cleanupQuiz, initialLoadComplete, resetQuizState, loadQuestions])
+    }, [currentLevel, level])
   );
+
+  // Debug questions state
+  useEffect(() => {
+    // console.log(
+    //   `Questions updated: ${questions.length} questions for level ${currentLevel}`
+    // );
+    // console.log("Current question index:", currentQuestionIndex);
+    if (questions.length > 0) {
+      //   console.log("First question:", questions[0]?.questionText);
+    }
+  }, [questions, currentQuestionIndex, currentLevel]);
 
   // Handle quiz interruption
   const handleQuizInterruption = useCallback(() => {
@@ -259,9 +284,12 @@ export default function QuizScreen() {
       // Check cache first
       const cacheKey = `quiz-level-${currentLevel}`;
       const cachedQuestions = await AsyncStorage.getItem(cacheKey);
-
       if (cachedQuestions) {
-        setQuestions(JSON.parse(cachedQuestions));
+        const parsed = JSON.parse(cachedQuestions);
+        // console.log(
+        //   `Loaded ${parsed.length} cached questions for level ${currentLevel}`
+        // );
+        setQuestions(parsed);
         setLoading(false);
         return;
       }
@@ -283,7 +311,7 @@ export default function QuizScreen() {
               questionText: q.questionText,
               correctAnswer: q.correctAnswer.toString(),
               explanation: q.explanation || "",
-              point: q.point || 100,
+              point: currentLevel * 20, // Level 1: 20 points, Level 2: 40 points, etc.
               timeLimit: QUIZ_TIME_LIMIT,
             });
           });
@@ -291,11 +319,17 @@ export default function QuizScreen() {
       });
 
       if (levelQuizzes.length === 0) {
+        // console.log(`No questions found for level ${currentLevel}`);
+        // console.log("Available quiz data:", snapshot.val());
         Alert.alert("No Questions", "No questions available for this level", [
           { text: "OK", onPress: () => router.back() },
         ]);
         return;
       }
+
+      //   console.log(
+      //     `Found ${levelQuizzes.length} questions for level ${currentLevel}`
+      //   );
 
       // Shuffle and cache
       const shuffled = levelQuizzes.sort(() => Math.random() - 0.5);
@@ -318,24 +352,48 @@ export default function QuizScreen() {
   }, [currentLevel]);
 
   useEffect(() => {
+    if (initialLoadComplete && level) {
+      // Only reset when level actually changes after initial load
+      resetQuizState();
+      loadQuestions();
+    }
+  }, [level, initialLoadComplete]);
+
+  // Add this new effect to track initial load
+  useEffect(() => {
+    if (!initialLoadComplete && !loading) {
+      setInitialLoadComplete(true);
+    }
+  }, [loading, initialLoadComplete]);
+
+  useEffect(() => {
     isMountedRef.current = true;
     loadUserData();
-    loadQuestions();
+
+    // Only load questions if not already loaded
+    if (questions.length === 0) {
+      loadQuestions();
+    }
 
     return () => {
       isMountedRef.current = false;
       cleanupQuiz();
     };
-  }, [loadQuestions, cleanupQuiz]);
+  }, []); // Remove dependencies to prevent re-initialization
 
-  // Timer functions
   const startTimer = useCallback(() => {
-    if (!isQuizActive || !isScreenFocused) return;
+    if (!isQuizActive || !isScreenFocused || isProcessing || showExplanation)
+      return;
 
-    if (timerRef.current) clearInterval(timerRef.current);
+    // Always clear existing timer first
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
 
     setTimeLeft(QUIZ_TIME_LIMIT);
     timerAnimation.setValue(1);
+
     Animated.timing(timerAnimation, {
       toValue: 0,
       duration: QUIZ_TIME_LIMIT * 1000,
@@ -346,13 +404,17 @@ export default function QuizScreen() {
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
           handleTimeUp();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-  }, [isQuizActive, isScreenFocused]);
+  }, [isQuizActive, isScreenFocused, isProcessing, showExplanation]);
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) {
@@ -362,16 +424,21 @@ export default function QuizScreen() {
     timerAnimation.stopAnimation();
   }, []);
 
-  // Start timer when question changes
   useEffect(() => {
     if (
       !loading &&
       questions.length > 0 &&
       isQuizActive &&
       !showExplanation &&
-      isScreenFocused
+      isScreenFocused &&
+      !isProcessing
     ) {
-      startTimer();
+      // Add small delay to ensure state is settled
+      const timer = setTimeout(() => {
+        startTimer();
+      }, 100);
+
+      return () => clearTimeout(timer);
     }
 
     return () => {
@@ -383,13 +450,12 @@ export default function QuizScreen() {
   }, [
     currentQuestionIndex,
     loading,
-    questions,
+    questions.length, // Use length instead of questions array
     isQuizActive,
     showExplanation,
     isScreenFocused,
-    startTimer,
-    stopTimer,
-  ]);
+    isProcessing,
+  ]); // Remove function dependencies
 
   // Focus input when question changes
   useEffect(() => {
@@ -453,10 +519,9 @@ export default function QuizScreen() {
         await Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success
         );
-        const pointsEarned = parseFloat(
-          (currentQ.point * (timeLeft / QUIZ_TIME_LIMIT)).toFixed(2)
-        );
-        setQuizScore((prev) => parseFloat((prev + pointsEarned).toFixed(2)));
+        // Calculate fixed points per question based on level
+        const pointsPerQuestion = Math.floor(currentQ.point / questions.length);
+        setQuizScore((prev) => prev + pointsPerQuestion);
         setCorrectAnswers((prev) => prev + 1);
         setIsAnswerWrong(false);
 
@@ -541,66 +606,71 @@ export default function QuizScreen() {
     });
   };
 
-  // Update user progress with retry logic
   const updateUserProgress = useCallback(async () => {
     const userId = auth.currentUser?.uid;
-    if (!userId) return;
+    if (!userId) {
+      //   console.log("User not authenticated");
+      return;
+    }
 
     try {
       const userRef = ref(database, `users/${userId}`);
       const snapshot = await get(userRef);
       const userData = snapshot.val() || {};
 
+      const newPoints = (userData.totalPoints || 0) + quizScore;
+
+      // Update streak
+      const today = new Date().toISOString().split("T")[0];
+      const lastDate = userData.lastCompletionDate;
+      const currentStreak = userData.streak || 0;
+      let newStreak = 1;
+
+      if (lastDate === today) {
+        newStreak = currentStreak;
+      } else if (lastDate && isConsecutiveDay(lastDate, today)) {
+        newStreak = currentStreak + 1;
+      }
+
+      await update(userRef, {
+        totalPoints: newPoints,
+        streak: newStreak,
+        lastCompletionDate: today,
+      });
+
+      await AsyncStorage.setItem("totalPoints", newPoints.toString());
+      await AsyncStorage.setItem("streak", newStreak.toString());
+
+      // Calculate pass threshold
       const passThreshold = Math.ceil(questions.length * 0.7);
       const isPassed = correctAnswers >= passThreshold;
 
+      // Only update progress if user passed
       if (isPassed) {
-        const newPoints = parseFloat(
-          ((userData.totalPoints || 0) + quizScore).toFixed(2)
-        );
-        const newLevel = Math.min(currentLevel + 1, 6);
+        // Only update level if this was current level
+        const shouldUpdateLevel = currentLevel === (userData.currentLevel || 1);
+        const newLevel = shouldUpdateLevel
+          ? Math.min(currentLevel + 1, 6)
+          : userData.currentLevel || 1;
 
-        const today = new Date().toISOString().split("T")[0];
-        const lastDate = userData.lastCompletionDate;
-        const currentStreak = userData.streak || 0;
-        let newStreak = 1;
+        await update(userRef, {
+          ...(shouldUpdateLevel && { currentLevel: newLevel }),
+          [`completedLevels/${currentLevel}`]: true,
+        });
 
-        if (lastDate === today) {
-          newStreak = currentStreak;
-        } else if (lastDate && isConsecutiveDay(lastDate, today)) {
-          newStreak = currentStreak + 1;
+        if (shouldUpdateLevel) {
+          await AsyncStorage.setItem("currentLevel", newLevel.toString());
         }
-
-        // Update with retry logic
-        let retries = 3;
-        while (retries > 0) {
-          try {
-            await update(userRef, {
-              totalPoints: newPoints,
-              currentLevel: newLevel,
-              streak: newStreak,
-              lastCompletionDate: today,
-              [`completedLevels/${currentLevel}`]: true,
-            });
-            break;
-          } catch (error) {
-            retries--;
-            if (retries === 0) throw error;
-            await new Promise((resolve) => setTimeout(resolve, 1000)); // wait 1s before retry
-          }
-        }
-
-        // Save to AsyncStorage for offline use
-        await AsyncStorage.setItem("currentLevel", newLevel.toString());
-        await AsyncStorage.setItem("totalPoints", newPoints.toString());
-        await AsyncStorage.setItem("streak", newStreak.toString());
       }
+
+      return isPassed;
     } catch (error) {
       console.error("Error updating user progress:", error);
       Alert.alert(
         "Error",
         "Failed to save progress. Please check your connection."
       );
+      return false;
     }
   }, [quizScore, currentLevel, correctAnswers, questions.length]);
 
@@ -612,10 +682,14 @@ export default function QuizScreen() {
     return diff === 1;
   };
 
-  // Handle level completion
   const handleLevelCompletion = useCallback(async () => {
     setIsQuizActive(false);
+
     await updateUserProgress();
+
+    // Calculate pass threshold
+    const passThreshold = Math.ceil(questions.length * 0.7);
+    const isPassed = correctAnswers >= passThreshold;
 
     router.push({
       pathname: "/user/results",
@@ -625,16 +699,10 @@ export default function QuizScreen() {
         totalQuestions: questions.length.toString(),
         currentLevel: currentLevel.toString(),
         username: username || "Player",
+        isPassed: isPassed.toString(),
       },
     });
-  }, [
-    quizScore,
-    correctAnswers,
-    questions.length,
-    currentLevel,
-    username,
-    updateUserProgress,
-  ]);
+  }, [quizScore, correctAnswers, questions.length, currentLevel, username]);
 
   // Handle quit quiz
   const handleQuitQuiz = () => {
