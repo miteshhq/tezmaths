@@ -598,7 +598,7 @@ export default function HomeScreen() {
               </Text>
             </View>
             <TouchableOpacity
-              onPress={() => router.push("/user/MultiplayerSelection")}
+              onPress={() => router.push("/user/multiplayer-mode-selection")}
             >
               <ImageBackground
                 source={require("../../assets/gradient.jpg")} // Replace with your actual image path

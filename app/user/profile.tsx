@@ -48,6 +48,7 @@ export default function ProfileScreen() {
     totalPoints: 0,
     highestCompletedLevelCompleted: 0,
     avatar: 0, // Default to first avatar
+    currentLevel: 0,
   });
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -125,9 +126,11 @@ export default function ProfileScreen() {
             highestCompletedLevelCompleted:
               data.highestCompletedLevelCompleted ?? 0,
             avatar: data.avatar ?? 0, // Add avatar field
+            currentLevel: data.currentLevel,
           };
 
           setUserData(formattedData);
+          //   console.log(userData);
           AsyncStorage.setItem("userData", JSON.stringify(formattedData));
 
           setTimeout(() => fetchUserRank(), 1000);
@@ -180,9 +183,11 @@ export default function ProfileScreen() {
           highestCompletedLevelCompleted:
             data.highestCompletedLevelCompleted ?? 0,
           avatar: avatar,
+          currentLevel: data.currentLevel,
         };
 
         setUserData(formattedData);
+        // console.log(userData);
         await AsyncStorage.setItem("userData", JSON.stringify(formattedData));
       }
       setLoading(false);
@@ -339,9 +344,7 @@ export default function ProfileScreen() {
             </View>
             <View className="items-center">
               <Text className="text-2xl font-black text-purple-800">
-                {userData.highestCompletedLevelCompleted
-                  .toString()
-                  .padStart(2, "0")}
+                0{userData.currentLevel - 1}
               </Text>
               <Text className="text-purple-800 text-lg">Levels</Text>
             </View>
