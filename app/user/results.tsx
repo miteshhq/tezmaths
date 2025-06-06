@@ -65,18 +65,18 @@ export default function ResultsScreen() {
 
   const handleShare = async () => {
     try {
-      console.log("Starting share process...");
+      //   console.log("Starting share process...");
 
       // Capture the card as an image
-      const uri = await captureRef(cardRef.current, {
-        format: "png",
-        quality: 1.0,
-        result: "tmpfile",
-        width: 400,
-        height: 600,
-      });
+      //   const uri = await captureRef(cardRef.current, {
+      //     format: "png",
+      //     quality: 1.0,
+      //     result: "tmpfile",
+      //     width: 400,
+      //     height: 600,
+      //   });
 
-      console.log("Image captured:", uri);
+      //   console.log("Image captured:", uri);
 
       // Prepare share message with links
       const downloadLinks =
@@ -98,7 +98,7 @@ export default function ResultsScreen() {
         await Share.share({
           title: "My TezMaths Quiz Results",
           message: shareMessage,
-          url: `file://${uri}`,
+          //   url: `file://${uri}`,
         });
       } else {
         // Android - try to share both
@@ -106,7 +106,7 @@ export default function ResultsScreen() {
           {
             title: "My TezMaths Quiz Results",
             message: shareMessage,
-            url: `file://${uri}`,
+            // url: `file://${uri}`,
           },
           {
             dialogTitle: "Share your TezMaths results",
@@ -114,7 +114,7 @@ export default function ResultsScreen() {
           }
         );
 
-        console.log("Share result:", result);
+        // console.log("Share result:", result);
       }
     } catch (error) {
       console.error("Error sharing:", error);
@@ -139,11 +139,9 @@ export default function ResultsScreen() {
           message: fallbackMessage,
         });
 
-        Alert.alert(
-          "Shared as Text",
-          "Image capture failed, but your results were shared as text!",
-          [{ text: "OK" }]
-        );
+        Alert.alert("Shared as Text", "Your results were shared as text!", [
+          { text: "OK" },
+        ]);
       } catch (fallbackError) {
         console.error("Fallback share error:", fallbackError);
         Alert.alert("Share Error", "Unable to share. Please try again later.", [
