@@ -1,25 +1,29 @@
 // app/user/quiz-screen.tsx
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Haptics from "expo-haptics";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { get, ref, update } from "firebase/database";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  View,
+  Alert,
+  Animated,
+  AppState,
+  BackHandler,
+  Easing,
+  KeyboardAvoidingView,
+  Platform,
   Text,
   TextInput,
-  Alert,
-  KeyboardAvoidingView,
-  BackHandler,
-  Platform,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
-import { ref, get, update } from "firebase/database";
-import { database, auth } from "../../firebase/firebaseConfig";
-import { CountdownCircleTimer } from "react-native-countdown-circle-timer";
-import * as Haptics from "expo-haptics";
-import SoundManager from "../../components/soundManager";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import Svg, { Circle } from "react-native-svg";
+import { auth, database } from "../../firebase/firebaseConfig";
 
 // Configuration
 const QUIZ_TIME_LIMIT = 15;
-const AUTO_SUBMIT_DELAY = 1000; // 1 second delay for auto-submit
+const AUTO_SUBMIT_DELAY = 200; // 200ms delay for auto-submit
+const EXPLANATION_DISPLAY_TIME = 4000; // 4 seconds
 
 interface Question {
   id: string;
@@ -30,10 +34,75 @@ interface Question {
   timeLimit: number;
 }
 
+// Circular Progress Component for question count
+const CircularProgress = ({
+  size,
+  progress,
+  strokeWidth,
+  color,
+  text,
+}: {
+  size: number;
+  progress: number; // 0 to 1
+  strokeWidth: number;
+  color: string;
+  text?: string;
+}) => {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const strokeDashoffset = circumference * (1 - progress);
+
+  return (
+    <View style={{ position: "relative", width: size, height: size }}>
+      <Svg width={size} height={size}>
+        <Circle
+          stroke="#e0e0e0"
+          fill="none"
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          strokeWidth={strokeWidth}
+        />
+        <Circle
+          stroke={color}
+          fill="none"
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          strokeWidth={strokeWidth}
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          rotation="-90"
+          origin={`${size / 2}, ${size / 2}`}
+        />
+      </Svg>
+      {text && (
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <Text style={{ color: "white", fontWeight: "bold", fontSize: 14 }}>
+            {text}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
 export default function QuizScreen() {
   const params = useLocalSearchParams();
   const { level, isSelectedLevel } = params;
   const currentLevel = Number(level) || 1;
+  console.log("Current Level is:", currentLevel);
 
   // State management
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -46,8 +115,128 @@ export default function QuizScreen() {
   const [isTimeOut, setIsTimeOut] = useState(false);
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState("");
+  const [timeLeft, setTimeLeft] = useState(QUIZ_TIME_LIMIT);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isQuizActive, setIsQuizActive] = useState(true);
+  const [networkError, setNetworkError] = useState(false);
+  const [isScreenFocused, setIsScreenFocused] = useState(true);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+
+  // Refs
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const submitTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const explanationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const appStateRef = useRef(AppState.currentState);
+  const inputRef = useRef<TextInput>(null);
+  const isMountedRef = useRef(true);
+
+  // Animated values
+  const timerAnimation = useRef(new Animated.Value(1)).current;
+  const questionTransition = useRef(new Animated.Value(1)).current;
+
+  // Cleanup function to stop all timers and processes
+  const cleanupQuiz = useCallback(() => {
+    // Clear all timers
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (submitTimeoutRef.current) clearTimeout(submitTimeoutRef.current);
+    if (explanationTimeoutRef.current)
+      clearTimeout(explanationTimeoutRef.current);
+
+    // Reset all refs
+    timerRef.current = null;
+    submitTimeoutRef.current = null;
+    explanationTimeoutRef.current = null;
+
+    // Stop animations
+    timerAnimation.stopAnimation();
+    questionTransition.stopAnimation();
+
+    // Mark quiz as inactive
+    setIsQuizActive(false);
+  }, []);
+
+  // Reset quiz state completely
+  const resetQuizState = useCallback(() => {
+    if (!isMountedRef.current) return;
+
+    setCurrentQuestionIndex(0);
+    setUserAnswer("");
+    setQuizScore(0);
+    setCorrectAnswers(0);
+    setShowExplanation(false);
+    setIsAnswerWrong(false);
+    setIsTimeOut(false);
+    setTimeLeft(QUIZ_TIME_LIMIT);
+    setIsProcessing(false);
+    setIsQuizActive(true);
+  }, []);
+
+  // Handle app state changes
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: string) => {
+      if (
+        appStateRef.current.match(/active/) &&
+        nextAppState === "background"
+      ) {
+        cleanupQuiz();
+      } else if (
+        appStateRef.current === "background" &&
+        nextAppState === "active"
+      ) {
+        if (isScreenFocused && isQuizActive) {
+          handleQuizInterruption();
+        }
+      }
+      appStateRef.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener(
+      "change",
+      handleAppStateChange
+    );
+    return () => subscription?.remove();
+  }, [isScreenFocused, isQuizActive, cleanupQuiz]);
+
+  // Handle focus/blur events
+  useFocusEffect(
+    useCallback(() => {
+      setIsScreenFocused(true);
+
+      // Reset quiz when returning to screen
+      if (!initialLoadComplete) {
+        setInitialLoadComplete(true);
+      } else {
+        resetQuizState();
+        loadQuestions();
+      }
+
+      return () => {
+        setIsScreenFocused(false);
+        cleanupQuiz();
+      };
+    }, [cleanupQuiz, initialLoadComplete, resetQuizState, loadQuestions])
+  );
+
+  // Handle quiz interruption
+  const handleQuizInterruption = useCallback(() => {
+    Alert.alert(
+      "Quiz Interrupted",
+      "Your quiz session was interrupted. You'll need to restart this level.",
+      [
+        {
+          text: "Restart Level",
+          onPress: () => {
+            resetQuizState();
+            loadQuestions();
+          },
+        },
+        {
+          text: "Go Home",
+          onPress: () => router.push("/user/home"),
+        },
+      ]
+    );
+  }, [resetQuizState]);
 
   // Load user data
   const loadUserData = useCallback(async () => {
@@ -62,9 +251,21 @@ export default function QuizScreen() {
     }
   }, []);
 
-  // Load questions from Firebase
+  // Load questions from Firebase with caching
   const loadQuestions = useCallback(async () => {
     try {
+      setNetworkError(false);
+
+      // Check cache first
+      const cacheKey = `quiz-level-${currentLevel}`;
+      const cachedQuestions = await AsyncStorage.getItem(cacheKey);
+
+      if (cachedQuestions) {
+        setQuestions(JSON.parse(cachedQuestions));
+        setLoading(false);
+        return;
+      }
+
       const quizzesRef = ref(database, "quizzes");
       const snapshot = await get(quizzesRef);
 
@@ -80,7 +281,7 @@ export default function QuizScreen() {
             levelQuizzes.push({
               id: q.id || Math.random().toString(),
               questionText: q.questionText,
-              correctAnswer: q.correctAnswer,
+              correctAnswer: q.correctAnswer.toString(),
               explanation: q.explanation || "",
               point: q.point || 100,
               timeLimit: QUIZ_TIME_LIMIT,
@@ -90,32 +291,57 @@ export default function QuizScreen() {
       });
 
       if (levelQuizzes.length === 0) {
-        Alert.alert("No Questions", "No questions available for this level");
-        router.back();
+        Alert.alert("No Questions", "No questions available for this level", [
+          { text: "OK", onPress: () => router.back() },
+        ]);
         return;
       }
 
-      // Shuffle questions
-      setQuestions(levelQuizzes.sort(() => Math.random() - 0.5));
+      // Shuffle and cache
+      const shuffled = levelQuizzes.sort(() => Math.random() - 0.5);
+      setQuestions(shuffled);
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(shuffled));
     } catch (error) {
       console.error("Error loading questions:", error);
-      Alert.alert("Error", "Failed to load questions");
+      setNetworkError(true);
+      Alert.alert(
+        "Network Error",
+        "Failed to load questions. Please check your connection and try again.",
+        [
+          { text: "Retry", onPress: loadQuestions },
+          { text: "Cancel", onPress: () => router.back() },
+        ]
+      );
     } finally {
       setLoading(false);
     }
   }, [currentLevel]);
 
   useEffect(() => {
+    isMountedRef.current = true;
     loadUserData();
     loadQuestions();
-  }, [loadQuestions]);
 
-  // Start timer for current question
+    return () => {
+      isMountedRef.current = false;
+      cleanupQuiz();
+    };
+  }, [loadQuestions, cleanupQuiz]);
+
+  // Timer functions
   const startTimer = useCallback(() => {
-    // Clear existing timer
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
+    if (!isQuizActive || !isScreenFocused) return;
+
+    if (timerRef.current) clearInterval(timerRef.current);
+
+    setTimeLeft(QUIZ_TIME_LIMIT);
+    timerAnimation.setValue(1);
+    Animated.timing(timerAnimation, {
+      toValue: 0,
+      duration: QUIZ_TIME_LIMIT * 1000,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    }).start();
 
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
@@ -126,36 +352,68 @@ export default function QuizScreen() {
         return prev - 1;
       });
     }, 1000);
-  }, [currentQuestionIndex]);
+  }, [isQuizActive, isScreenFocused]);
 
-  const [timeLeft, setTimeLeft] = useState(QUIZ_TIME_LIMIT);
+  const stopTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    timerAnimation.stopAnimation();
+  }, []);
 
+  // Start timer when question changes
   useEffect(() => {
-    if (!loading && questions.length > 0) {
-      setTimeLeft(QUIZ_TIME_LIMIT);
+    if (
+      !loading &&
+      questions.length > 0 &&
+      isQuizActive &&
+      !showExplanation &&
+      isScreenFocused
+    ) {
       startTimer();
     }
 
     return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-      if (submitTimeoutRef.current) {
-        clearTimeout(submitTimeoutRef.current);
-      }
+      stopTimer();
+      if (submitTimeoutRef.current) clearTimeout(submitTimeoutRef.current);
+      if (explanationTimeoutRef.current)
+        clearTimeout(explanationTimeoutRef.current);
     };
-  }, [currentQuestionIndex, loading, questions, startTimer]);
+  }, [
+    currentQuestionIndex,
+    loading,
+    questions,
+    isQuizActive,
+    showExplanation,
+    isScreenFocused,
+    startTimer,
+    stopTimer,
+  ]);
 
-  // Handle answer input with auto-submit delay
+  // Focus input when question changes
+  useEffect(() => {
+    if (!showExplanation && questions.length > 0 && isScreenFocused) {
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [
+    currentQuestionIndex,
+    showExplanation,
+    questions.length,
+    isScreenFocused,
+  ]);
+
+  // Handle answer input
   const handleInputChange = (text: string) => {
+    if (!isQuizActive || showExplanation || !isScreenFocused) return;
+
     setUserAnswer(text);
 
-    // Clear any existing timeout
-    if (submitTimeoutRef.current) {
-      clearTimeout(submitTimeoutRef.current);
-    }
+    if (submitTimeoutRef.current) clearTimeout(submitTimeoutRef.current);
 
-    // Set new timeout for auto-submission
     if (text.trim() !== "") {
       submitTimeoutRef.current = setTimeout(() => {
         validateAnswer(text);
@@ -163,9 +421,10 @@ export default function QuizScreen() {
     }
   };
 
-  // Validate answer (called after delay or when answer matches)
+  // Validate answer
   const validateAnswer = (answer: string) => {
-    if (!questions[currentQuestionIndex]) return;
+    if (!questions[currentQuestionIndex] || isProcessing || !isScreenFocused)
+      return;
 
     const normalizedUserAnswer = answer.trim().toLowerCase();
     const normalizedCorrect = questions[currentQuestionIndex].correctAnswer
@@ -182,86 +441,107 @@ export default function QuizScreen() {
   // Handle answer submission
   const handleSubmitAnswer = useCallback(
     async (isCorrect: boolean) => {
+      if (isProcessing || !isQuizActive || !isScreenFocused) return;
+
       const currentQ = questions[currentQuestionIndex];
       if (!currentQ) return;
 
-      // Clear timer and submit timeout
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-      if (submitTimeoutRef.current) {
-        clearTimeout(submitTimeoutRef.current);
-        submitTimeoutRef.current = null;
-      }
+      setIsProcessing(true);
+      stopTimer();
 
       if (isCorrect) {
-        // Correct answer handling
-        await SoundManager.playSound("rightAnswerSoundEffect");
-        setQuizScore((prev) => prev + currentQ.point);
+        await Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Success
+        );
+        const pointsEarned = parseFloat(
+          (currentQ.point * (timeLeft / QUIZ_TIME_LIMIT)).toFixed(2)
+        );
+        setQuizScore((prev) => parseFloat((prev + pointsEarned).toFixed(2)));
         setCorrectAnswers((prev) => prev + 1);
         setIsAnswerWrong(false);
 
-        // Move to next question after delay
-        setTimeout(() => {
-          if (currentQuestionIndex < questions.length - 1) {
-            setCurrentQuestionIndex((prev) => prev + 1);
-            setUserAnswer("");
-          } else {
-            handleLevelCompletion();
-          }
-        }, 500);
+        Animated.timing(questionTransition, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }).start(() => {
+          moveToNextQuestion();
+          questionTransition.setValue(1);
+        });
       } else {
-        // Incorrect answer handling
-        await SoundManager.playSound("wrongAnswerSoundEffect");
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         setIsAnswerWrong(true);
         setShowExplanation(true);
 
-        // Move to next question after explanation
-        setTimeout(() => {
-          setShowExplanation(false);
-          setIsAnswerWrong(false);
-
-          if (currentQuestionIndex < questions.length - 1) {
-            setCurrentQuestionIndex((prev) => prev + 1);
-            setUserAnswer("");
-          } else {
-            handleLevelCompletion();
-          }
-        }, 3000);
+        explanationTimeoutRef.current = setTimeout(() => {
+          handleNextAfterExplanation();
+        }, EXPLANATION_DISPLAY_TIME);
       }
+
+      setIsProcessing(false);
     },
-    [currentQuestionIndex, questions]
+    [
+      currentQuestionIndex,
+      questions,
+      timeLeft,
+      isQuizActive,
+      isScreenFocused,
+      stopTimer,
+    ]
   );
 
-  // Handle timeout
+  // Handle time up
   const handleTimeUp = useCallback(async () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
+    if (!isQuizActive || isProcessing || !isScreenFocused) return;
 
-    await SoundManager.playSound("timeOutSound");
+    setIsProcessing(true);
+    stopTimer();
+
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     setIsTimeOut(true);
     setShowExplanation(true);
 
-    // Move to next question after explanation
-    setTimeout(() => {
-      setShowExplanation(false);
-      setIsTimeOut(false);
+    explanationTimeoutRef.current = setTimeout(() => {
+      handleNextAfterExplanation();
+    }, EXPLANATION_DISPLAY_TIME);
 
-      if (currentQuestionIndex < questions.length - 1) {
-        setCurrentQuestionIndex((prev) => prev + 1);
-        setUserAnswer("");
-      } else {
-        handleLevelCompletion();
-      }
-    }, 3000);
-  }, [currentQuestionIndex, questions]);
+    setIsProcessing(false);
+  }, [isQuizActive, isProcessing, isScreenFocused, stopTimer]);
 
-  // Update user progress
+  // Move to next question
+  const moveToNextQuestion = () => {
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex((prev) => prev + 1);
+      setUserAnswer("");
+      setTimeLeft(QUIZ_TIME_LIMIT);
+    } else {
+      handleLevelCompletion();
+    }
+  };
+
+  // Handle next question after explanation
+  const handleNextAfterExplanation = () => {
+    if (!isScreenFocused) return;
+
+    setShowExplanation(false);
+    setIsAnswerWrong(false);
+    setIsTimeOut(false);
+
+    if (explanationTimeoutRef.current) {
+      clearTimeout(explanationTimeoutRef.current);
+    }
+
+    Animated.timing(questionTransition, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      moveToNextQuestion();
+      questionTransition.setValue(1);
+    });
+  };
+
+  // Update user progress with retry logic
   const updateUserProgress = useCallback(async () => {
     const userId = auth.currentUser?.uid;
     if (!userId) return;
@@ -271,41 +551,58 @@ export default function QuizScreen() {
       const snapshot = await get(userRef);
       const userData = snapshot.val() || {};
 
-      // Update points and level
-      const newPoints = (userData.totalPoints || 0) + quizScore;
-      const newLevel = Math.min(
-        currentLevel + 1,
-        userData.maxLevel || currentLevel + 1
-      );
+      const passThreshold = Math.ceil(questions.length * 0.7);
+      const isPassed = correctAnswers >= passThreshold;
 
-      // Update streak
-      const today = new Date().toISOString().split("T")[0];
-      const lastDate = userData.lastCompletionDate;
-      const currentStreak = userData.streak || 0;
-      let newStreak = 1;
+      if (isPassed) {
+        const newPoints = parseFloat(
+          ((userData.totalPoints || 0) + quizScore).toFixed(2)
+        );
+        const newLevel = Math.min(currentLevel + 1, 6);
 
-      if (lastDate === today) {
-        newStreak = currentStreak;
-      } else if (lastDate && isConsecutiveDay(lastDate, today)) {
-        newStreak = currentStreak + 1;
+        const today = new Date().toISOString().split("T")[0];
+        const lastDate = userData.lastCompletionDate;
+        const currentStreak = userData.streak || 0;
+        let newStreak = 1;
+
+        if (lastDate === today) {
+          newStreak = currentStreak;
+        } else if (lastDate && isConsecutiveDay(lastDate, today)) {
+          newStreak = currentStreak + 1;
+        }
+
+        // Update with retry logic
+        let retries = 3;
+        while (retries > 0) {
+          try {
+            await update(userRef, {
+              totalPoints: newPoints,
+              currentLevel: newLevel,
+              streak: newStreak,
+              lastCompletionDate: today,
+              [`completedLevels/${currentLevel}`]: true,
+            });
+            break;
+          } catch (error) {
+            retries--;
+            if (retries === 0) throw error;
+            await new Promise((resolve) => setTimeout(resolve, 1000)); // wait 1s before retry
+          }
+        }
+
+        // Save to AsyncStorage for offline use
+        await AsyncStorage.setItem("currentLevel", newLevel.toString());
+        await AsyncStorage.setItem("totalPoints", newPoints.toString());
+        await AsyncStorage.setItem("streak", newStreak.toString());
       }
-
-      await update(userRef, {
-        totalPoints: newPoints,
-        currentLevel: newLevel,
-        streak: newStreak,
-        lastCompletionDate: today,
-        [`completedLevels/${currentLevel}`]: true,
-      });
-
-      // Save to AsyncStorage
-      await AsyncStorage.setItem("currentLevel", newLevel.toString());
-      await AsyncStorage.setItem("totalPoints", newPoints.toString());
-      await AsyncStorage.setItem("streak", newStreak.toString());
     } catch (error) {
       console.error("Error updating user progress:", error);
+      Alert.alert(
+        "Error",
+        "Failed to save progress. Please check your connection."
+      );
     }
-  }, [quizScore, currentLevel]);
+  }, [quizScore, currentLevel, correctAnswers, questions.length]);
 
   // Check consecutive days
   const isConsecutiveDay = (lastDate: string, today: string) => {
@@ -317,6 +614,7 @@ export default function QuizScreen() {
 
   // Handle level completion
   const handleLevelCompletion = useCallback(async () => {
+    setIsQuizActive(false);
     await updateUserProgress();
 
     router.push({
@@ -329,26 +627,43 @@ export default function QuizScreen() {
         username: username || "Player",
       },
     });
-  }, [quizScore, correctAnswers, questions, currentLevel, updateUserProgress]);
+  }, [
+    quizScore,
+    correctAnswers,
+    questions.length,
+    currentLevel,
+    username,
+    updateUserProgress,
+  ]);
+
+  // Handle quit quiz
+  const handleQuitQuiz = () => {
+    Alert.alert(
+      "Quit Quiz?",
+      "Are you sure you want to quit? Your progress will be lost and you'll need to restart this level.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Quit",
+          style: "destructive",
+          onPress: () => {
+            cleanupQuiz();
+            resetQuizState();
+            router.push("/user/home");
+          },
+        },
+      ]
+    );
+  };
 
   // Handle back button
   useEffect(() => {
     const backAction = () => {
-      Alert.alert(
-        "Quit Quiz?",
-        "Are you sure you want to quit? Your progress will be lost.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Quit",
-            onPress: () => {
-              SoundManager.stopAllSounds();
-              router.push("/user/home");
-            },
-          },
-        ]
-      );
-      return true;
+      if (isQuizActive && isScreenFocused) {
+        handleQuitQuiz();
+        return true;
+      }
+      return false;
     };
 
     const backHandler = BackHandler.addEventListener(
@@ -357,46 +672,88 @@ export default function QuizScreen() {
     );
 
     return () => backHandler.remove();
-  }, []);
+  }, [isQuizActive, isScreenFocused]);
+
+  // Get timer color
+  const getTimerColor = () => {
+    const percentage = timeLeft / QUIZ_TIME_LIMIT;
+    if (percentage > 0.6) return "#10B981";
+    if (percentage > 0.3) return "#F59E0B";
+    return "#EF4444";
+  };
+
+  // Render loading state
+  if (loading) {
+    return (
+      <View className="flex-1 bg-primary justify-center items-center">
+        <Text className="text-white text-xl mb-4">Loading Quiz...</Text>
+        <CircularProgress
+          size={80}
+          progress={0.6}
+          strokeWidth={8}
+          color="#FFFFFF"
+          text="Loading"
+        />
+      </View>
+    );
+  }
+
+  // Render network error
+  if (networkError) {
+    return (
+      <View className="flex-1 bg-primary justify-center items-center p-4">
+        <Text className="text-white text-xl mb-4 text-center">
+          Network Error
+        </Text>
+        <Text className="text-gray-300 text-center mb-6">
+          Please check your internet connection and try again.
+        </Text>
+        <TouchableOpacity
+          className="bg-white px-6 py-3 rounded-xl"
+          onPress={loadQuestions}
+        >
+          <Text className="text-primary font-bold">Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   // Render current question
   const renderQuestion = () => {
-    if (loading || !questions[currentQuestionIndex]) {
+    if (!questions[currentQuestionIndex]) {
       return <Text className="text-white text-xl">Loading question...</Text>;
     }
 
     const question = questions[currentQuestionIndex];
 
     return (
-      <View className="bg-white p-6 rounded-2xl shadow-lg">
+      <Animated.View
+        style={{ opacity: questionTransition }}
+        className="bg-white p-6 rounded-2xl shadow-lg"
+      >
         <Text className="text-xl font-bold text-purple-700 text-center mb-6">
           {question.questionText}
         </Text>
 
         <TextInput
+          ref={inputRef}
           className={`bg-gray-100 p-4 rounded-xl text-xl text-center border-2 ${
             isAnswerWrong ? "border-red-500" : "border-gray-200"
-          }`}
+          } ${isProcessing ? "opacity-50" : ""}`}
           value={userAnswer}
           onChangeText={handleInputChange}
           placeholder="Type your answer..."
           keyboardType="numeric"
-          autoFocus
-          editable={!showExplanation}
+          autoFocus={true}
+          editable={
+            !showExplanation && !isProcessing && isQuizActive && isScreenFocused
+          }
         />
 
-        {isAnswerWrong && (
-          <Text className="text-red-500 text-lg mt-2 text-center">
-            Incorrect. Try again!
-          </Text>
+        {isProcessing && (
+          <Text className="text-blue-500 text-center mt-2">Processing...</Text>
         )}
-
-        {isTimeOut && (
-          <Text className="text-red-500 text-lg mt-2 text-center">
-            Time Out!
-          </Text>
-        )}
-      </View>
+      </Animated.View>
     );
   };
 
@@ -407,18 +764,32 @@ export default function QuizScreen() {
     const question = questions[currentQuestionIndex];
 
     return (
-      <View className="absolute inset-0 bg-black bg-opacity-70 justify-center items-center p-4">
-        <View className="bg-white p-6 rounded-2xl w-full max-w-sm">
-          <Text className="text-xl font-bold text-purple-700 mb-4">
-            Explanation
-          </Text>
-          <Text className="text-gray-700 mb-4">
-            {question.explanation || "No explanation available"}
-          </Text>
-          <Text className="text-lg font-bold text-green-600">
-            Correct Answer: {question.correctAnswer}
+      <View className="bg-red-50 border border-red-200 p-4 rounded-2xl mt-4">
+        <View className="flex-row items-center mb-2">
+          <Text className="text-red-600 font-bold text-lg">
+            {isTimeOut ? "⏰ Time's Up!" : "❌ Incorrect"}
           </Text>
         </View>
+
+        <Text className="text-gray-700 mb-3">
+          <Text className="font-bold">Correct Answer: </Text>
+          {question.correctAnswer}
+        </Text>
+
+        {question.explanation && (
+          <Text className="text-gray-600 mb-4">{question.explanation}</Text>
+        )}
+
+        <TouchableOpacity
+          className="bg-primary py-2 px-4 rounded-xl self-end"
+          onPress={handleNextAfterExplanation}
+        >
+          <Text className="text-white font-bold">
+            {currentQuestionIndex < questions.length - 1
+              ? "Next Question"
+              : "Finish Quiz"}
+          </Text>
+        </TouchableOpacity>
       </View>
     );
   };
@@ -429,43 +800,60 @@ export default function QuizScreen() {
       className="flex-1 bg-primary p-4"
     >
       {/* Header */}
+      <View className="flex-row justify-between items-center mb-4">
+        <TouchableOpacity
+          className="bg-red-500 px-4 py-2 rounded-xl"
+          onPress={handleQuitQuiz}
+        >
+          <Text className="text-white font-bold">Quit</Text>
+        </TouchableOpacity>
+
+        <View className="flex-row items-center">
+          <Text className="text-white mr-2">Level {currentLevel}</Text>
+          <View className="bg-orange-500 px-3 py-1 rounded-full">
+            <Text className="text-white font-bold">{quizScore} pts</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Progress Indicators */}
       <View className="flex-row justify-between items-center mb-6">
-        <View>
-          <Text className="text-white text-xl font-bold">
-            Level {currentLevel}
-          </Text>
-          <Text className="text-gray-300">
-            Question {currentQuestionIndex + 1}/{questions.length}
-          </Text>
-        </View>
-
+        {/* Question Progress */}
         <View className="items-center">
-          <CountdownCircleTimer
-            key={`timer-${currentQuestionIndex}`}
-            isPlaying={!showExplanation}
-            duration={QUIZ_TIME_LIMIT}
-            colors={["#10B981", "#F59E0B", "#EF4444", "#B91C1C"]}
-            colorsTime={[10, 7, 4, 0]}
-            size={80}
-            onComplete={handleTimeUp}
-          >
-            {({ remainingTime }) => (
-              <Text className="text-white text-xl font-bold">
-                {remainingTime}s
-              </Text>
-            )}
-          </CountdownCircleTimer>
+          <CircularProgress
+            size={70}
+            progress={(currentQuestionIndex + 1) / questions.length}
+            strokeWidth={8}
+            color="#3B82F6"
+            text={`${currentQuestionIndex + 1}/${questions.length}`}
+          />
         </View>
 
-        <View className="bg-orange-500 px-3 py-1 rounded-full">
-          <Text className="text-white font-bold">{quizScore} pts</Text>
+        {/* Timer Bar */}
+        <View className="flex-1 ml-4">
+          <View className="flex-row justify-between mb-1">
+            <Text className="text-white">Time Remaining:</Text>
+            <Text className="text-white font-bold">{timeLeft}s</Text>
+          </View>
+          <View className="bg-gray-300 h-4 rounded-full overflow-hidden">
+            <Animated.View
+              className="h-full rounded-full"
+              style={{
+                backgroundColor: getTimerColor(),
+                width: timerAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ["0%", "100%"],
+                }),
+              }}
+            />
+          </View>
         </View>
       </View>
 
       {/* Question Area */}
       {renderQuestion()}
 
-      {/* Explanation Modal */}
+      {/* Explanation */}
       {renderExplanation()}
     </KeyboardAvoidingView>
   );
