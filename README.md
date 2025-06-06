@@ -8,5 +8,5 @@ password: admin@tezmaths
 ### Development Tasks Remaining
 
 - Google Auth
-- Single Player Mode Handling End to End
 - Multiplayer Mode End to End
+- the login, signup, register scrolling checking on keyboard open

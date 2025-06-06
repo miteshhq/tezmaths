@@ -16,6 +16,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Image,
+  ImageBackground,
 } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { auth, database } from "../../firebase/firebaseConfig";
@@ -89,7 +91,10 @@ const CircularProgress = ({
             alignItems: "center",
           }}
         >
-          <Text style={{ color: "white", fontWeight: "bold", fontSize: 14 }}>
+          <Text
+            style={{ fontWeight: "bold", fontSize: 14 }}
+            className="text-primary"
+          >
             {text}
           </Text>
         </View>
@@ -115,6 +120,8 @@ export default function QuizScreen() {
   const [isTimeOut, setIsTimeOut] = useState(false);
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState("");
+  const [avatar, setAvatar] = useState(1);
+  const [fullname, setFullname] = useState("");
   const [timeLeft, setTimeLeft] = useState(QUIZ_TIME_LIMIT);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isQuizActive, setIsQuizActive] = useState(true);
@@ -269,7 +276,9 @@ export default function QuizScreen() {
       const cachedData = await AsyncStorage.getItem("userData");
       if (cachedData) {
         const data = JSON.parse(cachedData);
-        setUsername(data.fullName || data.username || "Player");
+        setUsername(data.username || "player");
+        setFullname(data.fullName || "Player");
+        setAvatar(data.avatar || 1);
       }
     } catch (error) {
       console.error("Error loading user data:", error);
@@ -698,7 +707,9 @@ export default function QuizScreen() {
         correctAnswers: correctAnswers.toString(),
         totalQuestions: questions.length.toString(),
         currentLevel: currentLevel.toString(),
-        username: username || "Player",
+        username: username || "player",
+        fullname: fullname || "Player",
+        avatar: avatar.toString(),
         isPassed: isPassed.toString(),
       },
     });
@@ -754,7 +765,7 @@ export default function QuizScreen() {
   if (loading) {
     return (
       <View className="flex-1 bg-primary justify-center items-center">
-        <Text className="text-white text-xl mb-4">Loading Quiz...</Text>
+        <Text className="text-primary text-xl mb-4">Loading Quiz...</Text>
         <CircularProgress
           size={80}
           progress={0.6}
@@ -770,7 +781,7 @@ export default function QuizScreen() {
   if (networkError) {
     return (
       <View className="flex-1 bg-primary justify-center items-center p-4">
-        <Text className="text-white text-xl mb-4 text-center">
+        <Text className="text-primary text-xl mb-4 text-center">
           Network Error
         </Text>
         <Text className="text-gray-300 text-center mb-6">
@@ -789,7 +800,7 @@ export default function QuizScreen() {
   // Render current question
   const renderQuestion = () => {
     if (!questions[currentQuestionIndex]) {
-      return <Text className="text-white text-xl">Loading question...</Text>;
+      return <Text className="text-primary text-xl">Loading question...</Text>;
     }
 
     const question = questions[currentQuestionIndex];
@@ -797,26 +808,31 @@ export default function QuizScreen() {
     return (
       <Animated.View
         style={{ opacity: questionTransition }}
-        className="bg-white p-6 rounded-2xl shadow-lg"
+        className="bg-white overflow-hidden rounded-2xl border border-black"
       >
-        <Text className="text-xl font-bold text-purple-700 text-center mb-6">
-          {question.questionText}
+        <Text className="text-3xl font-black bg-pink-50 px-2 py-6 text-purple-800 text-center">
+          What is {question.questionText} ?
         </Text>
 
-        <TextInput
-          ref={inputRef}
-          className={`bg-gray-100 p-4 rounded-xl text-xl text-center border-2 ${
-            isAnswerWrong ? "border-red-500" : "border-gray-200"
-          } ${isProcessing ? "opacity-50" : ""}`}
-          value={userAnswer}
-          onChangeText={handleInputChange}
-          placeholder="Type your answer..."
-          keyboardType="numeric"
-          autoFocus={true}
-          editable={
-            !showExplanation && !isProcessing && isQuizActive && isScreenFocused
-          }
-        />
+        <View className="p-10">
+          <TextInput
+            ref={inputRef}
+            className={`bg-gray-50 p-4 rounded-xl text-xl text-center border ${
+              isAnswerWrong ? "border-red-500" : "border-gray-100"
+            } ${isProcessing ? "opacity-50" : ""}`}
+            value={userAnswer}
+            onChangeText={handleInputChange}
+            placeholder="Type Your Answer"
+            keyboardType="numeric"
+            autoFocus={true}
+            editable={
+              !showExplanation &&
+              !isProcessing &&
+              isQuizActive &&
+              isScreenFocused
+            }
+          />
+        </View>
 
         {isProcessing && (
           <Text className="text-blue-500 text-center mt-2">Processing...</Text>
@@ -832,97 +848,115 @@ export default function QuizScreen() {
     const question = questions[currentQuestionIndex];
 
     return (
-      <View className="bg-red-50 border border-red-200 p-4 rounded-2xl mt-4">
-        <View className="flex-row items-center mb-2">
-          <Text className="text-red-600 font-bold text-lg">
+      <View className="bg-white border border-black p-0 rounded-2xl mt-4 overflow-hidden">
+        <View className="flex-row items-center mb-2 p-4 border-b bg-red-50">
+          <Text className="text-red-600 font-bold text-lg text-center w-full">
             {isTimeOut ? "⏰ Time's Up!" : "❌ Incorrect"}
           </Text>
         </View>
-
-        <Text className="text-gray-700 mb-3">
-          <Text className="font-bold">Correct Answer: </Text>
-          {question.correctAnswer}
-        </Text>
-
-        {question.explanation && (
-          <Text className="text-gray-600 mb-4">{question.explanation}</Text>
-        )}
-
-        <TouchableOpacity
-          className="bg-primary py-2 px-4 rounded-xl self-end"
-          onPress={handleNextAfterExplanation}
-        >
-          <Text className="text-white font-bold">
-            {currentQuestionIndex < questions.length - 1
-              ? "Next Question"
-              : "Finish Quiz"}
+        <View className="flex flex-col items-center gap-2 p-4">
+          <Text className="text-purple-800 text-3xl">
+            <Text className="font-black">Explanation</Text>
           </Text>
-        </TouchableOpacity>
+
+          {question.explanation && (
+            <Text className="text-primary text-xl font-bold mb-4">
+              {question.explanation}
+            </Text>
+          )}
+
+          <TouchableOpacity
+            className="bg-primary py-2 px-4 rounded-xl"
+            onPress={handleNextAfterExplanation}
+          >
+            <Text className="text-white font-bold">
+              {currentQuestionIndex < questions.length - 1
+                ? "Continue"
+                : "Finish Quiz"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      className="flex-1 bg-primary p-4"
-    >
-      {/* Header */}
-      <View className="flex-row justify-between items-center mb-4">
-        <TouchableOpacity
-          className="bg-red-500 px-4 py-2 rounded-xl"
-          onPress={handleQuitQuiz}
-        >
-          <Text className="text-white font-bold">Quit</Text>
-        </TouchableOpacity>
-
-        <View className="flex-row items-center">
-          <Text className="text-white mr-2">Level {currentLevel}</Text>
-          <View className="bg-orange-500 px-3 py-1 rounded-full">
-            <Text className="text-white font-bold">{quizScore} pts</Text>
+    <>
+      {/* HEADER HERE */}
+      <ImageBackground
+        source={require("../../assets/gradient.jpg")}
+        style={{ overflow: "hidden", marginTop: 20 }}
+      >
+        <View className="px-4 py-4">
+          <View className="flex-row justify-between items-center">
+            <Text className="text-white text-3xl font-black">
+              Level {currentLevel}
+            </Text>
+            <View className="flex-row items-center gap-4">
+              <View className="flex-row items-center bg-primary px-3 py-1 rounded-full">
+                <Text className="text-white text-sm font-black">
+                  {quizScore} pts
+                </Text>
+                <Text className="text-white text-lg ml-1">🔥</Text>
+              </View>
+              <TouchableOpacity className="" onPress={handleQuitQuiz}>
+                <View className="flex-row items-center gap-1 bg-red-500 contrast-200 px-3 py-1 rounded-full">
+                  <Text className="text-white text-sm font-black">Quit</Text>
+                  <Image
+                    source={require("../../assets/icons/quitquiz.png")}
+                    style={{ width: 20, height: 20 }}
+                    tintColor={"#fff"}
+                  />
+                </View>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
-
-      {/* Progress Indicators */}
-      <View className="flex-row justify-between items-center mb-6">
-        {/* Question Progress */}
-        <View className="items-center">
-          <CircularProgress
-            size={70}
-            progress={(currentQuestionIndex + 1) / questions.length}
-            strokeWidth={8}
-            color="#3B82F6"
-            text={`${currentQuestionIndex + 1}/${questions.length}`}
-          />
-        </View>
-
-        {/* Timer Bar */}
-        <View className="flex-1 ml-4">
-          <View className="flex-row justify-between mb-1">
-            <Text className="text-white">Time Remaining:</Text>
-            <Text className="text-white font-bold">{timeLeft}s</Text>
-          </View>
-          <View className="bg-gray-300 h-4 rounded-full overflow-hidden">
-            <Animated.View
-              className="h-full rounded-full"
-              style={{
-                backgroundColor: getTimerColor(),
-                width: timerAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ["0%", "100%"],
-                }),
-              }}
+      </ImageBackground>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        className="flex-1 bg-white p-4"
+      >
+        {/* Progress Indicators */}
+        <View className="flex-row justify-between items-center mb-6">
+          {/* Question Progress */}
+          <View className="items-center">
+            <CircularProgress
+              size={70}
+              progress={(currentQuestionIndex + 1) / questions.length}
+              strokeWidth={8}
+              color="#F87720"
+              text={`${currentQuestionIndex + 1}/${questions.length}`}
             />
           </View>
+
+          {/* Timer Bar */}
+          <View className="flex-1 ml-4">
+            <View className="flex-row justify-between mb-1">
+              <Text className="text-primary">Time Remaining:</Text>
+              <Text className="text-primary font-bold">{timeLeft}s</Text>
+            </View>
+            <View className="bg-gray-300 h-4 rounded-full overflow-hidden">
+              <Animated.View
+                className="h-full rounded-full"
+                style={{
+                  backgroundColor: getTimerColor(),
+                  width: timerAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ["0%", "100%"],
+                  }),
+                }}
+              />
+            </View>
+          </View>
         </View>
-      </View>
 
-      {/* Question Area */}
-      {renderQuestion()}
+        {/* Question Area */}
+        {renderQuestion()}
 
-      {/* Explanation */}
-      {renderExplanation()}
-    </KeyboardAvoidingView>
+        {/* Explanation */}
+        {renderExplanation()}
+      </KeyboardAvoidingView>
+    </>
   );
 }

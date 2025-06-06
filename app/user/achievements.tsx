@@ -99,7 +99,7 @@ export default function Achievements() {
       </ImageBackground>
 
       {/* User Stats Summary */}
-      <View className="bg-orange-50 mx-4 my-4 p-6 rounded-2xl">
+      <View className="bg-pink-50 mx-4 my-4 p-6 rounded-2xl">
         <Text className="text-2xl font-black text-purple-800 text-center mb-4">
           Your Progress
         </Text>
@@ -146,7 +146,7 @@ export default function Achievements() {
             <View
               key={achievement.id}
               className={`flex-row items-center gap-4 p-6 mb-4 rounded-2xl ${
-                isCompleted ? "bg-white border border-primary" : "bg-orange-50"
+                isCompleted ? "bg-white border border-primary" : "bg-pink-50"
               }`}
             >
               <View className="ml-4 flex-1">
