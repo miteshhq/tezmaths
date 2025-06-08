@@ -19,12 +19,10 @@ import { battleManager } from "../../utils/battleManager";
 export default function MultiplayerModeSelection() {
   const router = useRouter();
 
-  // State for Quiz Code section
   const [showQuizCodeInput, setShowQuizCodeInput] = useState(false);
   const [quizCode, setQuizCode] = useState("");
   const [joiningRoom, setJoiningRoom] = useState(false);
 
-  // State for Create Room section
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [roomCode, setRoomCode] = useState("");
   const [roomName, setRoomName] = useState("");
@@ -32,7 +30,6 @@ export default function MultiplayerModeSelection() {
   const [creatingRoom, setCreatingRoom] = useState(false);
   const [playersInRoom, setPlayersInRoom] = useState({});
 
-  // State for Random matching
   const [searchingRandom, setSearchingRandom] = useState(false);
 
   const MAX_PLAYERS = 4;
@@ -41,30 +38,32 @@ export default function MultiplayerModeSelection() {
     return () => {
       if (roomId) {
         battleManager.removeRoomListener(roomId);
-        // Only leave room if user didn't navigate to battle
-        if (!router?.pathname?.includes("battle")) {
+        if (!router.pathname?.includes("battle")) {
           battleManager.leaveRoom(roomId).catch(console.error);
         }
       }
-      // Cancel any pending matchmaking
-      battleManager.cancelMatchmaking().catch(console.error);
     };
   }, [roomId]);
 
-  // Handle random player matching using battleManager
   const handleRandomMatch = async () => {
     setSearchingRandom(true);
     try {
+      console.log("Starting random match search...");
       const { roomId } = await battleManager.findRandomMatch();
-      router.push(`/user/battle-room?roomId=${roomId}&isHost=true`);
+      console.log("Found/created room:", roomId);
+
+      // Add longer delay to ensure room is properly set up
+      setTimeout(() => {
+        console.log("Navigating to room:", roomId);
+        router.push(`/user/battle-room?roomId=${roomId}&isHost=true`);
+      }, 500);
     } catch (error) {
+      console.error("Random match error:", error);
       Alert.alert("Matchmaking Failed", error.message);
-    } finally {
       setSearchingRandom(false);
     }
   };
 
-  // Handle joining room using battleManager
   const handleJoinQuizCode = async () => {
     if (quizCode.length < 4) {
       Alert.alert("Invalid Code", "Please enter a valid quiz code");
@@ -84,7 +83,6 @@ export default function MultiplayerModeSelection() {
     }
   };
 
-  // Handle creating room using battleManager
   const handleCreateRoom = async () => {
     setCreatingRoom(true);
     try {
@@ -94,12 +92,10 @@ export default function MultiplayerModeSelection() {
       setRoomCode(newRoomCode);
       setRoomId(newRoomId);
 
-      // Listen for players
       battleManager.listenToRoom(newRoomId, (roomData) => {
         if (roomData) {
           setPlayersInRoom(roomData.players || {});
 
-          // Auto-start when room full
           if (
             Object.keys(roomData.players || {}).length >= roomData.maxPlayers
           ) {
@@ -114,13 +110,11 @@ export default function MultiplayerModeSelection() {
     }
   };
 
-  // Copy room code to clipboard
   const copyRoomCode = async () => {
     await Clipboard.setStringAsync(roomCode);
     Alert.alert("Copied!", "Room code copied to clipboard");
   };
 
-  // Start battle room using battleManager
   const startBattleRoom = async () => {
     if (Object.keys(playersInRoom).length < 2) {
       Alert.alert("Need More Players", "Wait for at least 2 players to join");
@@ -136,7 +130,6 @@ export default function MultiplayerModeSelection() {
     }
   };
 
-  // Cancel room creation using battleManager
   const cancelRoomCreation = async () => {
     if (roomId) {
       await battleManager.leaveRoom(roomId);
@@ -148,15 +141,12 @@ export default function MultiplayerModeSelection() {
     setPlayersInRoom({});
   };
 
-  // Cancel random search - battleManager handles cleanup automatically
   const cancelRandomSearch = () => {
     setSearchingRandom(false);
-    // The battleManager.findRandomMatch() promise will be rejected on timeout
   };
 
   return (
     <ScrollView className="flex-1 bg-white">
-      {/* Header */}
       <ImageBackground
         source={require("../../assets/gradient.jpg")}
         style={{ overflow: "hidden", marginTop: 20 }}
@@ -173,7 +163,6 @@ export default function MultiplayerModeSelection() {
         </View>
       </ImageBackground>
 
-      {/* Welcome Section */}
       <View className="px-4 py-4">
         <View className="flex-row justify-center items-center">
           <Text className="text-purple-800 text-2xl mt-4 font-black">
@@ -182,9 +171,7 @@ export default function MultiplayerModeSelection() {
         </View>
       </View>
 
-      {/* Mode Selection Cards */}
       <View className="px-4 py-6 flex flex-col gap-4">
-        {/* Random Player Card */}
         <View className="border border-black rounded-2xl overflow-hidden">
           <View className="w-full h-8 bg-primary"></View>
           <View className="w-full p-4 flex flex-col items-center gap-4">
@@ -228,7 +215,6 @@ export default function MultiplayerModeSelection() {
           </View>
         </View>
 
-        {/* Quiz Code Card */}
         <View className="border border-black rounded-2xl overflow-hidden">
           <View className="w-full h-8 bg-primary"></View>
           <View className="w-full p-4 flex flex-col items-center gap-4">
@@ -306,7 +292,6 @@ export default function MultiplayerModeSelection() {
           </View>
         </View>
 
-        {/* Create Room Card */}
         <View className="border border-black rounded-2xl overflow-hidden">
           <View className="w-full h-8 bg-primary"></View>
           <View className="w-full p-4 flex flex-col items-center gap-4">
@@ -395,7 +380,6 @@ export default function MultiplayerModeSelection() {
                       </Text>
                     </View>
 
-                    {/* Show players in room */}
                     {Object.keys(playersInRoom).length > 1 && (
                       <View className="bg-gray-50 rounded-lg p-3">
                         <Text className="text-center text-purple-800 font-bold text-sm mb-2">

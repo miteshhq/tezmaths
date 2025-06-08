@@ -47,6 +47,13 @@ export default function TabsLayout() {
           }}
         >
           <Tabs.Screen
+            name="battle-results"
+            options={{
+              href: null, // removes from tab bar
+            }}
+          />
+
+          <Tabs.Screen
             name="battle-room"
             options={{
               href: null, // removes from tab bar

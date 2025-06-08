@@ -56,6 +56,7 @@ if __name__ == "__main__":
         'results-screen.tsx',
         'battleManager.js',
         'quiz-screen.tsx',
+        'battle-results.tsx'
     ]
     
     # Start the search from current directory
