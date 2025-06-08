@@ -41,18 +41,53 @@ export default function TabsLayout() {
             tabBarButton: (props) => (
               <TouchableOpacity
                 {...props}
-                android_ripple={{ color: "transparent" }}
+                android_ripple={{ color: "#F87720" }}
               />
             ),
           }}
         >
           <Tabs.Screen
+            name="battle-room"
+            options={{
+              href: null, // removes from tab bar
+            }}
+          />
+
+          <Tabs.Screen
+            name="results-screen"
+            options={{
+              href: null, // removes from tab bar
+            }}
+          />
+
+          <Tabs.Screen
+            name="battle-screen"
+            options={{
+              href: null, // removes from tab bar
+            }}
+          />
+
+          <Tabs.Screen
+            name="matching-screen"
+            options={{
+              href: null, // removes from tab bar
+            }}
+          />
+
+          <Tabs.Screen
+            name="multiplayer-mode-selection"
+            options={{
+              href: null, // removes from tab bar
+            }}
+          />
+
+          <Tabs.Screen
             name="level-select"
             options={{
               href: null, // removes from tab bar
             }}
-                  />
-                  
+          />
+
           <Tabs.Screen
             name="results"
             options={{

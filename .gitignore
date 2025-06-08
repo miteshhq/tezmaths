@@ -2,6 +2,7 @@
 
 # dependencies
 node_modules/
+raw.txt
 
 # Expo
 .expo/

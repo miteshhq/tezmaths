@@ -1,0 +1,64 @@
+{
+    "quizzes": {
+        "-OS-YXhSm6VaFpKATTWx": {
+            "createdAt": 1749134748678,
+            "level": 1,
+            "points": 20,
+            "questions": [
+                {
+                    "answerType": "manual",
+                    "correctAnswer": "22",
+                    "explanation": "7 plus 15 equals 22.",
+                    "point": 1,
+                    "questionText": "7 + 15",
+                    "timeLimit": 30
+                }
+            ],
+            "updatedAt": 1749134748678
+        }
+    },
+    "users": {
+        "1vmBYMCUdEOtaULTxlAUBMI4MMg2": {
+            "age": "19",
+            "avatar": 2,
+            "completedLevels": [
+                null,
+                true,
+                true,
+                true,
+                true,
+                true
+            ],
+            "currentLevel": 6,
+            "email": "miteshhq@gmail.com",
+            "fullName": "Miteshh",
+            "gender": "Male",
+            "highestCompletedLevelCompleted": 1,
+            "isnewuser": false,
+            "lastCompletionDate": "2025-06-06",
+            "phoneNumber": "7897897890",
+            "referrals": 7,
+            "streak": 0,
+            "totalPoints": 1228.5,
+            "username": "miteshhq"
+        },
+        "CcPwQdmCardxx4SPVyMqD2gpM5u1": {
+            "avatar": 1,
+            "completedLevels": [
+                null,
+                true
+            ],
+            "currentLevel": 2,
+            "email": "ragnar@mail.com",
+            "fullName": "Ragnar Lo",
+            "highestCompletedLevelCompleted": 0,
+            "isnewuser": false,
+            "lastCompletionDate": "2025-06-06",
+            "phoneNumber": "7889203083",
+            "referrals": 2,
+            "streak": 0,
+            "totalPoints": 87,
+            "username": "ragnar"
+        }
+    }
+}
