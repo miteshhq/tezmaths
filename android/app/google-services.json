@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "416608871397",
+    "firebase_url": "https://tezmaths-56cc1-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "tezmaths-56cc1",
+    "storage_bucket": "tezmaths-56cc1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:416608871397:android:87bca89f7b27c13457c50c",
+        "android_client_info": {
+          "package_name": "com.miteshhq.tezmaths"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "416608871397-0da1u3thq1oes30ss5ba7vql8je4rrmq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAB0ZDROoNWpHIZhQlwVVNfdUlzOO4mphM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "416608871397-0da1u3thq1oes30ss5ba7vql8je4rrmq.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
