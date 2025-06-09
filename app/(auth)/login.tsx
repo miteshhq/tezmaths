@@ -21,6 +21,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+import { useGoogleSignIn } from "../../utils/useGoogleSignIn";
 import { auth, database } from "../../firebase/firebaseConfig";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -32,6 +33,44 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const { signInWithGoogle, isLoading: googleLoading } = useGoogleSignIn();
+
+  const handleGoogleSignIn = useCallback(async () => {
+    try {
+      const { user, isNewUser } = await signInWithGoogle();
+
+      if (isNewUser) {
+        router.push({
+          pathname: "/register",
+          params: {
+            email: user.email,
+            isGoogleUser: "true",
+            displayName: user.displayName,
+          },
+        });
+      } else {
+        // Check if user data is complete
+        const userRef = ref(database, `users/${user.uid}`);
+        const snapshot = await get(userRef);
+        const userData = snapshot.val();
+
+        if (userData.isnewuser === true) {
+          router.push({
+            pathname: "/register",
+            params: {
+              email: user.email,
+              isGoogleUser: "true",
+              displayName: user.displayName,
+            },
+          });
+        } else {
+          await handleUserRedirect(user, userData);
+        }
+      }
+    } catch (error) {
+      setErrorMessage("Google sign-in failed. Please try again.");
+    }
+  }, [signInWithGoogle, router, handleUserRedirect]);
 
   const isValidEmail = useCallback(
     (email: string) => EMAIL_REGEX.test(email),
@@ -281,6 +320,8 @@ export default function LoginScreen() {
             <TouchableOpacity
               className="bg-white border border-black py-2 px-8 rounded-full items-center justify-center"
               activeOpacity={0.8}
+              onPress={handleGoogleSignIn}
+              disabled={googleLoading}
             >
               <View className="flex flex-row items-center gap-2">
                 <Image
@@ -288,7 +329,7 @@ export default function LoginScreen() {
                   style={{ width: 18, height: 18 }}
                 />
                 <Text className="text-gray-800 text-lg font-bold font-['Poppins-Regular']">
-                  Sign in with Google
+                  {googleLoading ? "Signing in..." : "Sign in with Google"}
                 </Text>
               </View>
             </TouchableOpacity>
