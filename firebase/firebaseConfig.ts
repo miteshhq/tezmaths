@@ -1,7 +1,7 @@
 // firebase/firebaseConfig.ts
 import { initializeApp } from "firebase/app";
-// import { initializeAuth, getAuth, getReactNativePersistence } from "firebase/auth";
-import { initializeAuth, getAuth } from "firebase/auth";
+import { initializeAuth, getAuth, getReactNativePersistence } from "firebase/auth";
+// import { initializeAuth, getAuth } from "firebase/auth";
 import { getDatabase } from "firebase/database";
 import { getStorage } from "firebase/storage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -9,7 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 // Firebase configuration object
 // const firebaseConfig = {
 //   apiKey: "AIzaSyBNPhBdMMwUdBqIq_kR8UxOnmul8Z2rMPY",
-//   authDomain: "trivia-61b3f.firebaseapp.com",
+//   authDomain: "trivia-61b3f.firebaseapp.com",F
 //   projectId: "trivia-61b3f",
 //   storageBucket: "trivia-61b3f.appspot.com",
 //   messagingSenderId: "377343706461",
@@ -32,11 +32,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // Initialize auth with React Native persistence
-// const auth = initializeAuth(app, {
-//     persistence: getReactNativePersistence(AsyncStorage),
-// });
+const auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage),
+});
 
-const auth = initializeAuth(app);
+// const auth = initializeAuth(app);
 
 // Initialize other Firebase services
 const database = getDatabase(app);
