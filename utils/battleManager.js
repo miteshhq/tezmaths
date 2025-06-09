@@ -7,7 +7,7 @@ import { auth, database } from "../firebase/firebaseConfig";
 
 export class BattleManager {
     constructor() {
-        this.userId = null; // Add userId property
+        this.userId = null;
         this.listeners = new Map();
         this.userPresenceRef = null;
         this.matchmakingListener = null;
@@ -41,7 +41,7 @@ export class BattleManager {
     async setupUserPresence() {
         try {
             const user = await this.waitForAuth();
-            this.userId = user.uid; // Store userId
+            this.userId = user.uid;
             const userId = this.userId;
 
             this.userPresenceRef = ref(database, `presence/${userId}`);
@@ -129,12 +129,15 @@ export class BattleManager {
                 players: {
                     [userId]: {
                         name: user.displayName || "Host",
+                        username: user.displayName || "Host",
                         ready: false,
                         score: 0,
                         isHost: true,
                         connected: true,
                         joinedAt: serverTimestamp(),
-                        answers: {}
+                        answers: {},
+                        answer: "",
+                        winner: false
                     }
                 },
                 gameState: {
@@ -233,12 +236,15 @@ export class BattleManager {
 
                 const playerData = {
                     name: playerName,
+                    username: playerName,
                     ready: roomData.matchmakingRoom ? true : false,
                     score: 0,
                     isHost: false,
                     connected: true,
                     joinedAt: serverTimestamp(),
-                    answers: {}
+                    answers: {},
+                    answer: "",
+                    winner: false
                 };
 
                 await update(ref(database, `rooms/${roomId}`), {
@@ -409,14 +415,13 @@ export class BattleManager {
             const snapshot = await get(roomRef);
             const room = snapshot.val();
 
-            console.log("Room data before starting:", room);
-
             if (!room) {
                 throw new Error("Room not found");
             }
 
             if (room.hostId !== userId) {
-                throw new Error("Not authorized to start battle");
+                console.log("Not host, cannot start battle");
+                return; // Don't throw error, just return silently
             }
 
             const connectedPlayers = Object.values(room.players || {}).filter(p => p.connected);
@@ -429,7 +434,7 @@ export class BattleManager {
             // Generate questions with error handling
             let questions;
             try {
-                questions = await this.generateQuestions(10);
+                questions = await this.generateQuestions(20);
                 console.log("Generated questions:", questions);
             } catch (error) {
                 console.error("Question generation failed:", error);
@@ -445,38 +450,59 @@ export class BattleManager {
             Object.keys(room.players).forEach(playerId => {
                 playerUpdates[`players/${playerId}/score`] = 0;
                 playerUpdates[`players/${playerId}/answers`] = {};
+                playerUpdates[`players/${playerId}/answer`] = "";
                 playerUpdates[`players/${playerId}/winner`] = false;
             });
 
+            const questionsArray = questions.map((q, index) => ({
+                ...q,
+                id: `q${index}`
+            }));
+
+            // Use consistent timestamp format
             const now = Date.now();
             const updateData = {
                 status: "playing",
                 questions,
                 currentQuestion: 0,
-                totalQuestions: questions.length,
+                totalQuestions: questionsArray.length,
                 questionTimeLimit: 15,
-                gameStartedAt: serverTimestamp(),
+                gameStartedAt: now,
                 questionStartedAt: now,
                 lastActivity: serverTimestamp(),
+                questionTransition: false,
+                nextQuestionStartTime: null,
+                currentWinner: null,
                 ...playerUpdates
             };
 
             console.log("Updating room with:", updateData);
             await update(roomRef, updateData);
 
-            // Verify the update
-            const verifySnapshot = await get(roomRef);
-            const updatedRoom = verifySnapshot.val();
-            console.log("Room after update:", updatedRoom);
-
-            if (updatedRoom.status !== "playing" || !updatedRoom.questions) {
-                throw new Error("Failed to update room status");
-            }
-
             console.log("Battle started successfully");
 
         } catch (error) {
             console.error("Start battle error:", error);
+            throw error;
+        }
+    }
+
+    async startQuestionTransition(roomId, duration = 3000) {
+        try {
+            console.log("Starting question transition for room:", roomId);
+            const now = Date.now();
+            const nextQuestionStartTime = now + duration;
+
+            await update(ref(database, `rooms/${roomId}`), {
+                questionTransition: true,
+                nextQuestionStartTime,
+                lastActivity: serverTimestamp()
+            });
+
+            console.log("Question transition started, next question at:", new Date(nextQuestionStartTime));
+            return nextQuestionStartTime;
+        } catch (error) {
+            console.error("Start transition error:", error);
             throw error;
         }
     }
@@ -493,12 +519,16 @@ export class BattleManager {
                 return this.getFallbackQuestions(count);
             }
 
-            const allQuestions = [];
+            let allQuestions = [];
 
             snapshot.forEach((childSnapshot) => {
                 const quiz = childSnapshot.val();
                 if (quiz.questions) {
-                    const questions = Array.isArray(quiz.questions) ? quiz.questions : Object.values(quiz.questions);
+                    // Handle both array and object formats
+                    const questions = Array.isArray(quiz.questions)
+                        ? quiz.questions
+                        : Object.values(quiz.questions);
+
                     questions.forEach(q => {
                         if (q.questionText && q.correctAnswer !== undefined) {
                             allQuestions.push({
@@ -513,10 +543,15 @@ export class BattleManager {
                 }
             });
 
-            // Shuffle and return requested count
-            const shuffled = allQuestions.sort(() => Math.random() - 0.5);
-            return shuffled.slice(0, count);
+            console.log("Total valid questions found:", allQuestions.length);
 
+            if (allQuestions.length < count) {
+                console.log(`Only ${allQuestions.length} questions found, adding ${count - allQuestions.length} fallback questions`);
+                const additional = this.getFallbackQuestions(count - allQuestions.length);
+                return [...allQuestions, ...additional].sort(() => Math.random() - 0.5);
+            }
+
+            return allQuestions.sort(() => Math.random() - 0.5).slice(0, count);
         } catch (error) {
             console.error("Error generating questions:", error);
             return this.getFallbackQuestions(count);
@@ -539,36 +574,162 @@ export class BattleManager {
         try {
             const user = await this.waitForAuth();
             const userId = user.uid;
-            const roomRef = ref(database, `rooms/${roomId}`);
 
-            let isCorrect = false;
+            console.log("Submitting answer:", { roomId, questionIndex, userAnswer, userId });
 
-            await runTransaction(roomRef, (room) => {
-                if (!room || room.status !== "playing" || questionIndex !== room.currentQuestion) return;
-
-                isCorrect = room.questions[questionIndex].correctAnswer === userAnswer.trim();
-                const scoreIncrement = isCorrect ? 100 : 0;
-
-                if (!room.players[userId]) return;
-
-                if (!room.players[userId].answers) room.players[userId].answers = {};
-
-                if (room.players[userId].answers[questionIndex] === undefined) {
-                    room.players[userId].answers[questionIndex] = {
-                        answer: userAnswer,
-                        isCorrect,
-                        timestamp: serverTimestamp()
-                    };
-                    room.players[userId].score = (room.players[userId].score || 0) + scoreIncrement;
-                }
-
-                return room;
+            // First update the player's answer immediately
+            await update(ref(database, `rooms/${roomId}/players/${userId}`), {
+                answer: userAnswer,
+                lastActivity: serverTimestamp()
             });
 
-            await this.checkGameProgression(roomId);
+            const roomRef = ref(database, `rooms/${roomId}`);
+            const snapshot = await get(roomRef);
+            const room = snapshot.val();
+
+            if (!room || room.status !== "playing" || questionIndex !== room.currentQuestion) {
+                console.log("Invalid room state for answer submission");
+                return false;
+            }
+
+            const currentQuestion = room.questions[questionIndex];
+            if (!currentQuestion) {
+                console.log("Current question not found");
+                return false;
+            }
+
+            const isCorrect = currentQuestion.correctAnswer.toLowerCase() === userAnswer.toLowerCase();
+            console.log("Answer is correct:", isCorrect);
+
+            if (isCorrect && !room.currentWinner) {
+                // This is the first correct answer
+                console.log("First correct answer, updating score and starting transition");
+
+                await update(ref(database, `rooms/${roomId}`), {
+                    [`players/${userId}/score`]: (room.players[userId]?.score || 0) + 100,
+                    [`players/${userId}/winner`]: true,
+                    currentWinner: userId,
+                    lastActivity: serverTimestamp()
+                });
+
+                // Start transition immediately with 2 second delay
+                setTimeout(async () => {
+                    try {
+                        await this.startQuestionTransition(roomId, 2000);
+                    } catch (error) {
+                        console.error("Error starting transition:", error);
+                    }
+                }, 500);
+
+                return true;
+            }
+
             return isCorrect;
         } catch (error) {
             console.error("Submit answer error:", error);
+            throw error;
+        }
+    }
+
+    async moveToNextQuestion(roomId) {
+        try {
+            const roomRef = ref(database, `rooms/${roomId}`);
+            const snapshot = await get(roomRef);
+            const roomData = snapshot.val();
+
+            if (!roomData) return;
+
+            const nextIndex = roomData.currentQuestion + 1;
+            const now = Date.now();
+
+            // Convert questions to array if stored as object
+            const questionsArray = roomData.questions
+                ? Object.values(roomData.questions)
+                : [];
+
+            const hasMoreQuestions = nextIndex < questionsArray.length;
+
+            // Reset player states
+            const playerUpdates = {};
+            Object.keys(roomData.players).forEach(playerId => {
+                playerUpdates[`players/${playerId}/answer`] = "";
+                playerUpdates[`players/${playerId}/winner`] = false;
+            });
+
+            if (hasMoreQuestions) {
+                await update(roomRef, {
+                    ...playerUpdates,
+                    currentWinner: null,
+                    currentQuestion: nextIndex,
+                    questionStartedAt: now,
+                    questionTransition: false,
+                    nextQuestionStartTime: null,
+                    lastActivity: serverTimestamp()
+                });
+            } else {
+                await this.endBattle(roomId);
+            }
+        } catch (error) {
+            console.error("Move to next question error:", error);
+            throw error;
+        }
+    }
+
+    async handleTimeExpiry(roomId) {
+        try {
+            console.log("Handling time expiry for room:", roomId);
+
+            const roomRef = ref(database, `rooms/${roomId}`);
+            const snapshot = await get(roomRef);
+            const room = snapshot.val();
+
+            if (!room || room.status !== "playing" || room.questionTransition) {
+                console.log("Room not in valid state for time expiry");
+                return;
+            }
+
+            // Start transition if no winner yet
+            if (!room.currentWinner) {
+                console.log("No winner found, starting transition due to time expiry");
+                await this.startQuestionTransition(roomId, 2000);
+            }
+        } catch (error) {
+            console.error("Handle time expiry error:", error);
+            throw error;
+        }
+    }
+
+    async endBattle(roomId) {
+        try {
+            console.log("Ending battle for room:", roomId);
+
+            const roomRef = ref(database, `rooms/${roomId}`);
+            const snapshot = await get(roomRef);
+            const roomData = snapshot.val();
+
+            if (!roomData) {
+                console.log("Room not found for ending battle");
+                return;
+            }
+
+            const playerArray = Object.entries(roomData.players || {})
+                .map(([id, data]) => ({
+                    userId: id,
+                    username: data.username || data.name,
+                    score: data.score || 0,
+                }))
+                .sort((a, b) => b.score - a.score);
+
+            await update(roomRef, {
+                status: "finished",
+                results: playerArray,
+                finishedAt: serverTimestamp(),
+                lastActivity: serverTimestamp()
+            });
+
+            console.log("Battle ended successfully");
+        } catch (error) {
+            console.error("End battle error:", error);
             throw error;
         }
     }

@@ -51,11 +51,12 @@ if __name__ == "__main__":
     files_to_find = [
         'battle-room.tsx',
         'battle-screen.tsx',
-        'matching-screen.tsx',
-        'multiplayer-mode-selection.tsx',
+        # 'matching-screen.tsx',
+        # 'multiplayer-mode-selection.tsx',
         'results-screen.tsx',
         'battleManager.js',
         'quiz-screen.tsx',
+        'results.tsx',
         'battle-results.tsx'
     ]
     

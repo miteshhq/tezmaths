@@ -9,12 +9,15 @@ import {
   Alert,
 } from "react-native";
 import { database } from "../../firebase/firebaseConfig";
-import { ref, onValue, update } from "firebase/database";
+import { ref, onValue } from "firebase/database";
 import { auth } from "../../firebase/firebaseConfig";
 import { useLocalSearchParams, router } from "expo-router";
 import Svg, { Circle } from "react-native-svg";
+import * as Haptics from "expo-haptics";
+import { battleManager } from "../../utils/battleManager";
 
-const DEBUG_MODE = true; // Set to false in production
+const DEBUG_MODE = true;
+const AUTO_SUBMIT_DELAY = 200;
 
 const debugLog = (message, data = null) => {
   if (DEBUG_MODE) {
@@ -22,7 +25,19 @@ const debugLog = (message, data = null) => {
   }
 };
 
-const CircularProgress = ({ size, progress, strokeWidth, color, text }) => {
+const CircularProgress = ({
+  size,
+  progress,
+  strokeWidth,
+  color,
+  text,
+}: {
+  size: number;
+  progress: number;
+  strokeWidth: number;
+  color: string;
+  text?: string;
+}) => {
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const strokeDashoffset = circumference * (1 - progress);
@@ -82,10 +97,113 @@ export default function BattleScreen() {
   const [timeLeft, setTimeLeft] = useState(15);
   const [userAnswer, setUserAnswer] = useState("");
   const [feedback, setFeedback] = useState("");
+  const [isAnswered, setIsAnswered] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const timerAnimation = useRef(new Animated.Value(1)).current;
   const userId = auth.currentUser?.uid;
+  const submitTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timeExpiryHandled = useRef(false);
 
+  const [showNextQuestionCountdown, setShowNextQuestionCountdown] =
+    useState(false);
+  const [countdownValue, setCountdownValue] = useState(0);
+
+  // Handle time expiry (only one instance)
   useEffect(() => {
+    if (
+      timeLeft === 0 &&
+      !roomData?.questionTransition &&
+      roomData?.hostId === userId &&
+      !timeExpiryHandled.current
+    ) {
+      timeExpiryHandled.current = true;
+      battleManager.handleTimeExpiry(roomId as string).catch((error) => {
+        console.error("Time expiry handling failed:", error);
+      });
+    }
+  }, [
+    timeLeft,
+    roomData?.questionTransition,
+    roomData?.hostId,
+    userId,
+    roomId,
+  ]);
+
+  // Handle transition to next question (only one instance)
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout | undefined;
+
+    if (
+      roomData?.questionTransition &&
+      roomData?.nextQuestionStartTime &&
+      roomData?.hostId === userId
+    ) {
+      const now = Date.now();
+      const transitionTimeLeft = roomData.nextQuestionStartTime - now;
+
+      if (transitionTimeLeft > 0) {
+        timeoutId = setTimeout(() => {
+          battleManager.moveToNextQuestion(roomId as string).catch((error) => {
+            console.error("Failed to move to next question:", error);
+          });
+        }, transitionTimeLeft);
+      } else {
+        battleManager.moveToNextQuestion(roomId as string).catch((error) => {
+          console.error("Failed to move to next question:", error);
+        });
+      }
+    }
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [
+    roomData?.questionTransition,
+    roomData?.nextQuestionStartTime,
+    roomData?.hostId,
+    userId,
+    roomId,
+  ]);
+
+  // Add cleanup for question transitions
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (submitTimeoutRef.current) clearTimeout(submitTimeoutRef.current);
+      timeExpiryHandled.current = false;
+    };
+  }, []);
+
+  // Handle countdown for next question
+  useEffect(() => {
+    if (!roomData?.nextQuestionStartTime) {
+      setShowNextQuestionCountdown(false);
+      return;
+    }
+
+    setShowNextQuestionCountdown(true);
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const timeLeft = Math.max(0, roomData.nextQuestionStartTime - now);
+      const seconds = Math.ceil(timeLeft / 1000);
+
+      setCountdownValue(seconds);
+
+      if (timeLeft <= 0) {
+        setShowNextQuestionCountdown(false);
+        clearInterval(interval);
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [roomData?.nextQuestionStartTime]);
+
+  // Room data listener
+  useEffect(() => {
+    if (!roomId) return;
+
     const roomRef = ref(database, `rooms/${roomId}`);
     const unsubscribe = onValue(
       roomRef,
@@ -101,31 +219,17 @@ export default function BattleScreen() {
           return;
         }
 
-        setRoomData(data);
-        debugLog("Status:", data.status);
-        debugLog("Questions:", data.questions);
-        debugLog("Current Question:", data.currentQuestion);
-
-        // Better validation of room state
-        if (data.status === "playing") {
-          if (!data.questions || data.questions.length === 0) {
-            debugLog("No questions available in playing room");
-            Alert.alert("Error", "No questions available", [
-              { text: "OK", onPress: () => router.push("/user/home") },
-            ]);
-            return;
-          }
-
-          if (
-            data.currentQuestion === undefined ||
-            data.currentQuestion === null
-          ) {
-            debugLog("Invalid current question index");
-            return;
-          }
-
-          debugLog("Room is properly set up for playing");
+        // Reset states when question changes
+        if (data.currentQuestion !== roomData?.currentQuestion) {
+          debugLog("Question changed, resetting states");
+          setUserAnswer("");
+          setFeedback("");
+          setIsAnswered(false);
+          setIsProcessing(false);
+          timeExpiryHandled.current = false; // Reset time expiry handler
         }
+
+        setRoomData(data);
       },
       (error) => {
         console.error("BattleScreen - Database listener error:", error);
@@ -138,30 +242,66 @@ export default function BattleScreen() {
     return () => unsubscribe();
   }, [roomId, router]);
 
+  // Timer management
   useEffect(() => {
     if (
       roomData &&
       roomData.status === "playing" &&
-      roomData.questionStartedAt
+      roomData.questionStartedAt &&
+      !roomData.questionTransition
     ) {
       const startTime = roomData.questionStartedAt;
       const timeLimit = roomData.questionTimeLimit || 15;
-      const interval = setInterval(() => {
+
+      // Clear existing timer
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+
+      const updateTimer = () => {
         const now = Date.now();
         const elapsed = Math.floor((now - startTime) / 1000);
-        const remaining = timeLimit - elapsed;
-        setTimeLeft(remaining > 0 ? remaining : 0);
-      }, 100);
-      return () => clearInterval(interval);
-    }
-  }, [roomData]);
+        const remaining = Math.max(0, timeLimit - elapsed);
+        setTimeLeft(remaining);
 
+        if (remaining <= 0) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
+      };
+
+      // Initial update
+      updateTimer();
+
+      // Set up interval
+      timerRef.current = setInterval(updateTimer, 100);
+
+      return () => {
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
+      };
+    } else {
+      // Clear timer if not in playing state or in transition
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+  }, [
+    roomData?.questionStartedAt,
+    roomData?.questionTransition,
+    roomData?.status,
+  ]);
+
+  // Navigate to results when battle finishes
   useEffect(() => {
     if (roomData?.status === "finished") {
       const playerArray = Object.entries(roomData.players || {})
         .map(([id, data]) => ({
           userId: id,
-          username: data.username,
+          username: data.username || data.name,
           score: data.score || 0,
         }))
         .sort((a, b) => b.score - a.score);
@@ -170,29 +310,87 @@ export default function BattleScreen() {
         pathname: "/user/battle-results",
         params: {
           players: JSON.stringify(playerArray),
-          totalQuestions: roomData.totalQuestions.toString(),
+          totalQuestions: roomData.totalQuestions?.toString() || "0",
         },
       });
     }
-  }, [roomData]);
+  }, [roomData?.status]);
 
-  const handleAnswerSubmit = async () => {
-    if (!roomData || !roomData.questions || !userId) return;
+  const handleInputChange = (text: string) => {
+    if (
+      isAnswered ||
+      timeLeft <= 0 ||
+      roomData?.questionTransition ||
+      isProcessing
+    )
+      return;
+
+    setUserAnswer(text);
+
+    // Clear any existing timeout
+    if (submitTimeoutRef.current) {
+      clearTimeout(submitTimeoutRef.current);
+    }
+
+    // Set new timeout for auto-submit
+    if (text.trim() !== "") {
+      submitTimeoutRef.current = setTimeout(() => {
+        handleAnswerSubmit(text);
+      }, AUTO_SUBMIT_DELAY);
+    }
+  };
+
+  const handleAnswerSubmit = async (answer: string) => {
+    if (
+      !roomData ||
+      !roomData.questions ||
+      !userId ||
+      isAnswered ||
+      isProcessing
+    )
+      return;
+
     const currentQuestion = roomData.questions[roomData.currentQuestion];
     if (!currentQuestion) return;
 
-    const normalizedAnswer = userAnswer.trim().toLowerCase();
+    const normalizedAnswer = answer.trim().toLowerCase();
     const normalizedCorrect = currentQuestion.correctAnswer.toLowerCase();
 
-    await update(ref(database, `rooms/${roomId}/players/${userId}`), {
-      answer: normalizedAnswer,
-    });
-
-    if (normalizedAnswer === normalizedCorrect) {
-      setFeedback("Waiting for confirmation...");
-    } else {
-      setFeedback("Wrong answer");
+    if (normalizedAnswer !== normalizedCorrect) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setFeedback("❌ Wrong answer, try again");
       setUserAnswer("");
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      debugLog("Submitting correct answer...");
+      const isFirstCorrect = await battleManager.submitAnswer(
+        roomId as string,
+        roomData.currentQuestion,
+        normalizedAnswer
+      );
+
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      if (isFirstCorrect) {
+        setFeedback("✅ Correct! You got it first! +100 points");
+      } else {
+        setFeedback("✅ Correct! Well done!");
+      }
+
+      setIsAnswered(true);
+      debugLog(
+        "Answer submitted successfully, isFirstCorrect:",
+        isFirstCorrect
+      );
+    } catch (error) {
+      console.error("Answer submission error:", error);
+      setFeedback("Error submitting answer");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -203,6 +401,7 @@ export default function BattleScreen() {
     return "#EF4444";
   };
 
+  // Loading states
   if (!roomData) {
     return (
       <View className="flex-1 bg-primary justify-center items-center">
@@ -251,11 +450,17 @@ export default function BattleScreen() {
     );
   }
 
-  const currentQuestion = roomData.questions[roomData.currentQuestion];
+  // In the component render:
+  const questionsArray = roomData.questions
+    ? Object.values(roomData.questions)
+    : [];
+
+  const currentQuestion = questionsArray[roomData.currentQuestion];
+
   if (!currentQuestion) {
     return (
       <View className="flex-1 bg-primary justify-center items-center">
-        <Text className="text-white text-xl">Waiting for next question...</Text>
+        <Text className="text-white text-xl">Loading next question...</Text>
       </View>
     );
   }
@@ -265,10 +470,10 @@ export default function BattleScreen() {
       <View className="flex-row justify-between items-center mb-6">
         <CircularProgress
           size={70}
-          progress={(roomData.currentQuestion + 1) / roomData.totalQuestions}
+          progress={(roomData?.currentQuestion + 1) / roomData?.totalQuestions}
           strokeWidth={8}
           color="#F87720"
-          text={`${roomData.currentQuestion + 1}/${roomData.totalQuestions}`}
+          text={`${roomData?.currentQuestion + 1}/${roomData?.totalQuestions}`}
         />
         <View className="flex-1 ml-4">
           <View className="flex-row justify-between mb-1">
@@ -276,14 +481,11 @@ export default function BattleScreen() {
             <Text className="text-primary font-bold">{timeLeft}s</Text>
           </View>
           <View className="bg-gray-300 h-4 rounded-full overflow-hidden">
-            <Animated.View
-              className="h-full rounded-full"
+            <View
+              className="h-full rounded-full transition-all duration-1000"
               style={{
                 backgroundColor: getTimerColor(),
-                width: timerAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ["0%", "100%"],
-                }),
+                width: `${(timeLeft / 15) * 100}%`,
               }}
             />
           </View>
@@ -292,32 +494,66 @@ export default function BattleScreen() {
 
       <View className="bg-white rounded-2xl border border-black p-4">
         <Text className="text-3xl font-black text-purple-800 text-center">
-          What is {currentQuestion.question} ?
+          What is {currentQuestion?.question} ?
         </Text>
         <TextInput
           className="bg-gray-50 p-4 rounded-xl text-xl text-center border border-gray-100 mt-4"
           value={userAnswer}
-          onChangeText={(text) => {
-            setUserAnswer(text);
-            handleAnswerSubmit();
-          }}
+          onChangeText={handleInputChange}
           placeholder="Type Your Answer"
           keyboardType="numeric"
+          editable={
+            !isAnswered &&
+            timeLeft > 0 &&
+            !roomData.questionTransition &&
+            !isProcessing
+          }
         />
         {feedback && (
-          <Text className="text-center mt-2 text-red-500">{feedback}</Text>
+          <Text
+            className={`text-center mt-2 ${
+              feedback.includes("✅") ? "text-green-500" : "text-red-500"
+            }`}
+          >
+            {feedback}
+          </Text>
+        )}
+        {isProcessing && (
+          <Text className="text-blue-500 text-center mt-2">Processing...</Text>
         )}
       </View>
 
-      {roomData.players[userId]?.winner && (
-        <Text className="text-green-500 text-center mt-4">
-          {roomData.players[userId].username} answered right!
-        </Text>
+      {/* Show players who got it right */}
+      {Object.values(roomData?.players || {}).map((player, index) => {
+        if (player.winner) {
+          return (
+            <Text
+              key={`winner-${index}`}
+              className="text-green-500 text-center mt-4"
+            >
+              🏆 {player.username || player.name} got it right!
+            </Text>
+          );
+        }
+        return null;
+      })}
+
+      {/* Question transition countdown */}
+      {showNextQuestionCountdown && (
+        <View className="absolute inset-0 bg-black bg-opacity-70 justify-center items-center">
+          <Text className="text-white text-6xl font-bold">
+            {countdownValue}
+          </Text>
+          <Text className="text-white text-xl mt-4">
+            Next question starting...
+          </Text>
+        </View>
       )}
-      {timeLeft === 0 && (
+
+      {/* Time's up message */}
+      {timeLeft === 0 && !roomData.questionTransition && (
         <Text className="text-red-500 text-center mt-4">
-          Better luck next time! The right answer was{" "}
-          {currentQuestion.correctAnswer}.
+          ⏰ Time's up! The correct answer was {currentQuestion?.correctAnswer}.
         </Text>
       )}
     </View>
