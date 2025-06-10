@@ -2,6 +2,7 @@
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createUserWithEmailAndPassword } from "firebase/auth";
+import { get, ref } from "firebase/database"; // ADD THIS LINE
 import React, { useCallback, useState } from "react";
 import {
   Image,
@@ -16,10 +17,11 @@ import {
   View,
 } from "react-native";
 import { useGoogleSignIn } from "../../utils/useGoogleSignIn";
-import { auth } from "../../firebase/firebaseConfig";
+import { auth, database } from "../../firebase/firebaseConfig"; // ADD database import
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 6;
+const LEVEL_STORAGE_KEY = "highestLevelReached"; // ADD THIS LINE
 
 export default function SignUpScreen() {
   const router = useRouter();
@@ -28,6 +30,29 @@ export default function SignUpScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const { signInWithGoogle, isLoading: googleLoading } = useGoogleSignIn();
+
+  const handleUserRedirect = useCallback(
+    async (user: any, userData: any) => {
+      if (userData.isnewuser === true || userData.isnewuser === undefined) {
+        // console.log("New user, redirecting to registration.");
+        router.push("/register");
+        return;
+      }
+
+      if (userData.highestCompletedLevelCompleted !== undefined) {
+        await AsyncStorage.setItem(
+          LEVEL_STORAGE_KEY,
+          userData.highestCompletedLevelCompleted.toString()
+        );
+      }
+
+      const now = new Date().getTime().toString();
+      await AsyncStorage.setItem("lastLogin", now);
+      // console.log("Redirecting to user home.");
+      router.push("/user/home");
+    },
+    [router]
+  );
 
   const handleGoogleSignIn = useCallback(async () => {
     try {
@@ -65,29 +90,6 @@ export default function SignUpScreen() {
       setErrorMessage("Google sign-in failed. Please try again.");
     }
   }, [signInWithGoogle, router, handleUserRedirect]);
-
-  const handleUserRedirect = useCallback(
-    async (user: any, userData: any) => {
-      if (userData.isnewuser === true || userData.isnewuser === undefined) {
-        // console.log("New user, redirecting to registration.");
-        router.push("/register");
-        return;
-      }
-
-      if (userData.highestCompletedLevelCompleted !== undefined) {
-        await AsyncStorage.setItem(
-          LEVEL_STORAGE_KEY,
-          userData.highestCompletedLevelCompleted.toString()
-        );
-      }
-
-      const now = new Date().getTime().toString();
-      await AsyncStorage.setItem("lastLogin", now);
-      // console.log("Redirecting to user home.");
-      router.push("/user/home");
-    },
-    [router]
-  );
 
   const isValidEmail = useCallback(
     (email: string) => EMAIL_REGEX.test(email),
