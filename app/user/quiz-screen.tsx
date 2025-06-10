@@ -278,7 +278,7 @@ export default function QuizScreen() {
         const data = JSON.parse(cachedData);
         setUsername(data.username || "player");
         setFullname(data.fullName || "Player");
-        setAvatar(data.avatar || 1);
+        setAvatar(data.avatar || 0);
       }
     } catch (error) {
       console.error("Error loading user data:", error);

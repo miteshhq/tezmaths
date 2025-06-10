@@ -125,7 +125,7 @@ export default function ProfileScreen() {
             totalPoints: data.totalPoints ?? 0,
             highestCompletedLevelCompleted:
               data.highestCompletedLevelCompleted ?? 0,
-            avatar: data.avatar ?? 0, // Add avatar field
+            avatar: data.avatar ?? 0,
             currentLevel: data.currentLevel,
           };
 

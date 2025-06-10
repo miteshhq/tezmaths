@@ -90,6 +90,7 @@ export default function HomeScreen() {
         const processedUserData = {
           username: data.username || "User",
           fullName: data.fullName || "Unavailable",
+          avatar: data.avatar || 0,
           referrals: data.referrals || 0,
           totalPoints: data.totalPoints || 0,
           streak: data.streak || 0,
@@ -280,6 +281,7 @@ export default function HomeScreen() {
       const userDataToCache = {
         username: userData.username || "User",
         fullName: userData.fullName || "Unavailable",
+        avatar: userData.avatar || 0,
         referrals: userData.referrals || 0,
         totalPoints: userData.totalPoints || 0,
         streak: userData.streak || 0,
