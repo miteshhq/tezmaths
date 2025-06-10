@@ -15,6 +15,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "416608871397-h1fenlfssbu4bc21frokr8lr6salbo5c.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.miteshhq.tezmaths",
+            "certificate_hash": "94e3de00b83a6b0635a32a837992acb1009626c6"
+          }
+        },
+        {
           "client_id": "416608871397-0da1u3thq1oes30ss5ba7vql8je4rrmq.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -30,6 +38,13 @@
             {
               "client_id": "416608871397-0da1u3thq1oes30ss5ba7vql8je4rrmq.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "416608871397-cs2qbmdo4gft960erm9h7qtfcbja5o7i.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.miteshhq.tezmaths"
+              }
             }
           ]
         }
