@@ -188,8 +188,12 @@ export default function QuizScreen() {
     setIsProcessing(false);
     setIsQuizActive(true);
     setLoading(true);
-    setNetworkError(false); // Add this line
-  }, [cleanupQuiz]); // Add dependency
+    setNetworkError(false);
+
+    // Reset animation values - THIS IS THE KEY FIX
+    questionTransition.setValue(1);
+    timerAnimation.setValue(1);
+  }, [cleanupQuiz, questionTransition, timerAnimation]);
 
   // Handle app state changes
   useEffect(() => {
@@ -219,12 +223,15 @@ export default function QuizScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      //   console.log(`Screen focused for level ${currentLevel}`);
       setIsScreenFocused(true);
 
       // Clear any existing questions first
       setQuestions([]);
       setLoading(true);
+
+      // Reset animation values when screen focuses - IMPORTANT FIX
+      questionTransition.setValue(1);
+      timerAnimation.setValue(1);
 
       resetQuizState();
       loadQuestions();
@@ -232,10 +239,9 @@ export default function QuizScreen() {
       return () => {
         setIsScreenFocused(false);
         cleanupQuiz();
-        // Clear current level cache when leaving
         AsyncStorage.removeItem(`quiz-level-${currentLevel}`);
       };
-    }, [currentLevel, level])
+    }, [currentLevel, level, questionTransition, timerAnimation])
   );
 
   // Debug questions state
@@ -290,14 +296,14 @@ export default function QuizScreen() {
     try {
       setNetworkError(false);
 
+      // Reset animation at the start of loading - ADDITIONAL SAFETY
+      questionTransition.setValue(1);
+
       // Check cache first
       const cacheKey = `quiz-level-${currentLevel}`;
       const cachedQuestions = await AsyncStorage.getItem(cacheKey);
       if (cachedQuestions) {
         const parsed = JSON.parse(cachedQuestions);
-        // console.log(
-        //   `Loaded ${parsed.length} cached questions for level ${currentLevel}`
-        // );
         setQuestions(parsed);
         setLoading(false);
         return;
@@ -320,7 +326,7 @@ export default function QuizScreen() {
               questionText: q.questionText,
               correctAnswer: q.correctAnswer.toString(),
               explanation: q.explanation || "",
-              point: currentLevel * 20, // Level 1: 20 points, Level 2: 40 points, etc.
+              point: currentLevel * 20,
               timeLimit: QUIZ_TIME_LIMIT,
             });
           });
@@ -328,19 +334,12 @@ export default function QuizScreen() {
       });
 
       if (levelQuizzes.length === 0) {
-        // console.log(`No questions found for level ${currentLevel}`);
-        // console.log("Available quiz data:", snapshot.val());
         Alert.alert("No Questions", "No questions available for this level", [
           { text: "OK", onPress: () => router.back() },
         ]);
         return;
       }
 
-      //   console.log(
-      //     `Found ${levelQuizzes.length} questions for level ${currentLevel}`
-      //   );
-
-      // Shuffle and cache
       const shuffled = levelQuizzes.sort(() => Math.random() - 0.5);
       setQuestions(shuffled);
       await AsyncStorage.setItem(cacheKey, JSON.stringify(shuffled));
@@ -358,7 +357,7 @@ export default function QuizScreen() {
     } finally {
       setLoading(false);
     }
-  }, [currentLevel]);
+  }, [currentLevel, questionTransition]);
 
   useEffect(() => {
     if (initialLoadComplete && level) {
@@ -538,6 +537,7 @@ export default function QuizScreen() {
         await Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success
         );
+
         // Calculate fixed points per question based on level
         const pointsPerQuestion = Math.floor(currentQ.point / questions.length);
         setQuizScore((prev) => prev + pointsPerQuestion);
@@ -556,6 +556,7 @@ export default function QuizScreen() {
       } else {
         // WRONG ANSWER - Only show explanation, don't move to next question yet
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+
         setIsAnswerWrong(true);
         setShowExplanation(true);
         setIsProcessing(false); // Allow user to click continue
@@ -580,6 +581,7 @@ export default function QuizScreen() {
     stopTimer();
 
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+
     setIsTimeOut(true);
     setShowExplanation(true);
     setIsProcessing(false); // Allow user to click continue
@@ -861,7 +863,6 @@ export default function QuizScreen() {
     );
   }
 
-  // Render current question
   const renderQuestion = () => {
     if (!questions[currentQuestionIndex]) {
       return <Text className="text-primary text-xl">Loading question...</Text>;
@@ -871,7 +872,10 @@ export default function QuizScreen() {
 
     return (
       <Animated.View
-        style={{ opacity: questionTransition }}
+        style={{
+          opacity: questionTransition,
+          transform: [{ scale: questionTransition }], // Optional: add scale for smoother transition
+        }}
         className="bg-white overflow-hidden rounded-2xl border border-black"
       >
         <Text className="text-3xl font-black bg-pink-50 px-2 py-6 text-purple-800 text-center">

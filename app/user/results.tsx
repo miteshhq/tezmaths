@@ -1,5 +1,5 @@
 // app/user/results.tsx
-import React, { useRef } from "react";
+import React, { useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,6 @@ import {
   Platform,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { captureRef } from "react-native-view-shot";
 
 const shareConfig = {
   additionalText: "Check out my math quiz results! 🧠✨",
@@ -65,19 +64,6 @@ export default function ResultsScreen() {
 
   const handleShare = async () => {
     try {
-      //   console.log("Starting share process...");
-
-      // Capture the card as an image
-      //   const uri = await captureRef(cardRef.current, {
-      //     format: "png",
-      //     quality: 1.0,
-      //     result: "tmpfile",
-      //     width: 400,
-      //     height: 600,
-      //   });
-
-      //   console.log("Image captured:", uri);
-
       // Prepare share message with links
       const downloadLinks =
         Platform.OS === "ios"
@@ -312,22 +298,6 @@ export default function ResultsScreen() {
             />
           </View>
         </TouchableOpacity>
-
-        {/* <TouchableOpacity
-          className={`py-3 px-6 flex-1 ml-2 border border-black rounded-full`}
-          onPress={isPassed && currentLevel < 6 ? handleNextLevel : handleShare}
-        >
-          <View className="flex flex-row items-center justify-center gap-2">
-            <Text className="font-black text-2xl text-center">
-              {isPassed && currentLevel < 6 ? "Next Level" : "Share"}
-            </Text>
-            <Image
-              source={require("../../assets/icons/share.png")}
-              style={{ width: 20, height: 20 }}
-              tintColor={"#FF6B35"}
-            />
-          </View>
-        </TouchableOpacity> */}
       </View>
 
       {/* Watermark */}
