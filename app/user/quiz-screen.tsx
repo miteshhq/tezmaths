@@ -391,8 +391,9 @@ export default function QuizScreen() {
   }, []); // Remove dependencies to prevent re-initialization
 
   const startTimer = useCallback(() => {
-    if (!isQuizActive || !isScreenFocused || isProcessing || showExplanation)
+    if (!isQuizActive || !isScreenFocused || isProcessing || showExplanation) {
       return;
+    }
 
     // Always clear existing timer first
     if (timerRef.current) {
@@ -417,7 +418,10 @@ export default function QuizScreen() {
             clearInterval(timerRef.current);
             timerRef.current = null;
           }
-          handleTimeUp();
+          // Only call handleTimeUp if not already showing explanation
+          if (!showExplanation) {
+            handleTimeUp();
+          }
           return 0;
         }
         return prev - 1;
@@ -483,7 +487,8 @@ export default function QuizScreen() {
 
   // Handle answer input
   const handleInputChange = (text: string) => {
-    if (!isQuizActive || showExplanation || !isScreenFocused) return;
+    if (!isQuizActive || showExplanation || !isScreenFocused || isProcessing)
+      return;
 
     setUserAnswer(text);
 
@@ -498,7 +503,12 @@ export default function QuizScreen() {
 
   // Validate answer
   const validateAnswer = (answer: string) => {
-    if (!questions[currentQuestionIndex] || isProcessing || !isScreenFocused)
+    if (
+      !questions[currentQuestionIndex] ||
+      isProcessing ||
+      !isScreenFocused ||
+      showExplanation
+    )
       return;
 
     const normalizedUserAnswer = answer.trim().toLowerCase();
@@ -534,6 +544,7 @@ export default function QuizScreen() {
         setCorrectAnswers((prev) => prev + 1);
         setIsAnswerWrong(false);
 
+        // Move to next question immediately for correct answers
         Animated.timing(questionTransition, {
           toValue: 0,
           duration: 300,
@@ -543,30 +554,27 @@ export default function QuizScreen() {
           questionTransition.setValue(1);
         });
       } else {
+        // WRONG ANSWER - Only show explanation, don't move to next question yet
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         setIsAnswerWrong(true);
         setShowExplanation(true);
+        setIsProcessing(false); // Allow user to click continue
 
+        // Auto-advance after explanation time
         explanationTimeoutRef.current = setTimeout(() => {
-          handleNextAfterExplanation();
+          if (isMountedRef.current && isScreenFocused) {
+            handleNextAfterExplanation();
+          }
         }, EXPLANATION_DISPLAY_TIME);
       }
-
-      setIsProcessing(false);
     },
-    [
-      currentQuestionIndex,
-      questions,
-      timeLeft,
-      isQuizActive,
-      isScreenFocused,
-      stopTimer,
-    ]
+    [currentQuestionIndex, questions, isQuizActive, isScreenFocused, stopTimer]
   );
 
   // Handle time up
   const handleTimeUp = useCallback(async () => {
-    if (!isQuizActive || isProcessing || !isScreenFocused) return;
+    if (!isQuizActive || isProcessing || !isScreenFocused || showExplanation)
+      return;
 
     setIsProcessing(true);
     stopTimer();
@@ -574,46 +582,68 @@ export default function QuizScreen() {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     setIsTimeOut(true);
     setShowExplanation(true);
+    setIsProcessing(false); // Allow user to click continue
 
     explanationTimeoutRef.current = setTimeout(() => {
-      handleNextAfterExplanation();
+      if (isMountedRef.current && isScreenFocused) {
+        handleNextAfterExplanation();
+      }
     }, EXPLANATION_DISPLAY_TIME);
-
-    setIsProcessing(false);
-  }, [isQuizActive, isProcessing, isScreenFocused, stopTimer]);
+  }, [isQuizActive, isProcessing, isScreenFocused, stopTimer, showExplanation]);
 
   // Move to next question
-  const moveToNextQuestion = () => {
+  const moveToNextQuestion = useCallback(() => {
+    if (!isMountedRef.current) return;
+
     if (currentQuestionIndex < questions.length - 1) {
+      // Move to next question
       setCurrentQuestionIndex((prev) => prev + 1);
       setUserAnswer("");
       setTimeLeft(QUIZ_TIME_LIMIT);
+      setIsProcessing(false);
     } else {
+      // Quiz completed
       handleLevelCompletion();
     }
-  };
+  }, [currentQuestionIndex, questions.length]);
 
   // Handle next question after explanation
-  const handleNextAfterExplanation = () => {
-    if (!isScreenFocused) return;
+  const handleNextAfterExplanation = useCallback(() => {
+    if (!isScreenFocused || !isMountedRef.current) return;
 
+    // Clear the explanation timeout
+    if (explanationTimeoutRef.current) {
+      clearTimeout(explanationTimeoutRef.current);
+      explanationTimeoutRef.current = null;
+    }
+
+    // Reset explanation states
     setShowExplanation(false);
     setIsAnswerWrong(false);
     setIsTimeOut(false);
 
-    if (explanationTimeoutRef.current) {
-      clearTimeout(explanationTimeoutRef.current);
+    // Check if this was the last question
+    if (currentQuestionIndex >= questions.length - 1) {
+      // This was the last question, complete the quiz
+      handleLevelCompletion();
+      return;
     }
 
+    // Animate transition and move to next question
     Animated.timing(questionTransition, {
       toValue: 0,
       duration: 300,
       useNativeDriver: true,
     }).start(() => {
-      moveToNextQuestion();
+      // Move to next question
+      setCurrentQuestionIndex((prev) => prev + 1);
+      setUserAnswer("");
+      setTimeLeft(QUIZ_TIME_LIMIT);
+      setIsProcessing(false);
+
       questionTransition.setValue(1);
     });
-  };
+  }, [isScreenFocused, currentQuestionIndex, questions.length]);
 
   const updateUserProgress = useCallback(async () => {
     const userId = auth.currentUser?.uid;
@@ -692,28 +722,54 @@ export default function QuizScreen() {
   };
 
   const handleLevelCompletion = useCallback(async () => {
+    // Prevent multiple calls
+    if (!isQuizActive) return;
+
+    console.log(
+      "Completing quiz with score:",
+      quizScore,
+      "correct:",
+      correctAnswers
+    );
+
     setIsQuizActive(false);
+    cleanupQuiz(); // Clean up all timers and processes
 
-    await updateUserProgress();
+    try {
+      const isPassed = await updateUserProgress();
 
-    // Calculate pass threshold
-    const passThreshold = Math.ceil(questions.length * 0.7);
-    const isPassed = correctAnswers >= passThreshold;
-
-    router.push({
-      pathname: "/user/results",
-      params: {
-        quizScore: quizScore.toString(),
-        correctAnswers: correctAnswers.toString(),
-        totalQuestions: questions.length.toString(),
-        currentLevel: currentLevel.toString(),
-        username: username || "player",
-        fullname: fullname || "Player",
-        avatar: avatar.toString(),
-        isPassed: isPassed.toString(),
-      },
-    });
-  }, [quizScore, correctAnswers, questions.length, currentLevel, username]);
+      // Small delay to ensure cleanup is complete
+      setTimeout(() => {
+        router.push({
+          pathname: "/user/results",
+          params: {
+            quizScore: quizScore.toString(),
+            correctAnswers: correctAnswers.toString(),
+            totalQuestions: questions.length.toString(),
+            currentLevel: currentLevel.toString(),
+            username: username || "player",
+            fullname: fullname || "Player",
+            avatar: avatar.toString(),
+            isPassed: (isPassed || false).toString(),
+          },
+        });
+      }, 100);
+    } catch (error) {
+      console.error("Error completing level:", error);
+      router.push("/user/home");
+    }
+  }, [
+    quizScore,
+    correctAnswers,
+    questions.length,
+    currentLevel,
+    username,
+    fullname,
+    avatar,
+    isQuizActive,
+    updateUserProgress,
+    cleanupQuiz,
+  ]);
 
   // Handle quit quiz
   const handleQuitQuiz = () => {
@@ -734,6 +790,14 @@ export default function QuizScreen() {
       ]
     );
   };
+
+  useEffect(() => {
+    if (showExplanation && timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+      timerAnimation.stopAnimation();
+    }
+  }, [showExplanation]);
 
   // Handle back button
   useEffect(() => {
@@ -835,7 +899,7 @@ export default function QuizScreen() {
         </View>
 
         {isProcessing && (
-          <Text className="text-blue-500 text-center mt-2">Processing...</Text>
+          <Text className="text-primary text-center pb-2">Processing...</Text>
         )}
       </Animated.View>
     );
@@ -846,6 +910,7 @@ export default function QuizScreen() {
     if (!showExplanation || !questions[currentQuestionIndex]) return null;
 
     const question = questions[currentQuestionIndex];
+    const isLastQuestion = currentQuestionIndex >= questions.length - 1;
 
     return (
       <View className="bg-white border border-black p-0 rounded-2xl mt-4 overflow-hidden">
@@ -858,21 +923,19 @@ export default function QuizScreen() {
           <Text className="text-purple-800 text-3xl">
             <Text className="font-black">Explanation</Text>
           </Text>
-
           {question.explanation && (
-            <Text className="text-primary text-xl font-bold mb-4">
+            <Text className="text-primary text-xl font-bold mb-4 text-center">
               {question.explanation}
             </Text>
           )}
 
           <TouchableOpacity
-            className="bg-primary py-2 px-4 rounded-xl"
+            className="bg-primary py-3 px-6 rounded-xl"
             onPress={handleNextAfterExplanation}
+            disabled={isProcessing}
           >
             <Text className="text-white font-bold">
-              {currentQuestionIndex < questions.length - 1
-                ? "Continue"
-                : "Finish Quiz"}
+              {isLastQuestion ? "Finish Quiz" : "Continue"}
             </Text>
           </TouchableOpacity>
         </View>
