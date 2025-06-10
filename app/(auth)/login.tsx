@@ -37,38 +37,80 @@ export default function LoginScreen() {
 
   const handleGoogleSignIn = useCallback(async () => {
     try {
+      setErrorMessage(""); // Clear any previous errors
+      console.log("Starting Google Sign-In from login screen...");
+
       const { user, isNewUser } = await signInWithGoogle();
 
+      console.log("Google Sign-In completed:", {
+        uid: user.uid,
+        email: user.email,
+        isNewUser,
+      });
+
       if (isNewUser) {
+        console.log("New user detected, redirecting to register...");
         router.push({
           pathname: "/register",
           params: {
             email: user.email,
             isGoogleUser: "true",
-            displayName: user.displayName,
+            displayName: user.displayName || "",
           },
         });
       } else {
         // Check if user data is complete
+        console.log("Existing user, checking profile completion...");
         const userRef = ref(database, `users/${user.uid}`);
         const snapshot = await get(userRef);
-        const userData = snapshot.val();
 
-        if (userData.isnewuser === true) {
+        if (!snapshot.exists()) {
+          console.log(
+            "User data not found in database, redirecting to register..."
+          );
           router.push({
             pathname: "/register",
             params: {
               email: user.email,
               isGoogleUser: "true",
-              displayName: user.displayName,
+              displayName: user.displayName || "",
+            },
+          });
+          return;
+        }
+
+        const userData = snapshot.val();
+        console.log("User data found:", {
+          hasData: !!userData,
+          isNewUser: userData.isnewuser,
+        });
+
+        if (userData.isnewuser === true) {
+          console.log("User profile incomplete, redirecting to register...");
+          router.push({
+            pathname: "/register",
+            params: {
+              email: user.email,
+              isGoogleUser: "true",
+              displayName: user.displayName || "",
             },
           });
         } else {
+          console.log("User profile complete, redirecting to home...");
           await handleUserRedirect(user, userData);
         }
       }
     } catch (error) {
-      setErrorMessage("Google sign-in failed. Please try again.");
+      console.error("Google Sign-In failed in login screen:", error);
+
+      // Set a user-friendly error message
+      let errorMsg = "Google sign-in failed. Please try again.";
+
+      if (error.message) {
+        errorMsg = error.message;
+      }
+
+      setErrorMessage(errorMsg);
     }
   }, [signInWithGoogle, router, handleUserRedirect]);
 

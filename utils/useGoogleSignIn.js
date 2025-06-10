@@ -11,8 +11,13 @@ export const useGoogleSignIn = () => {
     const configureGoogleSignIn = () => {
         GoogleSignin.configure({
             webClientId: '416608871397-0da1u3thq1oes30ss5ba7vql8je4rrmq.apps.googleusercontent.com',
-            offlineAccess: true,
-            forceCodeForRefreshToken: true, // Add this for better token handling
+            offlineAccess: false, // Changed to false - often causes issues when true
+            hostedDomain: '', // Add empty hostedDomain
+            forceCodeForRefreshToken: false, // Changed to false
+            accountName: '', // Add empty accountName
+            iosClientId: '', // Add your iOS client ID if you have one
+            googleServicePlistPath: '', // Add if needed
+            openIdConnect: false,
         });
     };
 
@@ -21,58 +26,86 @@ export const useGoogleSignIn = () => {
             setIsLoading(true);
             setError(null);
 
-            // Configure Google Sign-In first
+            console.log('Starting Google Sign-In process...');
+
+            // Configure Google Sign-In
             configureGoogleSignIn();
 
-            // Check if device supports Google Play Services
-            await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+            // Check Google Play Services
+            const hasPlayServices = await GoogleSignin.hasPlayServices({
+                showPlayServicesUpdateDialog: true
+            });
+            console.log('Play Services available:', hasPlayServices);
 
-            // Sign out any existing user first to ensure clean state
-            await GoogleSignin.signOut();
+            // Sign out any existing session to ensure clean state
+            try {
+                await GoogleSignin.signOut();
+                console.log('Previous session cleared');
+            } catch (signOutError) {
+                console.log('No previous session to clear');
+            }
 
-            // Sign in with Google
+            // Attempt Google Sign-In
+            console.log('Initiating Google Sign-In...');
             const userInfo = await GoogleSignin.signIn();
 
-            // Validate that we have the required tokens
-            if (!userInfo.idToken) {
-                throw new Error('Failed to get Google ID token');
-            }
-
-            console.log('Google Sign-In successful:', {
-                email: userInfo.user.email,
-                hasIdToken: !!userInfo.idToken
+            console.log('Google Sign-In response:', {
+                hasUser: !!userInfo.user,
+                email: userInfo.user?.email,
+                hasIdToken: !!userInfo.idToken,
+                hasAccessToken: !!userInfo.accessToken,
+                idTokenLength: userInfo.idToken?.length,
             });
 
-            // Create Firebase credential with proper validation
-            const googleCredential = GoogleAuthProvider.credential(userInfo.idToken);
-
-            if (!googleCredential) {
-                throw new Error('Failed to create Google credential');
+            // Validate essential data
+            if (!userInfo || !userInfo.user) {
+                throw new Error('No user data received from Google');
             }
 
+            if (!userInfo.idToken) {
+                console.error('Missing ID token. UserInfo:', userInfo);
+                throw new Error('Failed to get authentication token from Google');
+            }
+
+            // Create Firebase credential
+            console.log('Creating Firebase credential...');
+            const googleCredential = GoogleAuthProvider.credential(
+                userInfo.idToken,
+                userInfo.accessToken // Include access token for better compatibility
+            );
+
             // Sign in to Firebase
+            console.log('Signing in to Firebase...');
             const userCredential = await signInWithCredential(auth, googleCredential);
             const user = userCredential.user;
 
             if (!user) {
-                throw new Error('Failed to authenticate with Firebase');
+                throw new Error('Firebase authentication failed - no user returned');
             }
 
-            console.log('Firebase authentication successful:', user.uid);
+            console.log('Firebase authentication successful:', {
+                uid: user.uid,
+                email: user.email,
+                displayName: user.displayName
+            });
 
             // Check if user exists in database
+            console.log('Checking user in database...');
             const userRef = ref(database, `users/${user.uid}`);
             const snapshot = await get(userRef);
             const isNewUser = !snapshot.exists();
 
+            console.log('Database check result:', { isNewUser });
+
             if (isNewUser) {
                 // Create new user profile
+                console.log('Creating new user profile...');
                 const newUserData = {
-                    fullName: user.displayName || '',
-                    email: user.email,
+                    fullName: user.displayName || userInfo.user.name || '',
+                    email: user.email || userInfo.user.email,
                     avatar: 1,
                     isnewuser: true,
-                    photoURL: user.photoURL || '',
+                    photoURL: user.photoURL || userInfo.user.photo || '',
                     providerId: 'google.com',
                     createdAt: new Date().toISOString(),
                     streak: 0,
@@ -84,29 +117,41 @@ export const useGoogleSignIn = () => {
                 };
 
                 await set(userRef, newUserData);
-                console.log('New user profile created');
+                console.log('New user profile created successfully');
             }
 
             return { user, isNewUser };
 
         } catch (error) {
-            console.error('Google Sign-In Error Details:', {
-                message: error.message,
-                code: error.code,
-                stack: error.stack
-            });
+            console.error('=== Google Sign-In Error Details ===');
+            console.error('Error message:', error.message);
+            console.error('Error code:', error.code);
+            console.error('Full error:', error);
 
             let friendlyMessage = 'Google sign-in failed. Please try again.';
 
-            // Handle specific error cases
+            // Handle specific error cases with more detailed logging
             if (error.code === 'auth/argument-error') {
-                friendlyMessage = 'Authentication configuration error. Please contact support.';
+                console.error('Firebase argument error - check webClientId configuration');
+                friendlyMessage = 'Configuration error. Please ensure Google Sign-In is properly set up.';
             } else if (error.code === 'auth/network-request-failed') {
-                friendlyMessage = 'Network error. Please check your connection and try again.';
+                console.error('Network error during authentication');
+                friendlyMessage = 'Network error. Please check your internet connection.';
+            } else if (error.code === 'auth/invalid-credential') {
+                console.error('Invalid credential - token may be malformed');
+                friendlyMessage = 'Authentication failed. Please try again.';
             } else if (error.message?.includes('DEVELOPER_ERROR')) {
-                friendlyMessage = 'Configuration error. Please contact support.';
+                console.error('Google Sign-In developer error - check SHA fingerprints and OAuth setup');
+                friendlyMessage = 'Setup error. Please contact support.';
             } else if (error.message?.includes('SIGN_IN_CANCELLED')) {
-                friendlyMessage = 'Sign-in was cancelled.';
+                console.log('User cancelled sign-in');
+                friendlyMessage = 'Sign-in cancelled.';
+            } else if (error.message?.includes('SIGN_IN_REQUIRED')) {
+                console.error('Sign-in required error');
+                friendlyMessage = 'Please try signing in again.';
+            } else if (error.code === '12501') {
+                console.error('Google Sign-In cancelled by user');
+                friendlyMessage = 'Sign-in cancelled.';
             }
 
             setError(friendlyMessage);
@@ -120,10 +165,27 @@ export const useGoogleSignIn = () => {
         try {
             await GoogleSignin.signOut();
             await auth.signOut();
+            console.log('Sign out successful');
         } catch (error) {
             console.error('Sign out error:', error);
         }
     };
 
-    return { signInWithGoogle, signOut, isLoading, error };
+    const getCurrentUser = async () => {
+        try {
+            const currentUser = await GoogleSignin.getCurrentUser();
+            return currentUser;
+        } catch (error) {
+            console.log('No current Google user');
+            return null;
+        }
+    };
+
+    return {
+        signInWithGoogle,
+        signOut,
+        getCurrentUser,
+        isLoading,
+        error
+    };
 };
