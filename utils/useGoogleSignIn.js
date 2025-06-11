@@ -101,7 +101,7 @@ export const useSimpleGoogleSignIn = () => {
             setError(null);
             return { user: firebaseUser, isNewUser };
 
-        } catch (error: any) {
+        } catch (error) {
             console.error('Google Sign-In Error:', error);
 
             let errorMessage = 'Sign-in failed. Please try again.';
