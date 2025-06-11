@@ -24,8 +24,8 @@ import { auth, database } from "../../firebase/firebaseConfig";
 
 // Configuration
 const QUIZ_TIME_LIMIT = 15;
-const AUTO_SUBMIT_DELAY = 200; // 200ms delay for auto-submit
-const EXPLANATION_DISPLAY_TIME = 4000; // 4 seconds
+const AUTO_SUBMIT_DELAY = 500; // 200ms delay for auto-submit
+const EXPLANATION_DISPLAY_TIME = 4; // 4 seconds
 
 interface Question {
   id: string;
@@ -555,18 +555,24 @@ export default function QuizScreen() {
         });
       } else {
         // WRONG ANSWER - Only show explanation, don't move to next question yet
+        // await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+
+        // setIsAnswerWrong(true);
+        // setShowExplanation(true);
+        // setIsProcessing(false); // Allow user to click continue
+
+        // // Auto-advance after explanation time
+        // explanationTimeoutRef.current = setTimeout(() => {
+        //   if (isMountedRef.current && isScreenFocused) {
+        //     handleNextAfterExplanation();
+        //   }
+        // }, EXPLANATION_DISPLAY_TIME);
+
+        // WRONG ANSWER - End quiz immediately
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
 
         setIsAnswerWrong(true);
-        setShowExplanation(true);
-        setIsProcessing(false); // Allow user to click continue
-
-        // Auto-advance after explanation time
-        explanationTimeoutRef.current = setTimeout(() => {
-          if (isMountedRef.current && isScreenFocused) {
-            handleNextAfterExplanation();
-          }
-        }, EXPLANATION_DISPLAY_TIME);
+        handleLevelCompletion();
       }
     },
     [currentQuestionIndex, questions, isQuizActive, isScreenFocused, stopTimer]
@@ -582,15 +588,18 @@ export default function QuizScreen() {
 
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
 
-    setIsTimeOut(true);
-    setShowExplanation(true);
-    setIsProcessing(false); // Allow user to click continue
+    // setIsTimeOut(true);
+    // setShowExplanation(true);
+    // setIsProcessing(false); // Allow user to click continue
 
-    explanationTimeoutRef.current = setTimeout(() => {
-      if (isMountedRef.current && isScreenFocused) {
-        handleNextAfterExplanation();
-      }
-    }, EXPLANATION_DISPLAY_TIME);
+    // explanationTimeoutRef.current = setTimeout(() => {
+    //   if (isMountedRef.current && isScreenFocused) {
+    //     handleNextAfterExplanation();
+    //   }
+    // }, EXPLANATION_DISPLAY_TIME);
+
+    setIsTimeOut(true);
+    handleLevelCompletion(); // End quiz immediately on timeout
   }, [isQuizActive, isProcessing, isScreenFocused, stopTimer, showExplanation]);
 
   // Move to next question

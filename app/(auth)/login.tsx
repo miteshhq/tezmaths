@@ -21,7 +21,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import { useGoogleSignIn } from "../../utils/useGoogleSignIn";
+import { useSimpleGoogleSignIn } from "../../utils/useGoogleSignIn";
 import { auth, database } from "../../firebase/firebaseConfig";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -33,14 +33,22 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isResettingPassword, setIsResettingPassword] = useState(false);
-  const { signInWithGoogle, isLoading: googleLoading } = useGoogleSignIn();
+  const { signInWithGoogle, isLoading, error, isReady } =
+    useSimpleGoogleSignIn();
 
   const handleGoogleSignIn = useCallback(async () => {
     try {
       setErrorMessage(""); // Clear any previous errors
       console.log("Starting Google Sign-In from login screen...");
 
-      const { user, isNewUser } = await signInWithGoogle();
+      const result = await signInWithGoogle();
+
+      if (!result) {
+        // Sign-in was cancelled or failed, error is already set by the hook
+        return;
+      }
+
+      const { user, isNewUser } = result;
 
       console.log("Google Sign-In completed:", {
         uid: user.uid,
@@ -112,7 +120,7 @@ export default function LoginScreen() {
 
       setErrorMessage(errorMsg);
     }
-  }, [signInWithGoogle, router, handleUserRedirect]);
+  }, [signInWithGoogle, router]);
 
   const isValidEmail = useCallback(
     (email: string) => EMAIL_REGEX.test(email),
@@ -122,7 +130,6 @@ export default function LoginScreen() {
   const handleUserRedirect = useCallback(
     async (user: any, userData: any) => {
       if (userData.isnewuser === true || userData.isnewuser === undefined) {
-        // console.log("New user, redirecting to registration.");
         router.push("/register");
         return;
       }
@@ -136,7 +143,6 @@ export default function LoginScreen() {
 
       const now = new Date().getTime().toString();
       await AsyncStorage.setItem("lastLogin", now);
-      // console.log("Redirecting to user home.");
       router.push("/user/home");
     },
     [router]
@@ -185,7 +191,6 @@ export default function LoginScreen() {
 
   const handleLogin = useCallback(async () => {
     setErrorMessage("");
-    // console.log("Starting login process...");
 
     if (!isValidEmail(email)) {
       setErrorMessage("Please enter a valid email address.");
@@ -260,6 +265,9 @@ export default function LoginScreen() {
 
   const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
 
+  // Combine error messages from the hook and local state
+  const displayError = error || errorMessage;
+
   return (
     <SafeAreaView className="flex-1 bg-white">
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
@@ -310,9 +318,9 @@ export default function LoginScreen() {
               onSubmitEditing={handleLogin}
             />
 
-            {errorMessage ? (
+            {displayError ? (
               <Text className="text-red-500 text-sm text-center font-['Poppins-Regular'] mb-2">
-                {errorMessage}
+                {displayError}
               </Text>
             ) : null}
 
@@ -361,9 +369,12 @@ export default function LoginScreen() {
 
             <TouchableOpacity
               className="bg-white border border-black py-2 px-8 rounded-full items-center justify-center"
+              style={{
+                opacity: !isReady || isLoading ? 0.5 : 1,
+              }}
               activeOpacity={0.8}
               onPress={handleGoogleSignIn}
-              disabled={googleLoading}
+              disabled={!isReady || isLoading}
             >
               <View className="flex flex-row items-center gap-2">
                 <Image
@@ -371,7 +382,7 @@ export default function LoginScreen() {
                   style={{ width: 18, height: 18 }}
                 />
                 <Text className="text-gray-800 text-lg font-bold font-['Poppins-Regular']">
-                  {googleLoading ? "Signing in..." : "Sign in with Google"}
+                  {isLoading ? "Signing in..." : "Sign in with Google"}
                 </Text>
               </View>
             </TouchableOpacity>
