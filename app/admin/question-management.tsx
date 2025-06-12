@@ -1,28 +1,28 @@
-import React, { useState, useEffect, useRef } from "react";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system";
+import { onAuthStateChanged, User } from "firebase/auth";
 import {
-  View,
+  get,
+  push,
+  ref,
+  remove,
+  serverTimestamp,
+  set,
+} from "firebase/database";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
-  ScrollView,
-  RefreshControl,
-  ActivityIndicator,
+  View,
 } from "react-native";
-import {
-  ref,
-  push,
-  set,
-  remove,
-  get,
-  serverTimestamp,
-} from "firebase/database";
-import { database, auth } from "../../firebase/firebaseConfig";
-import { onAuthStateChanged, User } from "firebase/auth";
 import { RadioButton } from "react-native-paper";
-import * as FileSystem from "expo-file-system";
-import * as DocumentPicker from "expo-document-picker";
 import * as XLSX from "xlsx";
+import { auth, database } from "../../firebase/firebaseConfig";
 
 interface Question {
   questionText: string;
@@ -380,7 +380,7 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
       key={index}
       className="bg-white p-4 rounded-xl mb-4 border border-gray-200"
     >
-      <Text className="text-lg font-bold mb-3 text-gray-800">
+      <Text className="text-lg font-bold mb-3 text-black">
         Question {index + 1}
       </Text>
       <View className="mb-4">
@@ -390,11 +390,11 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
           value={question.answerType}
         >
           <View className="flex-row items-center mb-2">
-            <RadioButton value="manual" color="#F87720" />
+            <RadioButton value="manual" color="#F97316" />
             <Text className="ml-2">Manual Input</Text>
           </View>
           <View className="flex-row items-center">
-            <RadioButton value="mcq" color="#F87720" />
+            <RadioButton value="mcq" color="#F97316" />
             <Text className="ml-2">Multiple Choice</Text>
           </View>
         </RadioButton.Group>
@@ -622,8 +622,8 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
 
   if (!currentUser) {
     return (
-      <View className="flex-1 bg-gray-50 justify-center items-center">
-        <ActivityIndicator size="large" color="#F87720" />
+      <View className="flex-1 bg-custom-gray justify-center items-center">
+        <ActivityIndicator size="large" color="#F97316" />
         <Text className="text-gray-600 mt-4">Checking authentication...</Text>
       </View>
     );
@@ -631,7 +631,7 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
 
   if (!isAdmin) {
     return (
-      <View className="flex-1 bg-gray-50 justify-center items-center p-4">
+      <View className="flex-1 bg-custom-gray justify-center items-center p-4">
         <Text className="text-xl font-bold text-red-600 mb-4">
           Access Denied
         </Text>
@@ -645,12 +645,12 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
   return (
     <ScrollView
       ref={scrollViewRef}
-      className="flex-1 bg-gray-50 p-4"
+      className="flex-1 bg-custom-gray p-4"
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
-      <Text className="text-3xl font-bold mb-6 text-center text-gray-800">
+      <Text className="text-3xl font-bold mb-6 text-center text-black">
         {editingQuizId ? "Edit Quiz" : "Create New Quiz"}
       </Text>
       <TextInput
@@ -702,7 +702,7 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
       </TouchableOpacity>
       {editingQuizId && (
         <TouchableOpacity
-          className="bg-gray-500 py-3 px-6 rounded-xl text-white font-medium mb-6 items-center"
+          className="bg-red-500 py-3 px-6 rounded-xl text-white font-medium mb-6 items-center"
           onPress={resetForm}
         >
           <Text className="text-white font-medium text-lg">Cancel Edit</Text>
@@ -723,7 +723,7 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
               className="bg-white p-4 rounded-xl mb-4 border border-gray-200"
             >
               <View className="flex-row justify-between items-center mb-3">
-                <Text className="text-lg font-bold flex-1 text-gray-800">
+                <Text className="text-lg font-bold flex-1 text-black">
                   {quiz.name}
                 </Text>
                 <View className="flex-row gap-2">
@@ -759,7 +759,7 @@ What is 2+2? | mcq | 3,4,5,6 | 4 | Basic addition | 30`;
                       key={index}
                       className="bg-gray-100 p-3 rounded-lg mb-2"
                     >
-                      <Text className="font-bold mb-1 text-gray-800">
+                      <Text className="font-bold mb-1 text-black">
                         Q{index + 1}: {question.questionText}
                       </Text>
                       <Text className="text-green-600">

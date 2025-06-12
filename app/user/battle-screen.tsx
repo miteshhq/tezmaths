@@ -1,19 +1,18 @@
+import * as Haptics from "expo-haptics";
+import { router, useLocalSearchParams } from "expo-router";
+import { onValue, ref } from "firebase/database";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  Animated,
   Text,
   TextInput,
   TouchableOpacity,
-  ActivityIndicator,
-  Animated,
-  Alert,
+  View,
 } from "react-native";
-import { database } from "../../firebase/firebaseConfig";
-import { ref, onValue } from "firebase/database";
-import { auth } from "../../firebase/firebaseConfig";
-import { useLocalSearchParams, router } from "expo-router";
 import Svg, { Circle } from "react-native-svg";
-import * as Haptics from "expo-haptics";
+import { auth, database } from "../../firebase/firebaseConfig";
 import { battleManager } from "../../utils/battleManager";
 
 const DEBUG_MODE = true;
@@ -472,7 +471,7 @@ export default function BattleScreen() {
           size={70}
           progress={(roomData?.currentQuestion + 1) / roomData?.totalQuestions}
           strokeWidth={8}
-          color="#F87720"
+          color="#F97316"
           text={`${roomData?.currentQuestion + 1}/${roomData?.totalQuestions}`}
         />
         <View className="flex-1 ml-4">
@@ -493,11 +492,11 @@ export default function BattleScreen() {
       </View>
 
       <View className="bg-white rounded-2xl border border-black p-4">
-        <Text className="text-3xl font-black text-purple-800 text-center">
+        <Text className="text-3xl font-black text-custom-purple text-center">
           What is {currentQuestion?.question} ?
         </Text>
         <TextInput
-          className="bg-gray-50 p-4 rounded-xl text-xl text-center border border-gray-100 mt-4"
+          className="bg-custom-gray p-4 rounded-xl text-xl text-center border border-gray-100 mt-4"
           value={userAnswer}
           onChangeText={handleInputChange}
           placeholder="Type Your Answer"

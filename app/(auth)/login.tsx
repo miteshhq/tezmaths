@@ -21,8 +21,8 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import { useSimpleGoogleSignIn } from "../../utils/useGoogleSignIn";
 import { auth, database } from "../../firebase/firebaseConfig";
+import { useSimpleGoogleSignIn } from "../../utils/useGoogleSignIn";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LEVEL_STORAGE_KEY = "highestLevelReached";
@@ -342,7 +342,7 @@ export default function LoginScreen() {
             >
               <Text
                 className={`text-base font-regular font-['Poppins-SemiBold'] text-center ${
-                  isResettingPassword ? "text-purple-400" : "text-purple-800"
+                  isResettingPassword ? "text-purple-400" : "text-custom-purple"
                 }`}
               >
                 {isResettingPassword
@@ -352,7 +352,7 @@ export default function LoginScreen() {
             </TouchableOpacity>
 
             <View className="flex-row mb-5 items-center">
-              <Text className="text-gray-800 text-base font-bold font-['Poppins-Regular']">
+              <Text className="text-black text-base font-bold font-['Poppins-Regular']">
                 Don't have an account?
               </Text>
               <TouchableOpacity onPress={navigateToSignup} activeOpacity={0.7}>
@@ -363,7 +363,7 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </View>
 
-            <Text className="text-gray-800 text-sm font-black font-['Poppins-Regular'] mb-4 text-center">
+            <Text className="text-black text-sm font-black font-['Poppins-Regular'] mb-4 text-center">
               OR
             </Text>
 
@@ -381,7 +381,7 @@ export default function LoginScreen() {
                   source={require("../../assets/icons/google.png")}
                   style={{ width: 18, height: 18 }}
                 />
-                <Text className="text-gray-800 text-lg font-bold font-['Poppins-Regular']">
+                <Text className="text-black text-lg font-bold font-['Poppins-Regular']">
                   {isLoading ? "Signing in..." : "Sign in with Google"}
                 </Text>
               </View>

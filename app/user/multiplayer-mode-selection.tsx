@@ -1,19 +1,17 @@
+import * as Clipboard from "expo-clipboard";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
-  StyleSheet,
-  Text,
-  View,
+  ActivityIndicator,
+  Alert,
   Image,
   ImageBackground,
-  TouchableOpacity,
   ScrollView,
+  Text,
   TextInput,
-  Alert,
-  ActivityIndicator,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import React, { useState, useEffect } from "react";
-import * as Clipboard from "expo-clipboard";
-import { auth } from "../../firebase/firebaseConfig";
 import { battleManager } from "../../utils/battleManager";
 
 export default function MultiplayerModeSelection() {
@@ -165,7 +163,7 @@ export default function MultiplayerModeSelection() {
 
       <View className="px-4 py-4">
         <View className="flex-row justify-center items-center">
-          <Text className="text-purple-800 text-2xl mt-4 font-black">
+          <Text className="text-custom-purple text-2xl mt-4 font-black">
             Choose Your Battle Mode!
           </Text>
         </View>
@@ -176,10 +174,10 @@ export default function MultiplayerModeSelection() {
           <View className="w-full h-8 bg-primary"></View>
           <View className="w-full p-4 flex flex-col items-center gap-4">
             <View className="flex flex-col items-center gap-1">
-              <Text className="text-2xl text-purple-800 font-black">
+              <Text className="text-2xl text-custom-purple font-black">
                 Random Player
               </Text>
-              <Text className="text-sm text-center text-purple-800">
+              <Text className="text-sm text-center text-custom-purple">
                 Get matched with a random opponent for an exciting battle!
               </Text>
             </View>
@@ -201,14 +199,14 @@ export default function MultiplayerModeSelection() {
             ) : (
               <View className="flex flex-col items-center gap-3">
                 <ActivityIndicator size="large" color="#9333ea" />
-                <Text className="text-purple-800 font-bold">
+                <Text className="text-custom-purple font-bold">
                   Searching for opponent...
                 </Text>
                 <TouchableOpacity
                   className="px-4 py-2 bg-gray-200 rounded-lg"
                   onPress={cancelRandomSearch}
                 >
-                  <Text className="text-purple-800 font-bold">Cancel</Text>
+                  <Text className="text-custom-purple font-bold">Cancel</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -219,10 +217,10 @@ export default function MultiplayerModeSelection() {
           <View className="w-full h-8 bg-primary"></View>
           <View className="w-full p-4 flex flex-col items-center gap-4">
             <View className="flex flex-col items-center gap-1">
-              <Text className="text-2xl text-purple-800 font-black">
+              <Text className="text-2xl text-custom-purple font-black">
                 Quiz Code
               </Text>
-              <Text className="text-sm text-center text-purple-800">
+              <Text className="text-sm text-center text-custom-purple">
                 Join a specific battle using a quiz code from your friend!
               </Text>
             </View>
@@ -244,7 +242,7 @@ export default function MultiplayerModeSelection() {
             ) : (
               <View className="w-full flex flex-col gap-3">
                 <TextInput
-                  className="border-2 border-purple-800 rounded-lg px-4 py-3 text-center text-lg font-bold text-purple-800"
+                  className="border-2 border-custom-purple rounded-lg px-4 py-3 text-center text-lg font-bold text-custom-purple"
                   placeholder="Enter Quiz Code"
                   placeholderTextColor="#9333ea"
                   value={quizCode}
@@ -284,7 +282,7 @@ export default function MultiplayerModeSelection() {
                       setQuizCode("");
                     }}
                   >
-                    <Text className="text-purple-800 font-bold">Cancel</Text>
+                    <Text className="text-custom-purple font-bold">Cancel</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -296,10 +294,10 @@ export default function MultiplayerModeSelection() {
           <View className="w-full h-8 bg-primary"></View>
           <View className="w-full p-4 flex flex-col items-center gap-4">
             <View className="flex flex-col items-center gap-1">
-              <Text className="text-2xl text-purple-800 font-black">
+              <Text className="text-2xl text-custom-purple font-black">
                 Create Room
               </Text>
-              <Text className="text-sm text-center text-purple-800">
+              <Text className="text-sm text-center text-custom-purple">
                 Create your own battle room and invite friends to join!
               </Text>
             </View>
@@ -321,7 +319,7 @@ export default function MultiplayerModeSelection() {
             ) : (
               <View className="w-full flex flex-col gap-3">
                 <TextInput
-                  className="border-2 border-purple-800 rounded-lg px-4 py-3 text-center text-lg text-purple-800"
+                  className="border-2 border-custom-purple rounded-lg px-4 py-3 text-center text-lg text-custom-purple"
                   placeholder="Enter Room Name"
                   placeholderTextColor="#9333ea"
                   value={roomName}
@@ -362,34 +360,36 @@ export default function MultiplayerModeSelection() {
                         setRoomName("");
                       }}
                     >
-                      <Text className="text-purple-800 font-bold">Cancel</Text>
+                      <Text className="text-custom-purple font-bold">
+                        Cancel
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
                   <View className="flex flex-col gap-3">
-                    <View className="bg-purple-100 rounded-lg p-4">
-                      <Text className="text-center text-purple-800 font-bold text-sm">
+                    <View className="bg-light-orange rounded-lg p-4">
+                      <Text className="text-center text-custom-purple font-bold text-sm">
                         Room Code
                       </Text>
-                      <Text className="text-center text-purple-800 font-black text-2xl">
+                      <Text className="text-center text-custom-purple font-black text-2xl">
                         {roomCode}
                       </Text>
-                      <Text className="text-center text-purple-800 text-xs mt-2">
+                      <Text className="text-center text-custom-purple text-xs mt-2">
                         Players: {Object.keys(playersInRoom).length}/
                         {MAX_PLAYERS}
                       </Text>
                     </View>
 
                     {Object.keys(playersInRoom).length > 1 && (
-                      <View className="bg-gray-50 rounded-lg p-3">
-                        <Text className="text-center text-purple-800 font-bold text-sm mb-2">
+                      <View className="bg-custom-gray rounded-lg p-3">
+                        <Text className="text-center text-custom-purple font-bold text-sm mb-2">
                           Players Joined:
                         </Text>
                         {Object.entries(playersInRoom).map(
                           ([playerId, player]) => (
                             <Text
                               key={playerId}
-                              className="text-center text-purple-800 text-sm"
+                              className="text-center text-custom-purple text-sm"
                             >
                               • {player.name}
                             </Text>
@@ -404,7 +404,7 @@ export default function MultiplayerModeSelection() {
                         onPress={copyRoomCode}
                       >
                         <View className="py-3 bg-purple-200 rounded-lg">
-                          <Text className="text-purple-800 font-bold text-center">
+                          <Text className="text-custom-purple font-bold text-center">
                             Copy Code
                           </Text>
                         </View>
@@ -428,7 +428,7 @@ export default function MultiplayerModeSelection() {
                     </View>
 
                     <TouchableOpacity
-                      className="py-2 bg-red-100 rounded-lg"
+                      className="py-2 bg-light-orange rounded-lg"
                       onPress={cancelRoomCreation}
                     >
                       <Text className="text-red-600 font-bold text-center">

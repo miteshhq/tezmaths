@@ -1,5 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import "@react-native-google-signin/google-signin";
 import { useRouter } from "expo-router";
+import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -12,7 +14,6 @@ import {
 } from "react-native";
 import welcomeImage from "../assets/welcome-image.png";
 import { auth } from "../firebase/firebaseConfig";
-import { onAuthStateChanged } from "firebase/auth";
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -47,16 +48,16 @@ export default function WelcomeScreen() {
   if (loading) {
     return (
       <View>
-        <ActivityIndicator size="large" color="#F87720" />
+        <ActivityIndicator size="large" color="#F97316" />
       </View>
     );
   }
 
   return (
-    <View className="flex-1 justify-center items-center bg-gray-50 px-5 pb-10">
+    <View className="flex-1 justify-center items-center bg-custom-gray px-5 pb-10">
       <Image source={welcomeImage} style={styles.image} />
 
-      <Text className="text-3xl text-gray-800 font-semibold text-center mb-2">
+      <Text className="text-3xl text-black font-semibold text-center mb-2">
         Hey! Welcome
       </Text>
 

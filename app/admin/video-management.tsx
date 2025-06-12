@@ -1,19 +1,19 @@
-import React, { useState, useEffect } from "react";
+import { FontAwesome } from "@expo/vector-icons";
+import { get, push, ref, remove, set } from "firebase/database";
+import React, { useEffect, useState } from "react";
 import {
-  View,
+  Alert,
+  Dimensions,
+  FlatList,
+  Linking,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
-  Dimensions,
-  FlatList,
-  ScrollView,
-  Alert,
-  Linking,
+  View,
 } from "react-native";
-import { ref, set, push, get, remove } from "firebase/database";
-import { database } from "../../firebase/firebaseConfig";
-import { FontAwesome } from "@expo/vector-icons";
 import { WebView } from "react-native-webview";
+import { database } from "../../firebase/firebaseConfig";
 
 export default function VideoManagement() {
   const [videoName, setVideoName] = useState("");
@@ -153,7 +153,7 @@ export default function VideoManagement() {
       <View className="flex-row justify-between items-start mb-3">
         <View className="flex-1 pr-3">
           <Text
-            className="text-lg font-semibold text-gray-800 mb-1"
+            className="text-lg font-semibold text-black mb-1"
             numberOfLines={2}
           >
             {item.name}
@@ -195,7 +195,7 @@ export default function VideoManagement() {
           </Text>
         </View>
       </View>
-      <View className="bg-gray-50 p-3 rounded-lg">
+      <View className="bg-custom-gray p-3 rounded-lg">
         <View className="flex-row items-center justify-between mb-2">
           <Text className="text-xs font-medium text-gray-600 uppercase tracking-wide">
             Video Details
@@ -244,10 +244,10 @@ export default function VideoManagement() {
   );
 
   return (
-    <View className="flex-1 bg-gray-50">
+    <View className="flex-1 bg-custom-gray">
       <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
         <View className="p-6">
-          <Text className="text-3xl font-bold text-gray-800 text-center mb-2">
+          <Text className="text-3xl font-bold text-black text-center mb-2">
             Video Management
           </Text>
           <Text className="text-gray-600 text-center mb-8">
@@ -357,7 +357,7 @@ export default function VideoManagement() {
           ) : (
             <View className="bg-white p-6 rounded-2xl border border-gray-200 items-center">
               <FontAwesome name="video-camera" size={48} color="#D1D5DB" />
-              <Text className="text-lg font-semibold text-gray-800 mt-4 mb-2">
+              <Text className="text-lg font-semibold text-black mt-4 mb-2">
                 No videos yet
               </Text>
               <Text className="text-gray-600 text-center">

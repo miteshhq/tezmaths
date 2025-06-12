@@ -1,30 +1,30 @@
 // app/user/edit-profile.tsx
-import React, { useState, useEffect } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import { get, ref, update } from "firebase/database";
+import React, { useEffect, useState } from "react";
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Image,
+  View,
 } from "react-native";
 import { auth, database } from "../../firebase/firebaseConfig";
-import { ref, get, update } from "firebase/database";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
 
 // Predefined avatar options
 const avatarOptions = [
-  { id: 0, source: require("../../assets/avatars/avatar1.png") },
-  { id: 1, source: require("../../assets/avatars/avatar2.png") },
-  { id: 2, source: require("../../assets/avatars/avatar3.png") },
-  { id: 3, source: require("../../assets/avatars/avatar4.png") },
-  { id: 4, source: require("../../assets/avatars/avatar5.png") },
-  { id: 5, source: require("../../assets/avatars/avatar6.png") },
+  { id: 0, source: require("../../assets/avatars/avatar1.jpg") },
+  { id: 1, source: require("../../assets/avatars/avatar2.jpg") },
+  { id: 2, source: require("../../assets/avatars/avatar3.jpg") },
+  { id: 3, source: require("../../assets/avatars/avatar4.jpg") },
+  { id: 4, source: require("../../assets/avatars/avatar5.jpg") },
+  { id: 5, source: require("../../assets/avatars/avatar6.jpg") },
 ];
 
 export default function EditProfileScreen() {
@@ -173,9 +173,7 @@ export default function EditProfileScreen() {
             <TouchableOpacity onPress={() => router.push("/user/profile")}>
               <Text className="text-primary font-semibold text-lg">Cancel</Text>
             </TouchableOpacity>
-            <Text className="text-xl font-bold text-gray-900">
-              Edit Profile
-            </Text>
+            <Text className="text-xl font-bold text-black">Edit Profile</Text>
             <TouchableOpacity
               onPress={handleSave}
               disabled={!hasChanges() || saving}
@@ -239,7 +237,7 @@ export default function EditProfileScreen() {
                 Full Name
               </Text>
               <TextInput
-                className="border border-gray-300 rounded-xl px-4 py-3 text-gray-900 bg-white"
+                className="border border-gray-300 rounded-xl px-4 py-3 text-black bg-white"
                 value={formData.fullName}
                 onChangeText={(text) =>
                   setFormData({ ...formData, fullName: text })

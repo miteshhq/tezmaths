@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-} from "react-native";
-import { ref, get } from "firebase/database";
-import { database } from "../../firebase/firebaseConfig";
 import { useRouter } from "expo-router";
+import { get, ref } from "firebase/database";
+import React, { useEffect, useState } from "react";
+import {
+  RefreshControl,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { database } from "../../firebase/firebaseConfig";
 
 interface DashboardStats {
   totalUsers: number;
@@ -120,20 +120,20 @@ const Dashboard = () => {
       subtitle: "Upload and organize video content",
       icon: "🎥",
       route: "/admin/video-management",
-      color: "bg-purple-500",
+      color: "bg-custom-purple",
     },
     {
       title: "Referral Analytics",
       subtitle: "View detailed referral insights",
       icon: "📊",
       route: "/admin/referral-points",
-      color: "bg-orange-500",
+      color: "bg-primary",
     },
   ];
 
   if (loading) {
     return (
-      <View className="flex-1 justify-center items-center bg-gray-50">
+      <View className="flex-1 justify-center items-center bg-custom-gray">
         <Text className="text-gray-600 text-lg font-medium">
           Loading dashboard...
         </Text>
@@ -143,7 +143,7 @@ const Dashboard = () => {
 
   return (
     <ScrollView
-      className="flex-1 bg-gray-50"
+      className="flex-1 bg-custom-gray"
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
@@ -151,7 +151,7 @@ const Dashboard = () => {
       <View className="p-6">
         {/* Header */}
         <View className="mb-8">
-          <Text className="text-3xl font-bold text-gray-800 mb-2">
+          <Text className="text-3xl font-bold text-black mb-2">
             Admin Dashboard
           </Text>
           <Text className="text-gray-600">
@@ -166,13 +166,13 @@ const Dashboard = () => {
           </Text>
           <View className="flex-row flex-wrap justify-between">
             <View className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 mb-4 w-[48%]">
-              <Text className="text-2xl font-bold text-gray-800">
+              <Text className="text-2xl font-bold text-black">
                 {stats.totalUsers}
               </Text>
               <Text className="text-gray-600 text-sm">Total Users</Text>
             </View>
             <View className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 mb-4 w-[48%]">
-              <Text className="text-2xl font-bold text-gray-800">
+              <Text className="text-2xl font-bold text-black">
                 {stats.totalReferrals}
               </Text>
               <Text className="text-gray-600 text-sm">Total Referrals</Text>
@@ -193,24 +193,24 @@ const Dashboard = () => {
               <View className="flex-row items-center">
                 <Text className="text-2xl mr-3">📝</Text>
                 <View>
-                  <Text className="font-semibold text-gray-800">Quizzes</Text>
+                  <Text className="font-semibold text-black">Quizzes</Text>
                   <Text className="text-gray-600 text-sm">Total available</Text>
                 </View>
               </View>
-              <Text className="text-2xl font-bold text-gray-800">
+              <Text className="text-2xl font-bold text-black">
                 {stats.totalQuizzes}
               </Text>
             </View>
-            <View className="h-px bg-gray-100 mb-4" />
+            <View className="h-px bg-custom-gray mb-4" />
             <View className="flex-row justify-between items-center">
               <View className="flex-row items-center">
                 <Text className="text-2xl mr-3">🎥</Text>
                 <View>
-                  <Text className="font-semibold text-gray-800">Videos</Text>
+                  <Text className="font-semibold text-black">Videos</Text>
                   <Text className="text-gray-600 text-sm">Total available</Text>
                 </View>
               </View>
-              <Text className="text-2xl font-bold text-gray-800">
+              <Text className="text-2xl font-bold text-black">
                 {stats.totalVideos}
               </Text>
             </View>
@@ -220,7 +220,7 @@ const Dashboard = () => {
         {/* Points Summary */}
         <View className="mb-8">
           <View className="bg-primary-100 rounded-2xl p-6 border-2 border-primary-200">
-            <Text className="text-2xl font-bold text-gray-800 text-center">
+            <Text className="text-2xl font-bold text-black text-center">
               {stats.totalPointsDistributed.toLocaleString()}
             </Text>
             <Text className="text-gray-600 text-center text-sm mt-1">
@@ -248,7 +248,7 @@ const Dashboard = () => {
                   <Text className="text-2xl">{button.icon}</Text>
                 </View>
                 <View className="flex-1">
-                  <Text className="font-semibold text-gray-800 text-lg">
+                  <Text className="font-semibold text-black text-lg">
                     {button.title}
                   </Text>
                   <Text className="text-gray-600 text-sm">

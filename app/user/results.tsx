@@ -1,15 +1,15 @@
 // app/user/results.tsx
-import React, { useRef, useEffect } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useRef } from "react";
 import {
-  View,
+  Alert,
+  Image,
+  Platform,
+  Share,
   Text,
   TouchableOpacity,
-  Image,
-  Share,
-  Alert,
-  Platform,
+  View,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
 
 const shareConfig = {
   additionalText: "Check out my math quiz results! 🧠✨",
@@ -151,19 +151,19 @@ export default function ResultsScreen() {
   const avatarImages = (avatar) => {
     switch (avatar) {
       case "1":
-        return require("../../assets/avatars/avatar1.png");
+        return require("../../assets/avatars/avatar1.jpg");
       case "2":
-        return require("../../assets/avatars/avatar2.png");
+        return require("../../assets/avatars/avatar2.jpg");
       case "3":
-        return require("../../assets/avatars/avatar3.png");
+        return require("../../assets/avatars/avatar3.jpg");
       case "4":
-        return require("../../assets/avatars/avatar4.png");
+        return require("../../assets/avatars/avatar4.jpg");
       case "5":
-        return require("../../assets/avatars/avatar5.png");
+        return require("../../assets/avatars/avatar5.jpg");
       case "6":
-        return require("../../assets/avatars/avatar6.png");
+        return require("../../assets/avatars/avatar6.jpg");
       default:
-        return require("../../assets/avatars/avatar1.png");
+        return require("../../assets/avatars/avatar1.jpg");
     }
   };
 
@@ -173,7 +173,7 @@ export default function ResultsScreen() {
       <View
         ref={cardRef}
         collapsable={false}
-        className="bg-gray-100 border-4 border-white p-4 rounded-3xl shadow-xl w-full max-w-md"
+        className="bg-custom-gray border-4 border-white p-4 rounded-3xl shadow-xl w-full max-w-md"
         style={{
           // Ensure the card looks good when captured
           shadowColor: "#000",
@@ -205,10 +205,10 @@ export default function ResultsScreen() {
           </Text>
         </View>
 
-        <Text className="text-2xl font-bold text-center text-gray-800 mb-4">
+        <Text className="text-2xl font-bold text-center text-black mb-4">
           {getMotivationalQuote()}
         </Text>
-        <Text className="text-3xl font-black text-center text-gray-900 mb-2">
+        <Text className="text-3xl font-black text-center text-black mb-2">
           Score: {quizScore}
         </Text>
 
@@ -223,7 +223,7 @@ export default function ResultsScreen() {
 
           <View className="items-center">
             <Text className="text-gray-700">Accuracy</Text>
-            <Text className="text-2xl font-bold text-purple-800">
+            <Text className="text-2xl font-bold text-custom-purple">
               {percentage}%
             </Text>
           </View>
@@ -234,11 +234,11 @@ export default function ResultsScreen() {
         </Text>
 
         <View className="items-center mb-8">
-          <Text className="text-xl font-bold text-center text-gray-800 mb-2">
+          <Text className="text-xl font-bold text-center text-black mb-2">
             TezMaths
           </Text>
 
-          <Text className="text-gray-800 text-center">
+          <Text className="text-black text-center">
             Sharpen your speed, master your math!
           </Text>
         </View>

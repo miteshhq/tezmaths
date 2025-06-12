@@ -151,7 +151,7 @@ export default function LearnScreen() {
     if (Platform.OS === "web" || !item.videoId) {
       return (
         <TouchableOpacity
-          className="w-full aspect-video bg-gray-100 justify-center items-center rounded-xl border border-gray-200"
+          className="w-full aspect-video bg-custom-gray justify-center items-center rounded-xl border border-gray-200"
           onPress={() => item.videoId && openYoutubeVideo(item.videoId)}
         >
           <View className="items-center">
@@ -181,7 +181,7 @@ export default function LearnScreen() {
       // console.log("WebView error:", error);
       return (
         <TouchableOpacity
-          className="w-full aspect-video bg-gray-100 justify-center items-center rounded-xl border border-gray-200"
+          className="w-full aspect-video bg-custom-gray justify-center items-center rounded-xl border border-gray-200"
           onPress={() => openYoutubeVideo(item.videoId)}
         >
           <View className="items-center">
@@ -217,7 +217,7 @@ export default function LearnScreen() {
       <View className="mx-4 mt-4">
         <View className="relative">
           <TextInput
-            className="bg-white text-gray-800 py-3 pl-12 pr-4 rounded-xl text-base border border-gray-200"
+            className="bg-white text-black py-3 pl-12 pr-4 rounded-xl text-base border border-gray-200"
             placeholder="Search videos by name"
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
@@ -242,7 +242,7 @@ export default function LearnScreen() {
           <Text className="text-white text-sm font-bold">{index + 1}</Text>
         </View> */}
         <View className="flex-1 flex items-center">
-          <Text className="text-purple-800 text-2xl font-black text-center">
+          <Text className="text-custom-purple text-2xl font-black text-center">
             {item.name}
           </Text>
           {/* <Text className="text-gray-600 text-sm leading-5">

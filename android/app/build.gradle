@@ -79,7 +79,12 @@ def enableProguardInReleaseBuilds = (findProperty('android.enableProguardInRelea
  * give correct results when using with locales other than en-US. Note that
  * this variant is about 6MiB larger per architecture than default.
  */
-def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
+def jscFlavor = 'org.webkit:android-jsc:+'
+
+/**
+ * Whether to enable the Hermes JS engine.
+ */
+def hermesEnabled = (findProperty('expo.jsEngine') ?: "hermes") == "hermes"
 
 android {
     ndkVersion rootProject.ext.ndkVersion
@@ -94,6 +99,7 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0.0"
+        missingDimensionStrategy 'react-native-camera', 'general'
     }
     signingConfigs {
         debug {
@@ -150,6 +156,7 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    implementation 'com.google.android.gms:play-services-auth:20.7.0'
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";
@@ -157,15 +164,15 @@ dependencies {
 
     if (isGifEnabled) {
         // For animated gif support
-        implementation("com.facebook.fresco:animated-gif:${expoLibs.versions.fresco.get()}")
+        implementation("com.facebook.fresco:animated-gif:3.1.3")
     }
 
     if (isWebpEnabled) {
         // For webp support
-        implementation("com.facebook.fresco:webpsupport:${expoLibs.versions.fresco.get()}")
+        implementation("com.facebook.fresco:webpsupport:3.1.3")
         if (isWebpAnimatedEnabled) {
             // Animated webp support
-            implementation("com.facebook.fresco:animated-webp:${expoLibs.versions.fresco.get()}")
+            implementation("com.facebook.fresco:animated-webp:3.1.3")
         }
     }
 

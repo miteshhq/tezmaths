@@ -6,9 +6,10 @@ module.exports = {
     theme: {
         extend: {
             colors: {
-                "primary": "#F87720",
-                "grad-start": "#3b3b3b",
-                "grad-end": "#111111",
+                "primary": "#F97316",
+                "custom-purple": "#76184F",
+                "light-orange": "#FEF4EC",
+                "custom-gray": "#F2F2F2",
             },
         },
     },

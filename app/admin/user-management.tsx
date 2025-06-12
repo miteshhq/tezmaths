@@ -1,14 +1,13 @@
-import React, { useState, useEffect } from "react";
+import { onValue, ref, remove } from "firebase/database";
+import React, { useEffect, useState } from "react";
 import {
-  View,
+  Alert,
+  FlatList,
   Text,
   TextInput,
   TouchableOpacity,
-  FlatList,
-  Alert,
+  View,
 } from "react-native";
-import { ref, get, remove, onValue } from "firebase/database";
-import { auth } from "../../firebase/firebaseConfig";
 import { database } from "../../firebase/firebaseConfig";
 
 export default function UserManagement() {
@@ -64,8 +63,8 @@ export default function UserManagement() {
   };
 
   return (
-    <View className="flex-1 bg-gray-50 p-6">
-      <Text className="text-3xl font-bold text-gray-800 text-center mb-8">
+    <View className="flex-1 bg-custom-gray p-6">
+      <Text className="text-3xl font-bold text-black text-center mb-8">
         All Users
       </Text>
       <TextInput
@@ -80,27 +79,26 @@ export default function UserManagement() {
         renderItem={({ item }: any) => (
           <View className="bg-white p-4 rounded-xl mb-4 border border-gray-200">
             <Text className="text-gray-600 mb-1">
-              <Text className="font-bold text-gray-800">Full Name:</Text>{" "}
+              <Text className="font-bold text-black">Full Name:</Text>{" "}
               {item.fullName || "N/A"}
             </Text>
             <Text className="text-gray-600 mb-1">
-              <Text className="font-bold text-gray-800">Username:</Text>{" "}
+              <Text className="font-bold text-black">Username:</Text>{" "}
               {item.username || "N/A"}
             </Text>
             <Text className="text-gray-600 mb-1">
-              <Text className="font-bold text-gray-800">Email:</Text>{" "}
-              {item.email}
+              <Text className="font-bold text-black">Email:</Text> {item.email}
             </Text>
             <Text className="text-gray-600 mb-1">
-              <Text className="font-bold text-gray-800">Phone:</Text>{" "}
+              <Text className="font-bold text-black">Phone:</Text>{" "}
               {item.phoneNumber || "N/A"}
             </Text>
             <Text className="text-gray-600 mb-1">
-              <Text className="font-bold text-gray-800">Points:</Text>{" "}
+              <Text className="font-bold text-black">Points:</Text>{" "}
               {item.totalPoints || 0}
             </Text>
             <Text className="text-gray-600 mb-3">
-              <Text className="font-bold text-gray-800">Referrals:</Text>{" "}
+              <Text className="font-bold text-black">Referrals:</Text>{" "}
               {item.referrals || 0}
             </Text>
             <TouchableOpacity

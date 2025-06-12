@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, ScrollView, RefreshControl } from "react-native";
-import { ref, get } from "firebase/database";
+import { get, ref } from "firebase/database";
+import React, { useEffect, useState } from "react";
+import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { database } from "../../firebase/firebaseConfig";
 
 interface UserData {
@@ -96,7 +96,7 @@ export default function ReferralPoints() {
 
   if (loading) {
     return (
-      <View className="flex-1 justify-center items-center bg-gray-50">
+      <View className="flex-1 justify-center items-center bg-custom-gray">
         <Text className="text-gray-600 text-lg font-medium">
           Loading referral data...
         </Text>
@@ -106,14 +106,14 @@ export default function ReferralPoints() {
 
   return (
     <ScrollView
-      className="flex-1 bg-gray-50"
+      className="flex-1 bg-custom-gray"
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
       <View className="p-6">
         {/* Header */}
-        <Text className="text-3xl font-bold text-gray-800 text-center mb-8">
+        <Text className="text-3xl font-bold text-black text-center mb-8">
           Referral Analytics Dashboard
         </Text>
 
@@ -124,20 +124,20 @@ export default function ReferralPoints() {
           </Text>
           <View className="flex-row flex-wrap justify-between">
             <View className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 mb-4 w-[48%]">
-              <Text className="text-2xl font-bold text-gray-800">
+              <Text className="text-2xl font-bold text-black">
                 {stats.totalUsers}
               </Text>
               <Text className="text-gray-600 text-sm">Total Users</Text>
             </View>
             <View className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 mb-4 w-[48%]">
-              <Text className="text-2xl font-bold text-gray-800">
+              <Text className="text-2xl font-bold text-black">
                 {stats.totalReferrals}
               </Text>
               <Text className="text-gray-600 text-sm">Total Referrals</Text>
             </View>
           </View>
           <View className="bg-primary-100 rounded-2xl p-6 border-2 border-primary-200">
-            <Text className="text-2xl font-bold text-gray-800 text-center">
+            <Text className="text-2xl font-bold text-black text-center">
               {stats.totalReferralPoints}
             </Text>
             <Text className="text-gray-600 text-center text-sm mt-1">
@@ -183,7 +183,7 @@ export default function ReferralPoints() {
                           {index + 1}
                         </Text>
                       </View>
-                      <Text className="font-semibold text-gray-800 text-base flex-1">
+                      <Text className="font-semibold text-black text-base flex-1">
                         {user.fullName}
                       </Text>
                     </View>
@@ -192,7 +192,7 @@ export default function ReferralPoints() {
                     </Text>
                   </View>
                   <View className="items-end">
-                    <Text className="font-bold text-gray-800 text-lg">
+                    <Text className="font-bold text-black text-lg">
                       {user.referrals}
                     </Text>
                     <Text className="text-gray-600 text-xs">referrals</Text>
@@ -220,7 +220,7 @@ export default function ReferralPoints() {
           <View className="space-y-3">
             <View className="flex-row justify-between">
               <Text className="text-gray-600">Avg. Referrals per User:</Text>
-              <Text className="font-semibold text-gray-800">
+              <Text className="font-semibold text-black">
                 {stats.totalUsers > 0
                   ? (stats.totalReferrals / stats.totalUsers).toFixed(2)
                   : 0}
@@ -230,13 +230,13 @@ export default function ReferralPoints() {
               <Text className="text-gray-600">
                 Points per Referral (to upliner):
               </Text>
-              <Text className="font-semibold text-gray-800">10 points</Text>
+              <Text className="font-semibold text-black">10 points</Text>
             </View>
             <View className="flex-row justify-between">
               <Text className="text-gray-600">
                 Points per Referral (to new user):
               </Text>
-              <Text className="font-semibold text-gray-800">5 points</Text>
+              <Text className="font-semibold text-black">5 points</Text>
             </View>
           </View>
         </View>

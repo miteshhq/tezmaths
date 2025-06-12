@@ -1,7 +1,7 @@
 // app/register.tsx
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { get, ref, set, update } from "firebase/database";
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   Image,
   StatusBar,
@@ -18,20 +18,20 @@ import { auth, database } from "../../firebase/firebaseConfig";
 
 // Avatar options
 const avatarOptions = [
-  { id: 1, source: require("../../assets/avatars/avatar1.png") },
-  { id: 2, source: require("../../assets/avatars/avatar2.png") },
-  { id: 3, source: require("../../assets/avatars/avatar3.png") },
-  { id: 4, source: require("../../assets/avatars/avatar4.png") },
-  { id: 5, source: require("../../assets/avatars/avatar5.png") },
-  { id: 6, source: require("../../assets/avatars/avatar6.png") },
+  { id: 1, source: require("../../assets/avatars/avatar1.jpg") },
+  { id: 2, source: require("../../assets/avatars/avatar2.jpg") },
+  { id: 3, source: require("../../assets/avatars/avatar3.jpg") },
+  { id: 4, source: require("../../assets/avatars/avatar4.jpg") },
+  { id: 5, source: require("../../assets/avatars/avatar5.jpg") },
+  { id: 6, source: require("../../assets/avatars/avatar6.jpg") },
 ];
 
 export default function RegisterScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { email } = params;
+  const { email, isGoogleUser, displayName } = params;
 
-  const [fullName, setFullName] = useState("");
+  const [fullName, setFullName] = useState((displayName as string) || "");
   const [username, setUsername] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [phoneError, setPhoneError] = useState("");
@@ -40,6 +40,13 @@ export default function RegisterScreen() {
   const [errorMessage, setErrorMessage] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState(true);
+
+  // Pre-fill name if coming from Google Sign-In
+  useEffect(() => {
+    if (isGoogleUser === "true" && displayName) {
+      setFullName(displayName as string);
+    }
+  }, [isGoogleUser, displayName]);
 
   const validatePhoneNumber = useCallback(() => {
     if (
@@ -209,23 +216,45 @@ export default function RegisterScreen() {
         referralSuccess = await processReferral(referralCode.trim());
       }
 
-      // Create user entry
-      const userRef = ref(database, `users/${userId}`);
-      await set(userRef, {
+      // Create user data object
+      const userData = {
         fullName,
         username: username.toLowerCase(),
         phoneNumber,
         email: email,
         avatar: selectedAvatar,
-        isnewuser: false,
+        isnewuser: false, // Mark as not new user anymore
         streak: 0,
         lastCompletionDate: null,
         highestCompletedLevelCompleted: 0,
         levelsScores: [],
         referrals: 0,
         totalPoints: referralSuccess ? 5 : 0, // Give 5 points for successful referral
-      });
+      };
 
+      // If this is a Google user, preserve some Google-specific fields
+      if (isGoogleUser === "true") {
+        const userRef = ref(database, `users/${userId}`);
+        const existingSnapshot = await get(userRef);
+
+        if (existingSnapshot.exists()) {
+          const existingData = existingSnapshot.val();
+          // Preserve Google-specific fields
+          userData.photoURL = existingData.photoURL || "";
+          userData.providerId = existingData.providerId || "google.com";
+          userData.createdAt =
+            existingData.createdAt || new Date().toISOString();
+        }
+      }
+
+      // Create/update user entry
+      const userRef = ref(database, `users/${userId}`);
+      await set(userRef, userData);
+
+      console.log(
+        "Registration completed successfully for:",
+        isGoogleUser === "true" ? "Google user" : "regular user"
+      );
       router.push("/user/home");
     } catch (error) {
       console.error("Registration failed:", error);
@@ -246,6 +275,7 @@ export default function RegisterScreen() {
     selectedAvatar,
     referralCode,
     processReferral,
+    isGoogleUser,
     router,
   ]);
 
@@ -271,7 +301,9 @@ export default function RegisterScreen() {
           scrollEnabled={true}
         >
           <Text className="text-4xl text-black font-black text-center mb-10 font-['Poppins-Bold']">
-            Setup Your Profile
+            {isGoogleUser === "true"
+              ? "Complete Your Profile"
+              : "Setup Your Profile"}
           </Text>
 
           {/* Avatar Selection */}

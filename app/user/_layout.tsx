@@ -1,21 +1,12 @@
-import React from "react";
-import { Tabs } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Image,
-  StyleSheet,
-  ActivityIndicator,
-  Dimensions,
-} from "react-native";
-import { useRouter } from "expo-router";
-import { auth } from "../../firebase/firebaseConfig";
+import { Tabs, useRouter } from "expo-router";
+import React from "react";
+import { Dimensions, StyleSheet, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { auth } from "../../firebase/firebaseConfig";
 
 const { width } = Dimensions.get("window");
-const ACTIVE_COLOR = "#F87720";
+const ACTIVE_COLOR = "#F97316";
 
 export default function TabsLayout() {
   const router = useRouter();
@@ -41,7 +32,7 @@ export default function TabsLayout() {
             tabBarButton: (props) => (
               <TouchableOpacity
                 {...props}
-                android_ripple={{ color: "#F87720" }}
+                android_ripple={{ color: "#F97316" }}
               />
             ),
           }}
@@ -55,13 +46,6 @@ export default function TabsLayout() {
 
           <Tabs.Screen
             name="battle-room"
-            options={{
-              href: null, // removes from tab bar
-            }}
-          />
-
-          <Tabs.Screen
-            name="results-screen"
             options={{
               href: null, // removes from tab bar
             }}

@@ -98,7 +98,7 @@ export default function BattleResultsScreen() {
       <View
         ref={cardRef}
         collapsable={false}
-        className="bg-gray-100 border-4 border-white p-4 rounded-3xl shadow-xl w-full max-w-md"
+        className="bg-custom-gray border-4 border-white p-4 rounded-3xl shadow-xl w-full max-w-md"
         style={{
           shadowColor: "#000",
           shadowOffset: { width: 0, height: 4 },
@@ -164,7 +164,7 @@ export default function BattleResultsScreen() {
             <View
               key={player.userId}
               className={`flex-row justify-between items-center p-4 rounded-lg mb-2 ${
-                player.userId === currentUserId ? "bg-blue-100" : "bg-gray-100"
+                player.userId === currentUserId ? "bg-blue-100" : "bg-custom-gray"
               }`}
             >
               <Text className="text-xl font-bold">

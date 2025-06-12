@@ -105,7 +105,7 @@ export default function LeaderboardScreen() {
               color="#6B7280"
               className="mr-2"
             />
-            <Text className="text-gray-800 text-base font-semibold">
+            <Text className="text-black text-base font-semibold">
               {item.fullName}
             </Text>
           </View>
@@ -162,7 +162,7 @@ export default function LeaderboardScreen() {
                 <FontAwesome name="user" size={24} color="white" />
               </View>
               <FontAwesome name="trophy" size={20} color="#C0C0C0" />
-              <Text className="text-gray-800 font-semibold text-sm mt-1">
+              <Text className="text-black font-semibold text-sm mt-1">
                 {topThree[1].username}
               </Text>
               <Text className="text-gray-600 text-xs">
@@ -178,7 +178,7 @@ export default function LeaderboardScreen() {
                 <FontAwesome name="user" size={28} color="white" />
               </View>
               <FontAwesome name="trophy" size={24} color="#FFD700" />
-              <Text className="text-gray-800 font-bold text-base mt-1">
+              <Text className="text-black font-bold text-base mt-1">
                 {topThree[0].username}
               </Text>
               <Text className="text-primary font-semibold text-sm">
@@ -190,11 +190,11 @@ export default function LeaderboardScreen() {
           {/* Third Place */}
           {topThree[2] && (
             <View className="items-center">
-              <View className="w-16 h-16 rounded-full bg-orange-400 justify-center items-center mb-2">
+              <View className="w-16 h-16 rounded-full bg-primary justify-center items-center mb-2">
                 <FontAwesome name="user" size={24} color="white" />
               </View>
               <FontAwesome name="trophy" size={20} color="#CD7F32" />
-              <Text className="text-gray-800 font-semibold text-sm mt-1">
+              <Text className="text-black font-semibold text-sm mt-1">
                 {topThree[2].username}
               </Text>
               <Text className="text-gray-600 text-xs">
@@ -234,7 +234,7 @@ export default function LeaderboardScreen() {
                       style={{ width: 28, height: 28 }}
                       tintColor={"#FF6B35"}
                     />
-                    <Text className="font-black text-center text-3xl text-purple-800">
+                    <Text className="font-black text-center text-3xl text-custom-purple">
                       Top Quiz Masters
                     </Text>
                   </View>

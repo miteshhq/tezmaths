@@ -1,69 +1,77 @@
-import { useState } from 'react';
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
-import { signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
+import { useState, useEffect } from 'react';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { auth, database } from '../firebase/firebaseConfig';
 import { ref, get, set } from 'firebase/database';
-
-// Required for proper OAuth flow
-WebBrowser.maybeCompleteAuthSession();
 
 export const useSimpleGoogleSignIn = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState < string | null > (null);
+    const [isReady, setIsReady] = useState(false);
 
-    // Simple configuration - just add your client ID
-    const [request, response, promptAsync] = Google.useAuthRequest({
-        // Your web client ID from Firebase
-        webClientId: '416608871397-0da1u3thq1oes30ss5ba7vql8je4rrmq.apps.googleusercontent.com',
+    // Initialize Google Sign-In when hook is created
+    useEffect(() => {
+        const initializeGoogleSignIn = async () => {
+            try {
+                // Configure Google Sign-In
+                GoogleSignin.configure({
+                    webClientId: '416608871397-0da1u3thq1oes30ss5ba7vql8je4rrmq.apps.googleusercontent.com',
+                    offlineAccess: true, // if you want to access Google API on behalf of the user FROM YOUR SERVER
+                });
 
-        // These will be auto-generated if you don't have them
-        // androidClientId: 'your-android-client-id', // Optional
-        // iosClientId: 'your-ios-client-id', // Optional
-    });
+                setIsReady(true);
+                console.log('Google Sign-In configured successfully');
+            } catch (error) {
+                console.error('Failed to configure Google Sign-In:', error);
+                setError('Failed to initialize Google Sign-In');
+            }
+        };
+
+        initializeGoogleSignIn();
+    }, []);
 
     const signInWithGoogle = async () => {
         try {
             setIsLoading(true);
             setError(null);
 
-            console.log('Starting simple Google Sign-In...');
+            console.log('Starting Google Sign-In...');
 
-            // Trigger the authentication flow
-            const result = await promptAsync();
+            // Check if device supports Google Play Services
+            await GoogleSignin.hasPlayServices({
+                showPlayServicesUpdateDialog: true
+            });
 
-            if (result.type === 'cancel') {
-                setError('Sign-in cancelled');
-                return null;
+            // Trigger the sign-in flow
+            const signInResult = await GoogleSignin.signIn();
+            console.log('Google sign-in result:', signInResult);
+
+            // Extract ID token (handling both old and new versions of the library)
+            let idToken = signInResult.data?.idToken;
+            if (!idToken) {
+                // Fallback for older versions of google-signin
+                idToken = (signInResult as any).idToken;
             }
 
-            if (result.type !== 'success') {
-                setError('Sign-in failed. Please try again.');
-                return null;
+            if (!idToken) {
+                throw new Error('No ID token found');
             }
 
-            console.log('Google authentication successful');
+            console.log('ID token received, creating Firebase credential...');
 
-            // Get the ID token from the result
-            const { id_token, access_token } = result.params;
+            // Create a Google credential with the token
+            const googleCredential = GoogleAuthProvider.credential(idToken);
 
-            if (!id_token) {
-                setError('No authentication token received');
-                return null;
-            }
-
-            // Create Firebase credential
-            const credential = GoogleAuthProvider.credential(id_token, access_token);
-
-            // Sign in to Firebase
-            console.log('Signing in to Firebase...');
-            const userCredential = await signInWithCredential(auth, credential);
+            // Sign in to Firebase with the credential
+            const userCredential = await signInWithCredential(auth, googleCredential);
             const firebaseUser = userCredential.user;
 
             if (!firebaseUser) {
                 setError('Firebase authentication failed');
                 return null;
             }
+
+            console.log('Firebase authentication successful');
 
             // Check if user exists in database
             const userRef = ref(database, `users/${firebaseUser.uid}`);
@@ -74,22 +82,25 @@ export const useSimpleGoogleSignIn = () => {
             if (isNewUser) {
                 const newUserData = {
                     fullName: firebaseUser.displayName || '',
+                    username: '', // Will be set during registration
+                    phoneNumber: '', // Will be set during registration
                     email: firebaseUser.email || '',
-                    avatar: 1,
-                    isnewuser: true,
-                    photoURL: firebaseUser.photoURL || '',
-                    providerId: 'google.com',
-                    createdAt: new Date().toISOString(),
+                    avatar: 1, // Default avatar
+                    isnewuser: true, // This matches your register.tsx structure
                     streak: 0,
                     lastCompletionDate: null,
                     highestCompletedLevelCompleted: 0,
                     levelsScores: [],
                     referrals: 0,
                     totalPoints: 0,
+                    // Additional Google-specific fields for reference
+                    photoURL: firebaseUser.photoURL || '',
+                    providerId: 'google.com',
+                    createdAt: new Date().toISOString(),
                 };
 
                 await set(userRef, newUserData);
-                console.log('New user profile created');
+                console.log('New user profile created with Google Sign-In');
             }
 
             console.log('Sign-in completed successfully:', {
@@ -101,15 +112,22 @@ export const useSimpleGoogleSignIn = () => {
             setError(null);
             return { user: firebaseUser, isNewUser };
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('Google Sign-In Error:', error);
 
             let errorMessage = 'Sign-in failed. Please try again.';
 
+            // Handle specific Google Sign-In errors
             if (error.code === 'auth/network-request-failed') {
                 errorMessage = 'Network error. Check your internet connection.';
             } else if (error.code === 'auth/invalid-credential') {
                 errorMessage = 'Authentication failed. Please try again.';
+            } else if (error.code === '12501') {
+                // Google Sign-In was cancelled
+                errorMessage = 'Sign-in cancelled';
+            } else if (error.code === '7') {
+                // Network error
+                errorMessage = 'Network error. Check your internet connection.';
             } else if (error.message) {
                 errorMessage = error.message;
             }
@@ -123,6 +141,8 @@ export const useSimpleGoogleSignIn = () => {
 
     const signOut = async () => {
         try {
+            // Sign out from both Google and Firebase
+            await GoogleSignin.signOut();
             await auth.signOut();
             console.log('Sign out successful');
         } catch (error) {
@@ -135,6 +155,6 @@ export const useSimpleGoogleSignIn = () => {
         signOut,
         isLoading,
         error,
-        isReady: !!request
+        isReady
     };
 };

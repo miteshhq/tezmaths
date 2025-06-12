@@ -1,40 +1,39 @@
 // app/user/profile.tsx
-import React, { useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  RefreshControl,
-  Image,
-  ImageBackground,
-} from "react-native";
-import { auth, database } from "../../firebase/firebaseConfig";
-import {
-  ref,
-  get,
-  update,
-  onValue,
-  query,
-  orderByChild,
-  limitToLast,
-} from "firebase/database";
-import { signOut } from "firebase/auth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
+import { signOut } from "firebase/auth";
+import {
+  get,
+  limitToLast,
+  onValue,
+  orderByChild,
+  query,
+  ref,
+  update,
+} from "firebase/database";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  ImageBackground,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import SoundManager from "../../components/soundManager";
+import { auth, database } from "../../firebase/firebaseConfig";
 
 // Predefined avatar options
 const avatarOptions = [
-  { id: 0, source: require("../../assets/avatars/avatar1.png") },
-  { id: 1, source: require("../../assets/avatars/avatar2.png") },
-  { id: 2, source: require("../../assets/avatars/avatar3.png") },
-  { id: 3, source: require("../../assets/avatars/avatar4.png") },
-  { id: 4, source: require("../../assets/avatars/avatar5.png") },
-  { id: 5, source: require("../../assets/avatars/avatar6.png") },
+  { id: 0, source: require("../../assets/avatars/avatar1.jpg") },
+  { id: 1, source: require("../../assets/avatars/avatar2.jpg") },
+  { id: 2, source: require("../../assets/avatars/avatar3.jpg") },
+  { id: 3, source: require("../../assets/avatars/avatar4.jpg") },
+  { id: 4, source: require("../../assets/avatars/avatar5.jpg") },
+  { id: 5, source: require("../../assets/avatars/avatar6.jpg") },
 ];
 
 export default function ProfileScreen() {
@@ -299,7 +298,7 @@ export default function ProfileScreen() {
                 </View>
                 <View>
                   <View className="flex flex-row items-center gap-2">
-                    <Text className="text-2xl font-black text-purple-800 w-fit">
+                    <Text className="text-2xl font-black text-custom-purple w-fit">
                       {userData.fullName}
                     </Text>
                     <TouchableOpacity onPress={handleEditProfile}>
@@ -330,29 +329,29 @@ export default function ProfileScreen() {
 
         {/* Stats Section */}
         <View className="border border-primary rounded-xl">
-          <Text className="text-purple-800 text-xl w-full text-center font-black py-2 border-b border-primary">
+          <Text className="text-custom-purple text-xl w-full text-center font-black py-2 border-b border-primary">
             Your Stats
           </Text>
           <View className="flex-row justify-between p-4">
             <View className="items-center">
-              <Text className="text-2xl font-black text-purple-800">
+              <Text className="text-2xl font-black text-custom-purple">
                 {userData.totalPoints % 1 !== 0
                   ? Math.round(userData.totalPoints * 10) / 10
                   : userData.totalPoints || 0}
               </Text>
-              <Text className="text-purple-800 text-lg">Score</Text>
+              <Text className="text-custom-purple text-lg">Score</Text>
             </View>
             <View className="items-center">
-              <Text className="text-2xl font-black text-purple-800">
+              <Text className="text-2xl font-black text-custom-purple">
                 0{userData.currentLevel - 1}
               </Text>
-              <Text className="text-purple-800 text-lg">Levels</Text>
+              <Text className="text-custom-purple text-lg">Levels</Text>
             </View>
             <View className="items-center">
-              <Text className="text-2xl font-black text-purple-800">
+              <Text className="text-2xl font-black text-custom-purple">
                 #{userRank > 0 ? userRank : "—"}
               </Text>
-              <Text className="text-purple-800 text-lg">Ranking</Text>
+              <Text className="text-custom-purple text-lg">Ranking</Text>
             </View>
           </View>
         </View>

@@ -496,7 +496,7 @@ export default function HomeScreen() {
   // Show loading screen if initial load
   if (loading) {
     return (
-      <View className="flex-1 bg-gray-50 justify-center items-center">
+      <View className="flex-1 bg-custom-gray justify-center items-center">
         <ActivityIndicator size="large" color="#FF6B35" />
         <Text className="text-white mt-4">Loading your data...</Text>
       </View>
@@ -541,7 +541,7 @@ export default function HomeScreen() {
       {/* Welcome Section */}
       <View className="px-4 py-4">
         <View className="flex-row justify-center items-center">
-          <Text className="text-purple-800 text-3xl mt-4 font-black">
+          <Text className="text-custom-purple text-3xl mt-4 font-black">
             Let's Practice Today!
           </Text>
         </View>
@@ -558,10 +558,10 @@ export default function HomeScreen() {
             />
 
             <View className="flex flex-col items-center gap-1">
-              <Text className="text-2xl text-purple-800 font-black">
+              <Text className="text-2xl text-custom-purple font-black">
                 Quiz Time
               </Text>
-              <Text className="text-sm text-center text-purple-800">
+              <Text className="text-sm text-center text-custom-purple">
                 Test your maths skills with our interactive quizzes!
               </Text>
             </View>
@@ -592,10 +592,10 @@ export default function HomeScreen() {
             />
 
             <View className="flex flex-col items-center gap-1">
-              <Text className="text-2xl text-purple-800 font-black">
+              <Text className="text-2xl text-custom-purple font-black">
                 Battle With Friends
               </Text>
-              <Text className="text-sm text-center text-purple-800">
+              <Text className="text-sm text-center text-custom-purple">
                 Challenge friends to real-time maths battles!
               </Text>
             </View>
@@ -624,7 +624,7 @@ export default function HomeScreen() {
           className="items-center"
           onPress={() => setShowStreakPopup(true)}
         >
-          <View className="bg-gray-100 rounded-full w-16 h-16 flex justify-center items-center mb-2">
+          <View className="bg-custom-gray rounded-full w-16 h-16 flex justify-center items-center mb-2">
             <Text className="text-2xl">🔥</Text>
           </View>
           <Text className="text-sm">Streak</Text>
@@ -632,7 +632,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
 
         <View className="items-center">
-          <View className="bg-gray-100 rounded-full w-16 h-16 flex justify-center items-center mb-2">
+          <View className="bg-custom-gray rounded-full w-16 h-16 flex justify-center items-center mb-2">
             <Text className="text-2xl">💎</Text>
           </View>
           <Text className="text-sm">Points</Text>
@@ -640,7 +640,7 @@ export default function HomeScreen() {
         </View>
 
         <View className="items-center">
-          <View className="bg-gray-100 rounded-full w-16 h-16 flex justify-center items-center mb-2">
+          <View className="bg-custom-gray rounded-full w-16 h-16 flex justify-center items-center mb-2">
             <Text className="text-2xl">👥</Text>
           </View>
           <Text className="text-sm">Referrals</Text>

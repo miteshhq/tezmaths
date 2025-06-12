@@ -178,7 +178,7 @@ export default function LevelSelect() {
         </ImageBackground>
 
         <View className="relative py-12">
-          <View className="absolute w-2 left-1/2 top-12 -translate-x-0.5 bg-gray-800 h-full"></View>
+          <View className="absolute w-2 left-1/2 top-12 -translate-x-0.5 bg-black h-full"></View>
 
           {/* Continue Button */}
           <View className="px-6 mb-8">
@@ -195,7 +195,7 @@ export default function LevelSelect() {
           {/* Select Level Section */}
           <View className="items-center mb-8">
             <View className="border-4 border-black rounded-full w-40 h-40 justify-center items-center bg-white">
-              <Text className="text-white bg-gray-900 rounded-xl px-4 py-2 text-lg font-bold text-center">
+              <Text className="text-white bg-black rounded-xl px-4 py-2 text-lg font-bold text-center">
                 Select Level
               </Text>
             </View>

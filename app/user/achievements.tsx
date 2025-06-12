@@ -1,18 +1,17 @@
 // app/achievements/index.tsx
+import { FontAwesome } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { onValue, ref } from "firebase/database";
 import React, { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  TouchableOpacity,
   ActivityIndicator,
-  ScrollView,
-  ImageBackground,
   Image,
+  ImageBackground,
+  ScrollView,
+  Text,
+  View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { FontAwesome } from "@expo/vector-icons";
 import { auth, database } from "../../firebase/firebaseConfig";
-import { ref, onValue } from "firebase/database";
 
 // Define achievement requirements - mix of levels and scores
 const ACHIEVEMENTS = [
@@ -74,7 +73,7 @@ export default function Achievements() {
   if (loading) {
     return (
       <View className="flex-1 bg-[#FFF2CC] items-center justify-center">
-        <ActivityIndicator size="large" color="#F87720" />
+        <ActivityIndicator size="large" color="#F97316" />
       </View>
     );
   }
@@ -99,8 +98,8 @@ export default function Achievements() {
       </ImageBackground>
 
       {/* User Stats Summary */}
-      <View className="bg-pink-50 mx-4 my-4 p-6 rounded-2xl">
-        <Text className="text-2xl font-black text-purple-800 text-center mb-4">
+      <View className="bg-light-orange mx-4 my-4 p-6 rounded-2xl">
+        <Text className="text-2xl font-black text-custom-purple text-center mb-4">
           Your Progress
         </Text>
         <View className="flex-row justify-between">
@@ -146,7 +145,9 @@ export default function Achievements() {
             <View
               key={achievement.id}
               className={`flex-row items-center gap-4 p-6 mb-4 rounded-2xl ${
-                isCompleted ? "bg-white border border-primary" : "bg-pink-50"
+                isCompleted
+                  ? "bg-white border border-primary"
+                  : "bg-light-orange"
               }`}
             >
               <View className="ml-4 flex-1">

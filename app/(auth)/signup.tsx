@@ -1,6 +1,6 @@
 // app/signup.tsx
-import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { get, ref } from "firebase/database"; // ADD THIS LINE
 import React, { useCallback, useState } from "react";
@@ -16,8 +16,8 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import { useSimpleGoogleSignIn } from "../../utils/useGoogleSignIn";
 import { auth, database } from "../../firebase/firebaseConfig"; // ADD database import
+import { useSimpleGoogleSignIn } from "../../utils/useGoogleSignIn";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 6;
@@ -264,7 +264,7 @@ export default function SignUpScreen() {
           </TouchableOpacity>
 
           <View className="flex-row mb-8 items-center">
-            <Text className="text-gray-800 text-base font-bold font-['Poppins-Regular']">
+            <Text className="text-black text-base font-bold font-['Poppins-Regular']">
               Already have an account?
             </Text>
             <TouchableOpacity onPress={navigateToLogin} activeOpacity={0.7}>
@@ -275,7 +275,7 @@ export default function SignUpScreen() {
             </TouchableOpacity>
           </View>
 
-          <Text className="text-gray-800 text-sm font-black font-['Poppins-Regular'] mb-4 text-center">
+          <Text className="text-black text-sm font-black font-['Poppins-Regular'] mb-4 text-center">
             OR
           </Text>
 
@@ -293,7 +293,7 @@ export default function SignUpScreen() {
                 source={require("../../assets/icons/google.png")}
                 style={{ width: 18, height: 18 }}
               />
-              <Text className="text-gray-800 text-lg font-bold font-['Poppins-Regular']">
+              <Text className="text-black text-lg font-bold font-['Poppins-Regular']">
                 {isLoading ? "Signing in..." : "Sign in with Google"}
               </Text>
             </View>

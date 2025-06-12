@@ -15,7 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../firebase/firebaseConfig";
 
 const { width } = Dimensions.get("window");
-const ACTIVE_COLOR = "#F87720";
+const ACTIVE_COLOR = "#F97316";
 
 export default function AdminTabsLayout() {
   const router = useRouter();
@@ -114,7 +114,7 @@ export default function AdminTabsLayout() {
 
   if (loading && !authChecked) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
+      <SafeAreaView className="flex-1 bg-custom-gray">
         <View className="flex-1 justify-center items-center">
           <ActivityIndicator size="large" color={ACTIVE_COLOR} />
           <Text className="text-gray-600 mt-4">Checking authentication...</Text>
@@ -125,7 +125,7 @@ export default function AdminTabsLayout() {
 
   if (loading && currentUser) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
+      <SafeAreaView className="flex-1 bg-custom-gray">
         <View className="flex-1 justify-center items-center">
           <ActivityIndicator size="large" color={ACTIVE_COLOR} />
           <Text className="text-gray-600 mt-4">Verifying admin access...</Text>
@@ -139,7 +139,7 @@ export default function AdminTabsLayout() {
 
   if (!currentUser) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
+      <SafeAreaView className="flex-1 bg-custom-gray">
         <View className="flex-1 justify-center items-center p-4">
           <Text className="text-xl font-bold text-red-600 mb-4">
             Authentication Required
@@ -148,7 +148,7 @@ export default function AdminTabsLayout() {
             Please log in to access the admin panel.
           </Text>
           <TouchableOpacity
-            className="bg-orange-500 px-6 py-3 rounded-lg"
+            className="bg-primary px-6 py-3 rounded-lg"
             onPress={() => router.replace("/login")}
           >
             <Text className="text-white font-bold">Go to Login</Text>
@@ -160,7 +160,7 @@ export default function AdminTabsLayout() {
 
   if (!isAdmin) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
+      <SafeAreaView className="flex-1 bg-custom-gray">
         <View className="flex-1 justify-center items-center p-4">
           <Text className="text-xl font-bold text-red-600 mb-4">
             Access Denied
@@ -173,13 +173,13 @@ export default function AdminTabsLayout() {
           </Text>
           <View className="flex-row gap-3">
             <TouchableOpacity
-              className="bg-gray-500 px-6 py-3 rounded-lg"
+              className="bg-custom-gray0 px-6 py-3 rounded-lg"
               onPress={handleLogout}
             >
               <Text className="text-white font-bold">Logout</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              className="bg-orange-500 px-6 py-3 rounded-lg"
+              className="bg-primary px-6 py-3 rounded-lg"
               onPress={() => checkAdminStatus(currentUser)}
             >
               <Text className="text-white font-bold">Retry</Text>

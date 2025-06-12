@@ -10,14 +10,14 @@ import {
   AppState,
   BackHandler,
   Easing,
+  Image,
+  ImageBackground,
   KeyboardAvoidingView,
   Platform,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  Image,
-  ImageBackground,
 } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { auth, database } from "../../firebase/firebaseConfig";
@@ -887,14 +887,14 @@ export default function QuizScreen() {
         }}
         className="bg-white overflow-hidden rounded-2xl border border-black"
       >
-        <Text className="text-3xl font-black bg-pink-50 px-2 py-6 text-purple-800 text-center">
+        <Text className="text-3xl font-black bg-light-orange px-2 py-6 text-custom-purple text-center">
           What is {question.questionText} ?
         </Text>
 
         <View className="p-10">
           <TextInput
             ref={inputRef}
-            className={`bg-gray-50 p-4 rounded-xl text-xl text-center border ${
+            className={`bg-custom-gray p-4 rounded-xl text-xl text-center border ${
               isAnswerWrong ? "border-red-500" : "border-gray-100"
             } ${isProcessing ? "opacity-50" : ""}`}
             value={userAnswer}
@@ -927,13 +927,13 @@ export default function QuizScreen() {
 
     return (
       <View className="bg-white border border-black p-0 rounded-2xl mt-4 overflow-hidden">
-        <View className="flex-row items-center mb-2 p-4 border-b bg-red-50">
+        <View className="flex-row items-center mb-2 p-4 border-b bg-light-orange">
           <Text className="text-red-600 font-bold text-lg text-center w-full">
             {isTimeOut ? "⏰ Time's Up!" : "❌ Incorrect"}
           </Text>
         </View>
         <View className="flex flex-col items-center gap-2 p-4">
-          <Text className="text-purple-800 text-3xl">
+          <Text className="text-custom-purple text-3xl">
             <Text className="font-black">Explanation</Text>
           </Text>
           {question.explanation && (
@@ -1001,7 +1001,7 @@ export default function QuizScreen() {
               size={70}
               progress={(currentQuestionIndex + 1) / questions.length}
               strokeWidth={8}
-              color="#F87720"
+              color="#F97316"
               text={`${currentQuestionIndex + 1}/${questions.length}`}
             />
           </View>
