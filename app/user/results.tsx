@@ -15,7 +15,7 @@ const shareConfig = {
   additionalText: "Check out my math quiz results! 🧠✨",
   appStoreLink: "https://apps.apple.com/app/tezmaths/id123456789", // Replace with actual App Store link
   playStoreLink:
-    "https://play.google.com/store/apps/details?id=com.tezmaths.app", // Replace with actual Play Store link
+    "https://play.google.com/store/apps/details?id=com.tezmathsteam.tezmaths", // Replace with actual Play Store link
   downloadText: "Download TezMaths now and challenge yourself!",
   hashtags: "#TezMaths #MathQuiz #BrainTraining #Education",
 };

@@ -50,7 +50,7 @@ export const useSimpleGoogleSignIn = () => {
             let idToken = signInResult.data?.idToken;
             if (!idToken) {
                 // Fallback for older versions of google-signin
-                idToken = (signInResult as any).idToken;
+                idToken = (signInResult).idToken;
             }
 
             if (!idToken) {
@@ -112,7 +112,7 @@ export const useSimpleGoogleSignIn = () => {
             setError(null);
             return { user: firebaseUser, isNewUser };
 
-        } catch (error: any) {
+        } catch (error) {
             console.error('Google Sign-In Error:', error);
 
             let errorMessage = 'Sign-in failed. Please try again.';

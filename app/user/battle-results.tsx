@@ -10,13 +10,12 @@ import {
   Platform,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
-import { captureRef } from "react-native-view-shot";
 
 const shareConfig = {
   additionalText: "Check out my battle results on TezMaths! ⚔️✨",
   appStoreLink: "https://apps.apple.com/app/tezmaths/id123456789", // Replace with actual link
   playStoreLink:
-    "https://play.google.com/store/apps/details?id=com.tezmaths.app", // Replace with actual link
+    "https://play.google.com/store/apps/details?id=com.tezmathsteam.tezmaths", // Replace with actual link
   downloadText: "Join the battle on TezMaths now!",
   hashtags: "#TezMaths #MathBattle #BrainTraining",
 };
@@ -107,8 +106,8 @@ export default function BattleResultsScreen() {
           elevation: 8,
         }}
       >
-        <Text className="text-3xl font-black text-primary text-center mb-6">
-          Battle Results
+        <Text className="text-3xl font-bold text-black text-center mb-6">
+          Battle With Friends
         </Text>
 
         <View className="mb-6">
@@ -159,12 +158,22 @@ export default function BattleResultsScreen() {
           )}
         </View>
 
+        {otherPlayers.length > 0 && (
+          <View
+            className={`flex-row justify-between items-center p-4 rounded-lg mb-2 bg-light-orange`}
+          >
+            <Text className="text-2xl text-black font-bold">Battle Score</Text>
+          </View>
+        )}
+
         <ScrollView className="w-full max-w-md mb-4">
           {otherPlayers.map((player, index) => (
             <View
               key={player.userId}
-              className={`flex-row justify-between items-center p-4 rounded-lg mb-2 ${
-                player.userId === currentUserId ? "bg-blue-100" : "bg-custom-gray"
+              className={`flex-row justify-between items-center p-4 rounded-lg mb-2 bg-light-orange ${
+                player.userId === currentUserId
+                  ? "border border-primary"
+                  : "border-none"
               }`}
             >
               <Text className="text-xl font-bold">
@@ -175,6 +184,20 @@ export default function BattleResultsScreen() {
             </View>
           ))}
         </ScrollView>
+
+        <Text className="text-3xl mt-2 mb-2 font-black text-center text-white p-2 bg-primary rounded-xl">
+          Download Now
+        </Text>
+
+        <View className="items-center mb-8">
+          <Text className="text-xl font-bold text-center text-black mb-2">
+            TezMaths
+          </Text>
+
+          <Text className="text-black text-center">
+            Sharpen your speed, master your math!
+          </Text>
+        </View>
       </View>
 
       <View className="flex-row justify-between mt-6 w-full max-w-md">
