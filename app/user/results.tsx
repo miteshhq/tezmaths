@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import logo from "../../assets/branding/tezmaths-full-logo.png";
 
 const shareConfig = {
   additionalText: "Check out my math quiz results! 🧠✨",
@@ -212,31 +213,12 @@ export default function ResultsScreen() {
           Score: {quizScore}
         </Text>
 
-        {/* Performance */}
-        {/* <View className="flex-row justify-between mb-6">
-          <View className="items-center">
-            <Text className="text-gray-700">Correct</Text>
-            <Text className="text-2xl font-bold text-green-600">
-              {correctAnswers}/{totalQuestions}
-            </Text>
-          </View>
-
-          <View className="items-center">
-            <Text className="text-gray-700">Accuracy</Text>
-            <Text className="text-2xl font-bold text-custom-purple">
-              {percentage}%
-            </Text>
-          </View>
-        </View> */}
-
         <Text className="text-3xl mt-2 mb-2 font-black text-center text-white p-2 bg-primary rounded-xl">
           Download Now
         </Text>
 
-        <View className="items-center mb-8">
-          <Text className="text-xl font-bold text-center text-black mb-2">
-            TezMaths
-          </Text>
+        <View className="items-center mb-8 mt-3">
+          <Image source={logo} style={{ height: 30, width: 140 }} />
 
           <Text className="text-black text-center">
             Sharpen your speed, master your math!
@@ -267,9 +249,25 @@ export default function ResultsScreen() {
           </View>
         </TouchableOpacity>
 
+        <TouchableOpacity
+          className={`py-3 px-6 flex-1 ml-2 border border-black rounded-full`}
+          onPress={handleShare}
+        >
+          <View className="flex flex-row items-center justify-center gap-2">
+            <Text className="font-black text-2xl text-center">Share</Text>
+            <Image
+              source={require("../../assets/icons/share.png")}
+              style={{ width: 20, height: 20 }}
+              tintColor={"#FF6B35"}
+            />
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      <View className="flex-row justify-between mt-6 w-full max-w-md">
         {isPassed && currentLevel < 6 && (
           <TouchableOpacity
-            className={`py-3 px-6 flex-1 ml-2 border border-black rounded-full`}
+            className={`py-3 px-6 flex-1 w-full ml-2 border border-black rounded-full`}
             onPress={handleNextLevel}
           >
             <View className="flex flex-row items-center justify-center gap-2">
@@ -284,20 +282,6 @@ export default function ResultsScreen() {
             </View>
           </TouchableOpacity>
         )}
-
-        <TouchableOpacity
-          className={`py-3 px-6 flex-1 ml-2 border border-black rounded-full`}
-          onPress={handleShare}
-        >
-          <View className="flex flex-row items-center justify-center gap-2">
-            <Text className="font-black text-2xl text-center">Share</Text>
-            <Image
-              source={require("../../assets/icons/share.png")}
-              style={{ width: 20, height: 20 }}
-              tintColor={"#FF6B35"}
-            />
-          </View>
-        </TouchableOpacity>
       </View>
 
       {/* Watermark */}

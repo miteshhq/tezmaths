@@ -10,10 +10,11 @@
     }
   },
   "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts",
-    "nativewind-env.d.ts"
-, "hooks/useGoogleSignIn.js"  ]
+        "**/*.ts",
+        "**/*.tsx",
+        ".expo/types/**/*.ts",
+        "expo-env.d.ts",
+        "nativewind-env.d.ts",
+        "utils/useGoogleSignIn.js"
+    ]
 }

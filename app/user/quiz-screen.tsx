@@ -1,4 +1,3 @@
-// app/user/quiz-screen.tsx
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -128,6 +127,8 @@ export default function QuizScreen() {
   const [networkError, setNetworkError] = useState(false);
   const [isScreenFocused, setIsScreenFocused] = useState(true);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+
+  const [maxDisplayQuestions, setMaxDisplayQuestions] = useState(20);
 
   // Refs
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -291,7 +292,6 @@ export default function QuizScreen() {
     }
   }, []);
 
-  // Load questions from Firebase with caching
   const loadQuestions = useCallback(async () => {
     try {
       setNetworkError(false);
@@ -302,9 +302,9 @@ export default function QuizScreen() {
       // Check cache first
       const cacheKey = `quiz-level-${currentLevel}`;
       const cachedQuestions = await AsyncStorage.getItem(cacheKey);
+
       if (cachedQuestions) {
-        const parsed = JSON.parse(cachedQuestions);
-        setQuestions(parsed);
+        setQuestions(JSON.parse(cachedQuestions));
         setLoading(false);
         return;
       }
@@ -312,11 +312,24 @@ export default function QuizScreen() {
       const quizzesRef = ref(database, "quizzes");
       const snapshot = await get(quizzesRef);
 
-      if (!snapshot.exists()) {
-        throw new Error("No quizzes found");
-      }
+      if (!snapshot.exists()) throw new Error("No quizzes found");
 
+      let maxDisplayQuestions = 20; // Default value
       const levelQuizzes: Question[] = [];
+
+      // First pass: Find maxDisplayQuestions value
+      snapshot.forEach((childSnapshot) => {
+        const quiz = childSnapshot.val();
+        if (
+          quiz.level === currentLevel &&
+          typeof quiz.maxDisplayQuestions === "number"
+        ) {
+          maxDisplayQuestions = Math.max(1, quiz.maxDisplayQuestions);
+          setMaxDisplayQuestions(maxDisplayQuestions);
+        }
+      });
+
+      // Second pass: Collect questions
       snapshot.forEach((childSnapshot) => {
         const quiz = childSnapshot.val();
         if (quiz.level === currentLevel && quiz.questions) {
@@ -326,7 +339,7 @@ export default function QuizScreen() {
               questionText: q.questionText,
               correctAnswer: q.correctAnswer.toString(),
               explanation: q.explanation || "",
-              point: currentLevel * 20,
+              //   point: currentLevel * 20,
               timeLimit: QUIZ_TIME_LIMIT,
             });
           });
@@ -340,9 +353,14 @@ export default function QuizScreen() {
         return;
       }
 
-      const shuffled = levelQuizzes.sort(() => Math.random() - 0.5);
-      setQuestions(shuffled);
-      await AsyncStorage.setItem(cacheKey, JSON.stringify(shuffled));
+      // Apply maxDisplayQuestions - FIXED: Shuffle and select random questions
+      const questionCount = Math.min(maxDisplayQuestions, levelQuizzes.length);
+      const selectedQuestions = levelQuizzes
+        .sort(() => Math.random() - 0.5)
+        .slice(0, questionCount);
+
+      setQuestions(selectedQuestions);
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(selectedQuestions));
     } catch (error) {
       console.error("Error loading questions:", error);
       setNetworkError(true);
@@ -538,8 +556,8 @@ export default function QuizScreen() {
           Haptics.NotificationFeedbackType.Success
         );
 
-        // Calculate fixed points per question based on level
-        const pointsPerQuestion = Math.floor(currentQ.point / questions.length);
+        // FIXED: Each correct answer adds points equal to level number
+        const pointsPerQuestion = currentLevel;
         setQuizScore((prev) => prev + pointsPerQuestion);
         setCorrectAnswers((prev) => prev + 1);
         setIsAnswerWrong(false);
@@ -572,6 +590,15 @@ export default function QuizScreen() {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
 
         setIsAnswerWrong(true);
+        setShowExplanation(true);
+        setIsProcessing(false); // Allow user to click continue
+
+        // Auto-advance after explanation time
+        explanationTimeoutRef.current = setTimeout(() => {
+          if (isMountedRef.current && isScreenFocused) {
+            handleNextAfterExplanation();
+          }
+        }, EXPLANATION_DISPLAY_TIME);
         handleLevelCompletion();
       }
     },
@@ -588,17 +615,16 @@ export default function QuizScreen() {
 
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
 
-    // setIsTimeOut(true);
-    // setShowExplanation(true);
-    // setIsProcessing(false); // Allow user to click continue
-
-    // explanationTimeoutRef.current = setTimeout(() => {
-    //   if (isMountedRef.current && isScreenFocused) {
-    //     handleNextAfterExplanation();
-    //   }
-    // }, EXPLANATION_DISPLAY_TIME);
-
     setIsTimeOut(true);
+    setShowExplanation(true);
+    setIsProcessing(false);
+
+    explanationTimeoutRef.current = setTimeout(() => {
+      if (isMountedRef.current && isScreenFocused) {
+        handleNextAfterExplanation();
+      }
+    }, EXPLANATION_DISPLAY_TIME);
+
     handleLevelCompletion(); // End quiz immediately on timeout
   }, [isQuizActive, isProcessing, isScreenFocused, stopTimer, showExplanation]);
 
@@ -656,73 +682,77 @@ export default function QuizScreen() {
     });
   }, [isScreenFocused, currentQuestionIndex, questions.length]);
 
-  const updateUserProgress = useCallback(async () => {
-    const userId = auth.currentUser?.uid;
-    if (!userId) {
-      //   console.log("User not authenticated");
-      return;
-    }
-
-    try {
-      const userRef = ref(database, `users/${userId}`);
-      const snapshot = await get(userRef);
-      const userData = snapshot.val() || {};
-
-      const newPoints = (userData.totalPoints || 0) + quizScore;
-
-      // Update streak
-      const today = new Date().toISOString().split("T")[0];
-      const lastDate = userData.lastCompletionDate;
-      const currentStreak = userData.streak || 0;
-      let newStreak = 1;
-
-      if (lastDate === today) {
-        newStreak = currentStreak;
-      } else if (lastDate && isConsecutiveDay(lastDate, today)) {
-        newStreak = currentStreak + 1;
+  const updateUserProgress = useCallback(
+    async (totalScore: number) => {
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        //   console.log("User not authenticated");
+        return;
       }
 
-      await update(userRef, {
-        totalPoints: newPoints,
-        streak: newStreak,
-        lastCompletionDate: today,
-      });
+      try {
+        const userRef = ref(database, `users/${userId}`);
+        const snapshot = await get(userRef);
+        const userData = snapshot.val() || {};
 
-      await AsyncStorage.setItem("totalPoints", newPoints.toString());
-      await AsyncStorage.setItem("streak", newStreak.toString());
+        const newPoints = (userData.totalPoints || 0) + totalScore;
 
-      // Calculate pass threshold
-      const passThreshold = Math.ceil(questions.length * 0.7);
-      const isPassed = correctAnswers >= passThreshold;
+        // Update streak
+        const today = new Date().toISOString().split("T")[0];
+        const lastDate = userData.lastCompletionDate;
+        const currentStreak = userData.streak || 0;
+        let newStreak = 1;
 
-      // Only update progress if user passed
-      if (isPassed) {
-        // Only update level if this was current level
-        const shouldUpdateLevel = currentLevel === (userData.currentLevel || 1);
-        const newLevel = shouldUpdateLevel
-          ? Math.min(currentLevel + 1, 6)
-          : userData.currentLevel || 1;
+        if (lastDate === today) {
+          newStreak = currentStreak;
+        } else if (lastDate && isConsecutiveDay(lastDate, today)) {
+          newStreak = currentStreak + 1;
+        }
 
         await update(userRef, {
-          ...(shouldUpdateLevel && { currentLevel: newLevel }),
-          [`completedLevels/${currentLevel}`]: true,
+          totalPoints: newPoints,
+          streak: newStreak,
+          lastCompletionDate: today,
         });
 
-        if (shouldUpdateLevel) {
-          await AsyncStorage.setItem("currentLevel", newLevel.toString());
-        }
-      }
+        await AsyncStorage.setItem("totalPoints", newPoints.toString());
+        await AsyncStorage.setItem("streak", newStreak.toString());
 
-      return isPassed;
-    } catch (error) {
-      console.error("Error updating user progress:", error);
-      Alert.alert(
-        "Error",
-        "Failed to save progress. Please check your connection."
-      );
-      return false;
-    }
-  }, [quizScore, currentLevel, correctAnswers, questions.length]);
+        // Calculate pass threshold
+        const passThreshold = Math.ceil(questions.length * 0.7);
+        const isPassed = correctAnswers >= passThreshold;
+
+        // Only update progress if user passed
+        if (isPassed) {
+          // Only update level if this was current level
+          const shouldUpdateLevel =
+            currentLevel === (userData.currentLevel || 1);
+          const newLevel = shouldUpdateLevel
+            ? Math.min(currentLevel + 1, 6)
+            : userData.currentLevel || 1;
+
+          await update(userRef, {
+            ...(shouldUpdateLevel && { currentLevel: newLevel }),
+            [`completedLevels/${currentLevel}`]: true,
+          });
+
+          if (shouldUpdateLevel) {
+            await AsyncStorage.setItem("currentLevel", newLevel.toString());
+          }
+        }
+
+        return isPassed;
+      } catch (error) {
+        console.error("Error updating user progress:", error);
+        Alert.alert(
+          "Error",
+          "Failed to save progress. Please check your connection."
+        );
+        return false;
+      }
+    },
+    [currentLevel, questions.length]
+  );
 
   // Check consecutive days
   const isConsecutiveDay = (lastDate: string, today: string) => {
@@ -736,9 +766,12 @@ export default function QuizScreen() {
     // Prevent multiple calls
     if (!isQuizActive) return;
 
+    // FIXED: Calculate total score correctly
+    const totalScore = quizScore;
+
     console.log(
       "Completing quiz with score:",
-      quizScore,
+      totalScore,
       "correct:",
       correctAnswers
     );
@@ -747,14 +780,14 @@ export default function QuizScreen() {
     cleanupQuiz(); // Clean up all timers and processes
 
     try {
-      const isPassed = await updateUserProgress();
+      const isPassed = await updateUserProgress(totalScore);
 
       // Small delay to ensure cleanup is complete
       setTimeout(() => {
         router.push({
           pathname: "/user/results",
           params: {
-            quizScore: quizScore.toString(),
+            quizScore: totalScore.toString(),
             correctAnswers: correctAnswers.toString(),
             totalQuestions: questions.length.toString(),
             currentLevel: currentLevel.toString(),
@@ -828,6 +861,11 @@ export default function QuizScreen() {
     return () => backHandler.remove();
   }, [isQuizActive, isScreenFocused]);
 
+  useEffect(() => {
+    // whenever we move to a new question, make sure it starts fully visible
+    questionTransition.setValue(1);
+  }, [currentQuestionIndex]);
+
   // Get timer color
   const getTimerColor = () => {
     const percentage = timeLeft / QUIZ_TIME_LIMIT;
@@ -881,6 +919,7 @@ export default function QuizScreen() {
 
     return (
       <Animated.View
+        key={currentQuestionIndex}
         style={{
           opacity: questionTransition,
           transform: [{ scale: questionTransition }], // Optional: add scale for smoother transition
@@ -970,6 +1009,7 @@ export default function QuizScreen() {
             </Text>
             <View className="flex-row items-center gap-4">
               <View className="flex-row items-center bg-primary px-3 py-1 rounded-full">
+                {/* FIXED: Display correct score */}
                 <Text className="text-white text-sm font-black">
                   {quizScore} pts
                 </Text>
@@ -999,10 +1039,10 @@ export default function QuizScreen() {
           <View className="items-center">
             <CircularProgress
               size={70}
-              progress={(currentQuestionIndex + 1) / questions.length}
               strokeWidth={8}
               color="#F97316"
-              text={`${currentQuestionIndex + 1}/${questions.length}`}
+              progress={(currentQuestionIndex + 1) / maxDisplayQuestions}
+              text={`${currentQuestionIndex + 1}/${maxDisplayQuestions}`}
             />
           </View>
 

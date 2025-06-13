@@ -10,6 +10,7 @@ import {
   Platform,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
+import logo from "../../assets/branding/tezmaths-full-logo.png";
 
 const shareConfig = {
   additionalText: "Check out my battle results on TezMaths! ⚔️✨",
@@ -189,10 +190,8 @@ export default function BattleResultsScreen() {
           Download Now
         </Text>
 
-        <View className="items-center mb-8">
-          <Text className="text-xl font-bold text-center text-black mb-2">
-            TezMaths
-          </Text>
+        <View className="items-center mb-8 mt-3">
+          <Image source={logo} style={{ height: 30, width: 140 }} />
 
           <Text className="text-black text-center">
             Sharpen your speed, master your math!

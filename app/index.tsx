@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import "@react-native-google-signin/google-signin";
+// import "@react-native-google-signin/google-signin";
 import { useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useState } from "react";
@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import welcomeImage from "../assets/welcome-image.png";
+import welcomeImage from "../assets/branding/png-logo.png";
 import { auth } from "../firebase/firebaseConfig";
 
 export default function WelcomeScreen() {

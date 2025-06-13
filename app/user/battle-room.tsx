@@ -97,7 +97,7 @@ export default function BattleRoom() {
         const unsubscribe = battleManager.listenToRoom(roomId, (roomData) => {
           if (!isMounted || navigationRef.current) return;
 
-          console.log("Room data updated:", roomData);
+        //   console.log("Room data updated:", roomData);
 
           if (!roomData) {
             Alert.alert("Room Closed", "The battle room has been closed", [
@@ -119,7 +119,7 @@ export default function BattleRoom() {
             roomData.questions.length > 0 &&
             roomData.currentQuestion !== undefined
           ) {
-            console.log("Battle is starting, navigating to battle screen");
+            // console.log("Battle is starting, navigating to battle screen");
             safeNavigate(
               `/user/battle-screen?roomId=${roomId}&question=${roomData.currentQuestion}`
             );

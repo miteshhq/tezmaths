@@ -727,7 +727,8 @@ export class BattleManager {
                 lastActivity: serverTimestamp()
             });
 
-            console.log("Battle ended successfully");
+            // immediately clear the room data to prevent garbage storage
+            await remove(ref(database, `rooms/${roomId}`));
         } catch (error) {
             console.error("End battle error:", error);
             throw error;

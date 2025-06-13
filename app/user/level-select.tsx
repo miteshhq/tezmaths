@@ -25,7 +25,7 @@ export default function LevelSelect() {
   const [currentLevel, setCurrentLevel] = useState(1);
   const [completedLevels, setCompletedLevels] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
-  const [maxLevel] = useState(6); // You can make this dynamic if needed
+  const [availableLevels, setAvailableLevels] = useState<number[]>([]);
 
   // Back handler setup
   useFocusEffect(
@@ -42,6 +42,54 @@ export default function LevelSelect() {
     }, [router])
   );
 
+  // Load available levels from Firebase
+  const loadAvailableLevels = useCallback(async () => {
+    try {
+      const quizzesRef = ref(database, "quizzes");
+      const snapshot = await get(quizzesRef);
+
+      if (!snapshot.exists()) {
+        console.log("No quizzes found in database");
+        return [];
+      }
+
+      const levelsSet = new Set<number>();
+
+      snapshot.forEach((childSnapshot) => {
+        const quiz = childSnapshot.val();
+        if (quiz.level && typeof quiz.level === "number") {
+          levelsSet.add(quiz.level);
+        }
+      });
+
+      // Convert to sorted array and find continuous sequence
+      const allLevels = Array.from(levelsSet).sort((a, b) => a - b);
+
+      if (allLevels.length === 0) {
+        return [];
+      }
+
+      // Find continuous sequence starting from 1
+      const continuousLevels: number[] = [];
+      let expectedLevel = 1;
+
+      for (const level of allLevels) {
+        if (level === expectedLevel) {
+          continuousLevels.push(level);
+          expectedLevel++;
+        } else if (level > expectedLevel) {
+          // Gap found, stop here
+          break;
+        }
+      }
+
+      return continuousLevels;
+    } catch (error) {
+      console.error("Error loading available levels:", error);
+      return [];
+    }
+  }, []);
+
   // Load user data and completed levels
   const loadUserData = useCallback(async () => {
     const userId = auth.currentUser?.uid;
@@ -52,6 +100,16 @@ export default function LevelSelect() {
 
     try {
       setLoading(true);
+
+      // First load available levels from database
+      const levels = await loadAvailableLevels();
+      setAvailableLevels(levels);
+
+      if (levels.length === 0) {
+        Alert.alert("No Levels", "No quiz levels are available at the moment.");
+        setLoading(false);
+        return;
+      }
 
       // Fetch user data
       const userRef = ref(database, `users/${userId}`);
@@ -67,7 +125,11 @@ export default function LevelSelect() {
           Object.entries(userData.completedLevels).forEach(
             ([level, isCompleted]) => {
               if (isCompleted === true) {
-                completedLevelsArray.push(parseInt(level));
+                const levelNum = parseInt(level);
+                // Only include levels that exist in available levels
+                if (levels.includes(levelNum)) {
+                  completedLevelsArray.push(levelNum);
+                }
               }
             }
           );
@@ -75,22 +137,39 @@ export default function LevelSelect() {
         setCompletedLevels(completedLevelsArray);
 
         // Set current level logic:
-        // If user has a saved currentLevel, use it
+        // If user has a saved currentLevel, use it (but ensure it's in available levels)
         // Otherwise, set to the next uncompleted level
         let userCurrentLevel = userData.currentLevel || 1;
+
+        // Ensure current level is within available levels
+        if (!levels.includes(userCurrentLevel)) {
+          userCurrentLevel = levels[0]; // Set to first available level
+        }
 
         // If the current level is already completed, move to next uncompleted level
         if (completedLevelsArray.includes(userCurrentLevel)) {
           // Find the next uncompleted level
-          for (let i = 1; i <= maxLevel; i++) {
-            if (!completedLevelsArray.includes(i)) {
-              userCurrentLevel = i;
+          let foundNext = false;
+          for (const level of levels) {
+            if (!completedLevelsArray.includes(level)) {
+              userCurrentLevel = level;
+              foundNext = true;
               break;
             }
+          }
+
+          // If all levels are completed, stay at the last level
+          if (!foundNext) {
+            userCurrentLevel = levels[levels.length - 1];
           }
         }
 
         setCurrentLevel(userCurrentLevel);
+      } else {
+        // New user, set to first available level
+        if (levels.length > 0) {
+          setCurrentLevel(levels[0]);
+        }
       }
     } catch (error) {
       console.error("Error loading user data:", error);
@@ -98,7 +177,7 @@ export default function LevelSelect() {
     } finally {
       setLoading(false);
     }
-  }, [maxLevel]);
+  }, [loadAvailableLevels]);
 
   // Load data on focus
   useFocusEffect(
@@ -131,7 +210,6 @@ export default function LevelSelect() {
 
   // Handle continue button (for current level)
   const handleContinue = () => {
-    // console.log(`Starting current level: ${currentLevel}`);
     handleLevelSelect(currentLevel);
   };
 
@@ -203,8 +281,7 @@ export default function LevelSelect() {
 
           {/* Level Buttons */}
           <View className="flex flex-col gap-4">
-            {Array.from({ length: maxLevel }, (_, i) => {
-              const level = i + 1;
+            {availableLevels.map((level) => {
               const isCompleted = completedLevels.includes(level);
               const isCurrent = level === currentLevel;
               const isUnlocked = level <= currentLevel;

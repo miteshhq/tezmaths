@@ -17,7 +17,7 @@ import {
   View,
 } from "react-native";
 import { auth, database } from "../../firebase/firebaseConfig"; // ADD database import
-import { useSimpleGoogleSignIn } from "../../utils/useGoogleSignIn";
+// import { useSimpleGoogleSignIn } from "../../utils/useGoogleSignIn";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 6;
@@ -29,11 +29,11 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const { signInWithGoogle, isLoading, error, isReady } =
-    useSimpleGoogleSignIn();
+//   const { signInWithGoogle, isLoading, error, isReady } =
+//     useSimpleGoogleSignIn();
 
   const handleUserRedirect = useCallback(
-    async (user: any, userData: any) => {
+    async (user, userData) => {
       if (userData.isnewuser === true || userData.isnewuser === undefined) {
         router.push("/register");
         return;
@@ -53,91 +53,91 @@ export default function SignUpScreen() {
     [router]
   );
 
-  const handleGoogleSignIn = useCallback(async () => {
-    try {
-      setErrorMessage(""); // Clear any previous errors
-      console.log("Starting Google Sign-In from login screen...");
+//   const handleGoogleSignIn = useCallback(async () => {
+//     try {
+//       setErrorMessage(""); // Clear any previous errors
+//       console.log("Starting Google Sign-In from login screen...");
 
-      const result = await signInWithGoogle();
+//       const result = await signInWithGoogle();
 
-      if (!result) {
-        // Sign-in was cancelled or failed, error is already set by the hook
-        return;
-      }
+//       if (!result) {
+//         // Sign-in was cancelled or failed, error is already set by the hook
+//         return;
+//       }
 
-      const { user, isNewUser } = result;
+//       const { user, isNewUser } = result;
 
-      //   console.log("Google Sign-In completed:", {
-      //     uid: user.uid,
-      //     email: user.email,
-      //     isNewUser,
-      //   });
+//       //   console.log("Google Sign-In completed:", {
+//       //     uid: user.uid,
+//       //     email: user.email,
+//       //     isNewUser,
+//       //   });
 
-      if (isNewUser) {
-        // console.log("New user detected, redirecting to register...");
-        router.push({
-          pathname: "/register",
-          params: {
-            email: user.email,
-            isGoogleUser: "true",
-            displayName: user.displayName || "",
-          },
-        });
-      } else {
-        // Check if user data is complete
-        console.log("Existing user, checking profile completion...");
-        const userRef = ref(database, `users/${user.uid}`);
-        const snapshot = await get(userRef);
+//       if (isNewUser) {
+//         // console.log("New user detected, redirecting to register...");
+//         router.push({
+//           pathname: "/register",
+//           params: {
+//             email: user.email,
+//             isGoogleUser: "true",
+//             displayName: user.displayName || "",
+//           },
+//         });
+//       } else {
+//         // Check if user data is complete
+//         console.log("Existing user, checking profile completion...");
+//         const userRef = ref(database, `users/${user.uid}`);
+//         const snapshot = await get(userRef);
 
-        if (!snapshot.exists()) {
-          console.log(
-            "User data not found in database, redirecting to register..."
-          );
-          router.push({
-            pathname: "/register",
-            params: {
-              email: user.email,
-              isGoogleUser: "true",
-              displayName: user.displayName || "",
-            },
-          });
-          return;
-        }
+//         if (!snapshot.exists()) {
+//           console.log(
+//             "User data not found in database, redirecting to register..."
+//           );
+//           router.push({
+//             pathname: "/register",
+//             params: {
+//               email: user.email,
+//               isGoogleUser: "true",
+//               displayName: user.displayName || "",
+//             },
+//           });
+//           return;
+//         }
 
-        const userData = snapshot.val();
-        console.log("User data found:", {
-          hasData: !!userData,
-          isNewUser: userData.isnewuser,
-        });
+//         const userData = snapshot.val();
+//         console.log("User data found:", {
+//           hasData: !!userData,
+//           isNewUser: userData.isnewuser,
+//         });
 
-        if (userData.isnewuser === true) {
-          console.log("User profile incomplete, redirecting to register...");
-          router.push({
-            pathname: "/register",
-            params: {
-              email: user.email,
-              isGoogleUser: "true",
-              displayName: user.displayName || "",
-            },
-          });
-        } else {
-          console.log("User profile complete, redirecting to home...");
-          await handleUserRedirect(user, userData);
-        }
-      }
-    } catch (error) {
-      console.error("Google Sign-In failed in login screen:", error);
+//         if (userData.isnewuser === true) {
+//           console.log("User profile incomplete, redirecting to register...");
+//           router.push({
+//             pathname: "/register",
+//             params: {
+//               email: user.email,
+//               isGoogleUser: "true",
+//               displayName: user.displayName || "",
+//             },
+//           });
+//         } else {
+//           console.log("User profile complete, redirecting to home...");
+//           await handleUserRedirect(user, userData);
+//         }
+//       }
+//     } catch (error) {
+//       console.error("Google Sign-In failed in login screen:", error);
 
-      // Set a user-friendly error message
-      let errorMsg = "Google sign-in failed. Please try again.";
+//       // Set a user-friendly error message
+//       let errorMsg = "Google sign-in failed. Please try again.";
 
-      if (error.message) {
-        errorMsg = error.message;
-      }
+//       if (error.message) {
+//         errorMsg = error.message;
+//       }
 
-      setErrorMessage(errorMsg);
-    }
-  }, [signInWithGoogle, router]);
+//       setErrorMessage(errorMsg);
+//     }
+//   }, [signInWithGoogle, router]);
 
   const isValidEmail = useCallback(
     (email: string) => EMAIL_REGEX.test(email),
@@ -176,7 +176,7 @@ export default function SignUpScreen() {
       // console.log("Account created successfully:", userCredential);
       setErrorMessage("");
       router.push("/login"); // Redirect to login screen after successful sign-up
-    } catch (error: any) {
+    } catch (error) {
       console.error("Sign-up failed:", error.message);
       setErrorMessage(error.message);
     }
@@ -187,7 +187,7 @@ export default function SignUpScreen() {
   const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
 
   // Combine error messages from the hook and local state
-  const displayError = error || errorMessage;
+  const displayError = errorMessage;
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -279,7 +279,7 @@ export default function SignUpScreen() {
             OR
           </Text>
 
-          <TouchableOpacity
+          {/* <TouchableOpacity
             className="bg-white border border-black py-2 px-8 rounded-full items-center justify-center"
             style={{
               opacity: !isReady || isLoading ? 0.5 : 1,
@@ -297,7 +297,7 @@ export default function SignUpScreen() {
                 {isLoading ? "Signing in..." : "Sign in with Google"}
               </Text>
             </View>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </ScrollView>
       </TouchableWithoutFeedback>
     </SafeAreaView>

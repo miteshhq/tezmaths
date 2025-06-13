@@ -498,7 +498,7 @@ export default function HomeScreen() {
     return (
       <View className="flex-1 bg-custom-gray justify-center items-center">
         <ActivityIndicator size="large" color="#FF6B35" />
-        <Text className="text-white mt-4">Loading your data...</Text>
+        <Text className="text-black mt-4">Loading...</Text>
       </View>
     );
   }

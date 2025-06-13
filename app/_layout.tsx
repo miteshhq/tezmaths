@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { Slot } from "expo-router";
 import * as Font from "expo-font";
 import { ActivityIndicator } from "react-native";
+// import { NavigationContainer } from "@react-navigation/native";
 import "./globals.css";
 
 export default function RootLayout() {

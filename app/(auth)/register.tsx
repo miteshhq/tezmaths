@@ -300,7 +300,7 @@ export default function RegisterScreen() {
           nestedScrollEnabled={true}
           scrollEnabled={true}
         >
-          <Text className="text-4xl text-black font-black text-center mb-10 font-['Poppins-Bold']">
+          <Text className="text-4xl text-black font-black text-center mb-4 font-['Poppins-Bold']">
             {isGoogleUser === "true"
               ? "Complete Your Profile"
               : "Setup Your Profile"}
@@ -325,7 +325,7 @@ export default function RegisterScreen() {
                 >
                   <Image
                     source={avatar.source}
-                    className="w-16 h-16 rounded-full"
+                    className="w-16 h-20 rounded-full"
                     resizeMode="cover"
                   />
                 </TouchableOpacity>

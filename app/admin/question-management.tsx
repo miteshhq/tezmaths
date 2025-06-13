@@ -8,8 +8,9 @@ import {
   remove,
   serverTimestamp,
   set,
+  update,
 } from "firebase/database";
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -40,28 +41,35 @@ interface QuizConfig {
 
 export default function QuestionManagement() {
   const [level, setLevel] = useState("");
-  const [points, setPoints] = useState("");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(false);
   const [existingQuizzes, setExistingQuizzes] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [editingQuizId, setEditingQuizId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  type TabType = "create" | "auto-generate" | "config" | "existing";
+  const [maxDisplayQuestions, setMaxDisplayQuestions] = useState("20");
+  const [autoGenMaxDisplay, setAutoGenMaxDisplay] = useState("20");
+  const [viewQuestionsModal, setViewQuestionsModal] = useState(false);
+  const [currentQuizQuestions, setCurrentQuizQuestions] = useState<Question[]>(
+    []
+  );
+  const [editMaxDisplayModal, setEditMaxDisplayModal] = useState(false);
+  const [currentQuizId, setCurrentQuizId] = useState("");
+  const [newMaxDisplay, setNewMaxDisplay] = useState("");
+
+  type TabType = "create" | "auto-generate" | "existing";
   const [activeTab, setActiveTab] = useState<TabType>("create");
 
   const [autoGenModal, setAutoGenModal] = useState(false);
-  const [configModal, setConfigModal] = useState(false);
   const [autoGenLevel, setAutoGenLevel] = useState("");
   const [autoGenCount, setAutoGenCount] = useState("");
-  const [configLevel, setConfigLevel] = useState("");
-  const [configDisplayQuestions, setConfigDisplayQuestions] = useState("");
-  const scrollViewRef = useRef<ScrollView>(null);
 
   const instructionsText = `Upload an Excel file with these columns:
-• Question Text, Correct Answer, Explanation (optional), Time Limit (optional)`;
+• Question Text
+• Correct Answer
+• Explanation (optional)
+• Time Limit (optional)`;
 
   // Authentication state listener
   useEffect(() => {
@@ -118,6 +126,7 @@ export default function QuestionManagement() {
           questions: Array.isArray(quizData.questions)
             ? quizData.questions
             : [],
+          maxDisplayQuestions: quizData.maxDisplayQuestions || 20,
         });
       });
       setExistingQuizzes(quizzes.reverse());
@@ -167,9 +176,6 @@ export default function QuestionManagement() {
         // Wait for all removals to complete
         if (removePromises.length > 0) {
           await Promise.all(removePromises);
-          console.log(
-            `Removed ${removePromises.length} existing quiz(s) for level ${levelNum}`
-          );
         }
       }
 
@@ -178,12 +184,13 @@ export default function QuestionManagement() {
         generatedQuestions.push(generateMathQuestion(levelNum));
       }
 
-      const pointsPerQuestion = levelNum; // Points equal to level
+      const pointsPerQuestion = levelNum;
       const totalPoints = countNum * pointsPerQuestion;
 
       const quizData = {
         level: levelNum,
         points: totalPoints,
+        maxDisplayQuestions: parseInt(autoGenMaxDisplay) || 20,
         questions: generatedQuestions.map((q) => ({
           questionText: q.questionText,
           correctAnswer: q.correctAnswer,
@@ -201,10 +208,9 @@ export default function QuestionManagement() {
 
       Alert.alert(
         "Success",
-        `Successfully generated ${countNum} questions for level ${levelNum}! Each question worth ${pointsPerQuestion} points.`
+        `Generated ${countNum} questions for level ${levelNum}!`
       );
 
-      setAutoGenModal(false);
       setAutoGenLevel("");
       setAutoGenCount("");
       fetchExistingQuizzes();
@@ -214,6 +220,12 @@ export default function QuestionManagement() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Function to view questions in modal
+  const handleViewQuestions = (questions: Question[]) => {
+    setCurrentQuizQuestions(questions);
+    setViewQuestionsModal(true);
   };
 
   const generateMathQuestion = (level: number): Question => {
@@ -234,7 +246,6 @@ export default function QuestionManagement() {
 
     switch (operation) {
       case "+":
-        // Both operands near upper range for challenging addition
         num1 =
           Math.floor(Math.random() * (upperRangeMax - upperRangeMin + 1)) +
           upperRangeMin;
@@ -247,7 +258,6 @@ export default function QuestionManagement() {
         break;
 
       case "-":
-        // Both operands near upper range, ensure positive result
         num1 =
           Math.floor(Math.random() * (upperRangeMax - upperRangeMin + 1)) +
           upperRangeMin;
@@ -260,14 +270,12 @@ export default function QuestionManagement() {
         break;
 
       case "*":
-        // First operand near upper range, second operand near lower range
         num1 =
           Math.floor(Math.random() * (upperRangeMax - upperRangeMin + 1)) +
           upperRangeMin;
         num2 =
           Math.floor(Math.random() * (lowerRangeMax - lowerRangeMin + 1)) +
           lowerRangeMin;
-        // Ensure second operand is at least 2 for meaningful multiplication
         if (num2 < 2) num2 = 2;
         answer = num1 * num2;
         questionText = `${num1} × ${num2}`;
@@ -275,27 +283,21 @@ export default function QuestionManagement() {
         break;
 
       case "/":
-        // First operand (dividend) near upper range, second operand (divisor) near lower range
         const divisor =
           Math.floor(Math.random() * (lowerRangeMax - lowerRangeMin + 1)) +
           lowerRangeMin;
-        // Ensure divisor is at least 2
         num2 = divisor < 2 ? 2 : divisor;
-
-        // Calculate quotient in a reasonable range, then multiply to get exact dividend
         const maxQuotient = Math.floor(upperRangeMax / num2);
         const minQuotient = Math.floor(upperRangeMin / num2);
         answer =
           Math.floor(Math.random() * (maxQuotient - minQuotient + 1)) +
           minQuotient;
-        num1 = num2 * answer; // This ensures whole number result
-
+        num1 = num2 * answer;
         questionText = `${num1} ÷ ${num2}`;
         explanation = `${num1} divided by ${num2} equals ${answer}.`;
         break;
 
       default:
-        // Fallback to addition
         num1 =
           Math.floor(Math.random() * (upperRangeMax - upperRangeMin + 1)) +
           upperRangeMin;
@@ -315,72 +317,6 @@ export default function QuestionManagement() {
       timeLimit: 30,
       points: 0,
     };
-  };
-
-  const handleUpdateDisplayConfig = async () => {
-    if (!configLevel || !configDisplayQuestions) {
-      Alert.alert(
-        "Error",
-        "Please enter both level and display questions count"
-      );
-      return;
-    }
-
-    const levelNum = parseInt(configLevel);
-    const displayNum = parseInt(configDisplayQuestions);
-
-    if (levelNum < 1 || levelNum > 10 || displayNum < 1) {
-      Alert.alert("Error", "Invalid level or display questions count");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // Get all quizzes for the specified level
-      const quizzesRef = ref(database, "quizzes");
-      const snapshot = await get(quizzesRef);
-
-      if (snapshot.exists()) {
-        const quizzes = snapshot.val();
-        let updatedCount = 0;
-
-        // Find quizzes with matching level and add maxDisplayQuestions
-        for (const quizId of Object.keys(quizzes)) {
-          const quiz = quizzes[quizId];
-          if (quiz.level === levelNum) {
-            // Update the specific quiz with new property
-            const quizRef = ref(database, `quizzes/${quizId}`);
-            await set(quizRef, {
-              ...quiz, // Keep all existing properties
-              maxDisplayQuestions: displayNum,
-              updatedAt: serverTimestamp(),
-            });
-            updatedCount++;
-          }
-        }
-
-        if (updatedCount === 0) {
-          Alert.alert("Info", `No quizzes found for level ${levelNum}`);
-          return;
-        }
-
-        Alert.alert(
-          "Success",
-          `Added maxDisplayQuestions (${displayNum}) to ${updatedCount} quizzes at level ${levelNum}`
-        );
-      } else {
-        Alert.alert("Error", "No quizzes found in database");
-      }
-
-      setConfigModal(false);
-      setConfigLevel("");
-      setConfigDisplayQuestions("");
-    } catch (error) {
-      console.error("Error updating config:", error);
-      Alert.alert("Error", `Failed to update config: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleDeleteQuiz = async (quizId: string) => {
@@ -555,7 +491,7 @@ export default function QuestionManagement() {
 
       Alert.alert(
         "Success",
-        `Successfully imported ${newQuestions.length} question${
+        `Imported ${newQuestions.length} question${
           newQuestions.length > 1 ? "s" : ""
         } from Excel file!`
       );
@@ -598,27 +534,25 @@ export default function QuestionManagement() {
   const renderQuestionCard = (question: Question, index: number) => (
     <View
       key={index}
-      className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100"
+      className="bg-white rounded-xl p-4 mb-4 border border-gray-200"
     >
-      <View className="flex-row justify-between items-center mb-4">
-        <Text className="text-lg font-bold text-gray-800">
+      <View className="flex-row justify-between items-center mb-3">
+        <Text className="text-base font-medium text-gray-800">
           Question {index + 1}
         </Text>
         <TouchableOpacity
-          className="bg-red-50 p-2 rounded-full"
+          className="bg-red-50 p-1 rounded"
           onPress={() => removeQuestion(index)}
         >
           <Text className="text-red-500 font-bold text-lg">×</Text>
         </TouchableOpacity>
       </View>
 
-      <View className="space-y-4">
+      <View className="space-y-3">
         <View>
-          <Text className="text-sm font-medium text-gray-700 mb-2">
-            Question Text
-          </Text>
+          <Text className="text-sm text-gray-600 mb-1">Question Text</Text>
           <TextInput
-            className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-gray-800"
+            className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-gray-800"
             placeholder="Enter your question here..."
             value={question.questionText}
             onChangeText={(text) => updateQuestion(index, "questionText", text)}
@@ -629,11 +563,9 @@ export default function QuestionManagement() {
         </View>
 
         <View>
-          <Text className="text-sm font-medium text-gray-700 mb-2">
-            Correct Answer
-          </Text>
+          <Text className="text-sm text-gray-600 mb-1">Correct Answer</Text>
           <TextInput
-            className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-gray-800"
+            className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-gray-800"
             placeholder="Enter the correct answer"
             value={question.correctAnswer}
             onChangeText={(text) =>
@@ -643,11 +575,11 @@ export default function QuestionManagement() {
         </View>
 
         <View>
-          <Text className="text-sm font-medium text-gray-700 mb-2">
+          <Text className="text-sm text-gray-600 mb-1">
             Explanation (Optional)
           </Text>
           <TextInput
-            className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-gray-800"
+            className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-gray-800"
             placeholder="Explain the answer..."
             value={question.explanation}
             onChangeText={(text) => updateQuestion(index, "explanation", text)}
@@ -658,11 +590,11 @@ export default function QuestionManagement() {
         </View>
 
         <View>
-          <Text className="text-sm font-medium text-gray-700 mb-2">
+          <Text className="text-sm text-gray-600 mb-1">
             Time Limit (seconds)
           </Text>
           <TextInput
-            className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-gray-800"
+            className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-gray-800"
             placeholder="30"
             value={question.timeLimit.toString()}
             keyboardType="numeric"
@@ -691,14 +623,14 @@ export default function QuestionManagement() {
 
     setLoading(true);
     try {
-      const numQuestions = questions.length;
-      const totalPoints = parseInt(points);
-      const pointsPerQuestion =
-        numQuestions > 0 ? totalPoints / numQuestions : 0;
+      const levelNum = Number(level);
+      const pointsPerQuestion = levelNum;
+      const totalPoints = questions.length * pointsPerQuestion;
 
       const quizData = {
-        level: Number(level),
+        level: levelNum,
         points: totalPoints,
+        maxDisplayQuestions: parseInt(maxDisplayQuestions) || 20,
         questions: questions.map((q) => ({
           questionText: q.questionText,
           correctAnswer: q.correctAnswer,
@@ -708,19 +640,14 @@ export default function QuestionManagement() {
           timeLimit: q.timeLimit || 30,
         })),
         updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
       };
 
-      if (!editingQuizId) {
-        quizData.createdAt = serverTimestamp();
-        await push(ref(database, "quizzes"), quizData);
-      } else {
-        const quizRef = ref(database, `quizzes/${editingQuizId}`);
-        await set(quizRef, quizData);
-      }
+      await push(ref(database, "quizzes"), quizData);
 
       Alert.alert(
         "Success",
-        `Quiz ${editingQuizId ? "updated" : "added"} successfully!`
+        `Quiz created successfully!\nLevel: ${levelNum}\nQuestions: ${questions.length}`
       );
       resetForm();
       fetchExistingQuizzes();
@@ -737,13 +664,9 @@ export default function QuestionManagement() {
       Alert.alert("Validation Error", "Level is required");
       return false;
     }
-    if (!points) {
-      Alert.alert("Validation Error", "Points are required");
-      return false;
-    }
-    const pointsNum = Number(points);
-    if (isNaN(pointsNum) || pointsNum <= 0) {
-      Alert.alert("Validation Error", "Points must be a positive number");
+    const levelNum = Number(level);
+    if (isNaN(levelNum)) {
+      Alert.alert("Validation Error", "Level must be a number");
       return false;
     }
     return true;
@@ -778,94 +701,53 @@ export default function QuestionManagement() {
     return true;
   };
 
-  const handleEditQuiz = async (quizId: string) => {
-    if (!currentUser || !isAdmin) {
-      Alert.alert("Error", "Admin authentication required");
+  const resetForm = () => {
+    setLevel("");
+    setQuestions([]);
+  };
+
+  const handleUpdateMaxDisplay = async () => {
+    if (!newMaxDisplay) {
+      Alert.alert("Error", "Please enter max display value");
       return;
     }
 
+    const displayNum = parseInt(newMaxDisplay);
+    if (isNaN(displayNum) || displayNum < 1) {
+      Alert.alert("Error", "Invalid max display value");
+      return;
+    }
+
+    setLoading(true);
     try {
-      const quizRef = ref(database, `quizzes/${quizId}`);
-      const snapshot = await get(quizRef);
+      const quizRef = ref(database, `quizzes/${currentQuizId}`);
+      await update(quizRef, {
+        maxDisplayQuestions: displayNum,
+        updatedAt: serverTimestamp(),
+      });
 
-      if (!snapshot.exists()) {
-        throw new Error("Quiz not found");
-      }
-
-      const quizData = snapshot.val();
-
-      const formattedQuestions = Array.isArray(quizData.questions)
-        ? quizData.questions.map((q: any) => ({
-            questionText: q.questionText || "",
-            points: q.point || 0,
-            correctAnswer: q.correctAnswer || "",
-            answerType: "manual" as const,
-            explanation: q.explanation || "",
-            timeLimit: q.timeLimit || 30,
-          }))
-        : [];
-
-      setLevel(quizData.level?.toString() || "");
-      setPoints(quizData.points?.toString() || "");
-      setQuestions(formattedQuestions);
-      setEditingQuizId(quizId);
-      setActiveTab("create");
-
-      setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-      }, 100);
-    } catch (error: any) {
-      console.error("Error loading quiz for edit:", error);
-      Alert.alert("Error", `Failed to load quiz for editing: ${error.message}`);
+      Alert.alert("Success", `Max display questions updated to ${displayNum}`);
+      fetchExistingQuizzes();
+      setEditMaxDisplayModal(false);
+    } catch (error) {
+      console.error("Error updating max display:", error);
+      Alert.alert("Error", `Failed to update: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const resetForm = () => {
-    setLevel("");
-    setPoints("");
-    setQuestions([]);
-    setEditingQuizId(null);
+  const openEditMaxDisplay = (quizId: string, currentValue: number) => {
+    setCurrentQuizId(quizId);
+    setNewMaxDisplay(currentValue.toString());
+    setEditMaxDisplayModal(true);
   };
-
-  const handleTabChange = (tab: TabType) => {
-    setActiveTab(tab);
-  };
-
-  // Remove the renderTabButton function entirely and replace with:
-  const TabButton = ({
-    tab,
-    title,
-    icon,
-    isActive,
-    onPress,
-  }: {
-    tab: TabType;
-    title: string;
-    icon: string;
-    isActive: boolean;
-    onPress: () => void;
-  }) => (
-    <TouchableOpacity
-      className={`flex-1 py-3 px-4 rounded-xl mx-1 ${
-        isActive ? "bg-orange-500 shadow-lg" : "bg-white border border-gray-200"
-      }`}
-      onPress={onPress}
-    >
-      <Text
-        className={`text-center font-medium ${
-          isActive ? "text-white" : "text-gray-600"
-        }`}
-      >
-        {icon} {title}
-      </Text>
-    </TouchableOpacity>
-  );
 
   if (!currentUser) {
     return (
       <View className="flex-1 bg-gray-50 justify-center items-center">
-        <ActivityIndicator size="large" color="#F97316" />
-        <Text className="text-gray-600 mt-4 text-lg">
+        <ActivityIndicator size="large" color="#3B82F6" />
+        <Text className="text-gray-600 mt-4 text-base">
           Checking authentication...
         </Text>
       </View>
@@ -875,11 +757,11 @@ export default function QuestionManagement() {
   if (!isAdmin) {
     return (
       <View className="flex-1 bg-gray-50 justify-center items-center p-6">
-        <View className="bg-white rounded-3xl p-8 shadow-lg">
-          <Text className="text-2xl font-bold text-red-500 mb-4 text-center">
-            🚫 Access Denied
+        <View className="bg-white rounded-xl p-6">
+          <Text className="text-xl font-bold text-red-500 mb-3 text-center">
+            Access Denied
           </Text>
-          <Text className="text-gray-600 text-center text-lg">
+          <Text className="text-gray-600 text-center">
             You need admin privileges to access the question management system.
           </Text>
         </View>
@@ -889,110 +771,141 @@ export default function QuestionManagement() {
 
   return (
     <View className="flex-1 bg-gray-50">
-      {/* Header */}
-
       <ScrollView
-        ref={scrollViewRef}
-        className="flex-1 px-3 py-4"
+        className="flex-1 px-4 py-4"
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
         showsVerticalScrollIndicator={false}
       >
-        <View className="bg-white pt-12 pb-6 px-2 shadow-sm rounded-2xl mb-4">
-          <Text className="text-3xl font-bold text-center text-gray-800 mb-6">
-            📚 Quiz Management
+        {/* Header */}
+        <View className="bg-white py-4 mb-4 rounded-xl">
+          <Text className="text-xl font-bold text-center text-gray-800">
+            Quiz Management
           </Text>
+        </View>
 
-          {/* Tab Navigation */}
-          <View className="flex-row">
-            <TabButton
-              tab="create"
-              title="Create"
-              icon="✏️"
-              isActive={activeTab === "create"}
-              onPress={() => setActiveTab("create")}
-            />
-            <TabButton
-              tab="auto-generate"
-              title="Auto Gen"
-              icon="🤖"
-              isActive={activeTab === "auto-generate"}
-              onPress={() => setActiveTab("auto-generate")}
-            />
-            <TabButton
-              tab="config"
-              title="Config"
-              icon="⚙️"
-              isActive={activeTab === "config"}
-              onPress={() => setActiveTab("config")}
-            />
-            <TabButton
-              tab="existing"
-              title="Existing"
-              icon="📋"
-              isActive={activeTab === "existing"}
-              onPress={() => setActiveTab("existing")}
-            />
-          </View>
+        {/* Tab Navigation */}
+        <View className="flex-row mb-4 bg-white rounded-xl p-1">
+          <TouchableOpacity
+            className={`flex-1 py-3 rounded-lg mx-1 ${
+              activeTab === "create" ? "bg-primary" : "bg-gray-100"
+            }`}
+            onPress={() => setActiveTab("create")}
+          >
+            <Text
+              className={`text-center font-medium ${
+                activeTab === "create" ? "text-white" : "text-gray-600"
+              }`}
+            >
+              Create
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className={`flex-1 py-3 rounded-lg mx-1 ${
+              activeTab === "auto-generate" ? "bg-primary" : "bg-gray-100"
+            }`}
+            onPress={() => setActiveTab("auto-generate")}
+          >
+            <Text
+              className={`text-center font-medium ${
+                activeTab === "auto-generate" ? "text-white" : "text-gray-600"
+              }`}
+            >
+              Auto Generate
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className={`flex-1 py-3 rounded-lg mx-1 ${
+              activeTab === "existing" ? "bg-primary" : "bg-gray-100"
+            }`}
+            onPress={() => setActiveTab("existing")}
+          >
+            <Text
+              className={`text-center font-medium ${
+                activeTab === "existing" ? "text-white" : "text-gray-600"
+              }`}
+            >
+              Existing
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Create Quiz Tab */}
         {activeTab === "create" && (
-          <View>
-            <View className="bg-white rounded-2xl p-6 mb-6 shadow-sm">
-              <Text className="text-xl font-bold text-gray-800 mb-4">
-                {editingQuizId ? "✏️ Edit Quiz" : "➕ Create New Quiz"}
+          <View className="mb-8">
+            <View className="bg-white rounded-xl p-4 mb-4">
+              <Text className="text-lg font-bold text-gray-800 mb-3">
+                Create New Quiz
               </Text>
 
               <View className="space-y-4">
+                {/* Level Input */}
                 <View>
-                  <Text className="text-sm font-medium text-gray-700 mb-2">
-                    Level
-                  </Text>
+                  <Text className="text-sm text-gray-600 mb-1">Level</Text>
                   <TextInput
-                    className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-gray-800 text-lg"
+                    className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-gray-800"
                     placeholder="Enter level"
                     value={level}
                     onChangeText={setLevel}
                     keyboardType="numeric"
                   />
+                  <Text className="text-gray-500 text-xs mt-1">
+                    Points per question = level value
+                  </Text>
                 </View>
 
+                {/* Max Display Questions */}
                 <View>
-                  <Text className="text-sm font-medium text-gray-700 mb-2">
-                    Total Points
+                  <Text className="text-sm text-gray-600 mb-1">
+                    Max Questions to Display
                   </Text>
                   <TextInput
-                    className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-gray-800 text-lg"
-                    placeholder="Enter total points"
-                    value={points}
-                    onChangeText={setPoints}
+                    className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-gray-800"
+                    placeholder="Enter number (default: 20)"
+                    value={maxDisplayQuestions}
+                    onChangeText={setMaxDisplayQuestions}
                     keyboardType="numeric"
                   />
                 </View>
-              </View>
 
-              {editingQuizId && (
-                <TouchableOpacity
-                  className="bg-gray-100 py-3 px-4 rounded-xl mt-4"
-                  onPress={resetForm}
-                >
-                  <Text className="text-gray-600 font-medium text-center">
-                    Cancel Edit
+                {/* Points Summary */}
+                <View className="bg-primary/5 p-3 rounded-lg">
+                  <Text className="font-medium text-primary mb-1">
+                    Quiz Summary
                   </Text>
-                </TouchableOpacity>
-              )}
+                  <View className="flex-row justify-between mb-1">
+                    <Text className="text-primary">Questions:</Text>
+                    <Text className="text-primary font-medium">
+                      {questions.length}
+                    </Text>
+                  </View>
+                  <View className="flex-row justify-between mb-1">
+                    <Text className="text-primary">Level:</Text>
+                    <Text className="text-primary font-medium">
+                      {level || "0"}
+                    </Text>
+                  </View>
+                  <View className="flex-row justify-between">
+                    <Text className="text-primary">Total Points:</Text>
+                    <Text className="text-primary font-medium">
+                      {questions.length * (level ? parseInt(level) : 0)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
             </View>
 
             {/* Questions Section */}
-            <View className="mb-6">
-              <View className="flex-row justify-between items-center mb-4">
-                <Text className="text-xl font-bold text-gray-800">
+            <View className="mb-4">
+              <View className="flex-row justify-between items-center mb-3">
+                <Text className="text-base font-medium text-gray-800">
                   Questions ({questions.length})
                 </Text>
                 <TouchableOpacity
-                  className="bg-orange-500 py-2 px-4 rounded-xl"
+                  className="bg-primary py-2 px-3 rounded-lg"
                   onPress={addNewQuestion}
                 >
                   <Text className="text-white font-medium">+ Add Question</Text>
@@ -1004,11 +917,11 @@ export default function QuestionManagement() {
               )}
 
               {questions.length === 0 && (
-                <View className="bg-white rounded-2xl p-8 border-2 border-dashed border-gray-200">
-                  <Text className="text-gray-500 text-center text-lg">
+                <View className="bg-white rounded-xl p-5 border border-dashed border-gray-300 items-center">
+                  <Text className="text-gray-500 text-center">
                     No questions added yet
                   </Text>
-                  <Text className="text-gray-400 text-center mt-2">
+                  <Text className="text-gray-400 text-xs mt-1">
                     Tap "Add Question" or import from Excel
                   </Text>
                 </View>
@@ -1016,15 +929,15 @@ export default function QuestionManagement() {
             </View>
 
             {/* Import Section */}
-            <View className="bg-blue-50 rounded-2xl p-6 mb-6">
-              <Text className="text-sm text-gray-700 mb-4">
+            <View className="bg-primary/5 rounded-xl p-4 mb-4">
+              <Text className="text-xs text-gray-600 mb-2">
                 {instructionsText}
               </Text>
               <TouchableOpacity
-                className="bg-blue-500 py-3 px-6 rounded-xl items-center"
+                className="bg-primary py-3 rounded-lg items-center"
                 onPress={pickFile}
               >
-                <Text className="text-white font-medium text-lg">
+                <Text className="text-white font-medium">
                   Import Questions from Excel
                 </Text>
               </TouchableOpacity>
@@ -1032,7 +945,7 @@ export default function QuestionManagement() {
 
             {/* Submit Button */}
             <TouchableOpacity
-              className={`py-4 px-6 rounded-xl items-center mb-8 ${
+              className={`py-3 rounded-lg items-center ${
                 loading ? "bg-gray-400" : "bg-green-500"
               }`}
               onPress={handleAddQuiz}
@@ -1041,8 +954,8 @@ export default function QuestionManagement() {
               {loading ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text className="text-white font-medium text-lg">
-                  {editingQuizId ? "Update Quiz" : "Submit Quiz"}
+                <Text className="text-white font-medium text-base">
+                  Submit Quiz
                 </Text>
               )}
             </TouchableOpacity>
@@ -1051,18 +964,16 @@ export default function QuestionManagement() {
 
         {/* Auto Generate Tab */}
         {activeTab === "auto-generate" && (
-          <View className="bg-white rounded-2xl p-6">
-            <Text className="text-xl font-bold text-gray-800 mb-4">
-              🤖 Auto Generate Questions
+          <View className="bg-white rounded-xl p-4">
+            <Text className="text-lg font-bold text-gray-800 mb-3">
+              Auto Generate Questions
             </Text>
 
             <View className="space-y-4">
               <View>
-                <Text className="text-sm font-medium text-gray-700 mb-2">
-                  Level
-                </Text>
+                <Text className="text-sm text-gray-600 mb-1">Level</Text>
                 <TextInput
-                  className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-gray-800 text-lg"
+                  className="bg-gray-50 border border-gray-200 rounded-lg p-3"
                   placeholder="Enter level"
                   value={autoGenLevel}
                   onChangeText={setAutoGenLevel}
@@ -1071,21 +982,53 @@ export default function QuestionManagement() {
               </View>
 
               <View>
-                <Text className="text-sm font-medium text-gray-700 mt-4 mb-2">
+                <Text className="text-sm text-gray-600 mb-1">
                   Number of Questions
                 </Text>
                 <TextInput
-                  className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-gray-800 text-lg"
-                  placeholder="Enter number of questions to generate"
+                  className="bg-gray-50 border border-gray-200 rounded-lg p-3"
+                  placeholder="Enter number of questions"
                   value={autoGenCount}
                   onChangeText={setAutoGenCount}
                   keyboardType="numeric"
                 />
               </View>
 
+              <View>
+                <Text className="text-sm text-gray-600 mb-1">
+                  Max Questions to Display
+                </Text>
+                <TextInput
+                  className="bg-gray-50 border border-gray-200 rounded-lg p-3"
+                  placeholder="Enter number (default: 20)"
+                  value={autoGenMaxDisplay}
+                  onChangeText={setAutoGenMaxDisplay}
+                  keyboardType="numeric"
+                />
+              </View>
+
+              <View className="bg-primary/5 p-3 rounded-lg">
+                <Text className="font-medium text-primary mb-1">Summary</Text>
+                <View className="space-y-1">
+                  <View className="flex-row justify-between">
+                    <Text className="text-primary">Points per question:</Text>
+                    <Text className="text-primary font-medium">
+                      {autoGenLevel || "0"}
+                    </Text>
+                  </View>
+                  <View className="flex-row justify-between">
+                    <Text className="text-primary">Total points:</Text>
+                    <Text className="text-primary font-medium">
+                      {(parseInt(autoGenLevel) || 0) *
+                        (parseInt(autoGenCount) || 0)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
               <TouchableOpacity
-                className={`py-2 px-6 mt-2 rounded-xl items-center ${
-                  loading ? "bg-gray-400" : "bg-orange-500"
+                className={`py-3 rounded-lg items-center ${
+                  loading ? "bg-gray-400" : "bg-primary"
                 }`}
                 onPress={handleAutoGenerate}
                 disabled={loading}
@@ -1093,73 +1036,14 @@ export default function QuestionManagement() {
                 {loading ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text className="text-white font-medium text-lg">
+                  <Text className="text-white font-medium text-base">
                     Generate Questions
                   </Text>
                 )}
               </TouchableOpacity>
 
-              <Text className="text-gray-500 text-sm mt-4">
-                This will generate math questions (+, -, ×, ÷) with whole number
-                results. Questions will be automatically saved to the database.
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Config Tab */}
-        {activeTab === "config" && (
-          <View className="bg-white rounded-2xl p-6">
-            <Text className="text-xl font-bold text-gray-800 mb-4">
-              ⚙️ Quiz Configuration
-            </Text>
-
-            <View className="space-y-4">
-              <View>
-                <Text className="text-sm font-medium text-gray-700 mb-2">
-                  Level
-                </Text>
-                <TextInput
-                  className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-gray-800 text-lg"
-                  placeholder="Enter level"
-                  value={configLevel}
-                  onChangeText={setConfigLevel}
-                  keyboardType="numeric"
-                />
-              </View>
-
-              <View>
-                <Text className="text-sm font-medium text-gray-700 mb-2">
-                  Questions to Display
-                </Text>
-                <TextInput
-                  className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-gray-800 text-lg"
-                  placeholder="Enter number of questions"
-                  value={configDisplayQuestions}
-                  onChangeText={setConfigDisplayQuestions}
-                  keyboardType="numeric"
-                />
-              </View>
-
-              <TouchableOpacity
-                className={`py-4 px-6 rounded-xl items-center ${
-                  loading ? "bg-gray-400" : "bg-blue-500"
-                }`}
-                onPress={handleUpdateDisplayConfig}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text className="text-white font-medium text-lg">
-                    Save Configuration
-                  </Text>
-                )}
-              </TouchableOpacity>
-
-              <Text className="text-gray-500 text-sm mt-4">
-                This sets how many questions will be shown to users for each
-                quiz level.
+              <Text className="text-gray-500 text-xs mt-1">
+                Generates math questions (+, -, ×, ÷) with whole number results
               </Text>
             </View>
           </View>
@@ -1168,66 +1052,98 @@ export default function QuestionManagement() {
         {/* Existing Quizzes Tab */}
         {activeTab === "existing" && (
           <View className="mb-8">
-            <Text className="text-xl font-bold text-gray-800 mb-4">
-              📋 Existing Quizzes ({existingQuizzes.length})
+            <Text className="text-base font-medium text-gray-800 mb-3">
+              Existing Quizzes ({existingQuizzes.length})
             </Text>
 
+            <View className="bg-primary/5 rounded-lg p-3 mb-4">
+              <Text className="text-sm text-primary">
+                Note: You cannot edit individual questions in existing quizzes.
+                Delete the quiz and create a new one or use auto-generate to
+                regenerate.
+              </Text>
+            </View>
+
             {existingQuizzes.length === 0 ? (
-              <View className="bg-white rounded-2xl p-8 border-2 border-dashed border-gray-200">
-                <Text className="text-gray-500 text-center text-lg">
-                  No quizzes found
-                </Text>
+              <View className="bg-white rounded-xl p-5 border border-dashed border-gray-300 items-center">
+                <Text className="text-gray-500">No quizzes found</Text>
               </View>
             ) : (
               existingQuizzes.map((quiz) => (
                 <View
                   key={quiz.id}
-                  className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-gray-100"
+                  className="bg-white rounded-xl p-4 mb-4 border border-gray-200"
                 >
-                  <View className="flex-row justify-between items-center mb-3">
-                    <Text className="text-lg font-bold text-gray-800">
-                      Level {quiz.level} {quiz.autoGenerated ? "(Auto)" : ""}
-                    </Text>
-                    <View className="flex-row gap-2">
-                      <TouchableOpacity
-                        className="bg-blue-100 p-2 rounded-lg"
-                        onPress={() => handleEditQuiz(quiz.id)}
-                      >
-                        <Text className="text-blue-600 font-medium">Edit</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        className="bg-red-100 p-2 rounded-lg"
-                        onPress={() => handleDeleteQuiz(quiz.id)}
-                      >
-                        <Text className="text-red-600 font-medium">Delete</Text>
-                      </TouchableOpacity>
+                  <View className="flex-row justify-between items-start mb-3">
+                    <View>
+                      <Text className="text-base font-medium text-gray-800">
+                        Level {quiz.level} {quiz.autoGenerated ? "(Auto)" : ""}
+                      </Text>
+                      <Text className="text-gray-500 text-xs">
+                        Created: {new Date(quiz.createdAt).toLocaleDateString()}
+                      </Text>
                     </View>
                   </View>
 
-                  <Text className="text-gray-600 mb-2">
-                    Points: {quiz.points} | Questions:{" "}
-                    {quiz.questions?.length || 0}
-                  </Text>
+                  <View className="grid grid-cols-2 gap-2 mb-3">
+                    <View className="bg-gray-50 p-2 rounded">
+                      <Text className="text-gray-500 text-xs">
+                        Total Points
+                      </Text>
+                      <Text className="font-medium text-sm">{quiz.points}</Text>
+                    </View>
+                    <View className="bg-gray-50 p-2 rounded">
+                      <Text className="text-gray-500 text-xs">Questions</Text>
+                      <Text className="font-medium text-sm">
+                        {quiz.questions?.length || 0}
+                      </Text>
+                    </View>
+                    <View className="bg-gray-50 p-2 rounded">
+                      <Text className="text-gray-500 text-xs">
+                        Points per Q
+                      </Text>
+                      <Text className="font-medium text-sm">{quiz.level}</Text>
+                    </View>
+                    <View className="bg-gray-50 p-2 rounded">
+                      <Text className="text-gray-500 text-xs">Max Display</Text>
+                      <Text className="font-medium text-sm">
+                        {quiz.maxDisplayQuestions || 20}
+                      </Text>
+                    </View>
+                  </View>
 
-                  <View className="mt-3">
-                    <Text className="font-medium text-gray-700 mb-1">
-                      Sample Questions:
-                    </Text>
-                    {quiz.questions?.slice(0, 2).map((q: any, idx: number) => (
-                      <Text
-                        key={idx}
-                        className="text-gray-600 mb-1"
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {idx + 1}. {q.questionText}
+                  <View className="flex-row justify-between">
+                    <TouchableOpacity
+                      className="bg-primary py-2 px-3 rounded-lg flex-1 mr-2"
+                      onPress={() => handleViewQuestions(quiz.questions)}
+                    >
+                      <Text className="text-white text-center text-sm">
+                        View Questions
                       </Text>
-                    ))}
-                    {quiz.questions?.length > 2 && (
-                      <Text className="text-gray-500">
-                        + {quiz.questions.length - 2} more...
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      className="bg-gray-500 py-2 px-3 rounded-lg flex-1 mr-2"
+                      onPress={() =>
+                        openEditMaxDisplay(
+                          quiz.id,
+                          quiz.maxDisplayQuestions || 20
+                        )
+                      }
+                    >
+                      <Text className="text-white text-center text-sm">
+                        Edit Max Questions
                       </Text>
-                    )}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      className="bg-red-500 py-2 px-3 rounded-lg flex-1"
+                      onPress={() => handleDeleteQuiz(quiz.id)}
+                    >
+                      <Text className="text-white text-center text-sm">
+                        Delete
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               ))
@@ -1235,6 +1151,90 @@ export default function QuestionManagement() {
           </View>
         )}
       </ScrollView>
+
+      {/* Questions View Modal */}
+      <Modal
+        visible={viewQuestionsModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setViewQuestionsModal(false)}
+      >
+        <View className="flex-1 bg-black/50 justify-center p-5">
+          <View className="bg-white rounded-xl p-5 max-h-[80%]">
+            <View className="flex-row justify-between items-center mb-4">
+              <Text className="text-lg font-bold">Quiz Questions</Text>
+              <TouchableOpacity onPress={() => setViewQuestionsModal(false)}>
+                <Text className="text-lg text-gray-500">✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView>
+              {currentQuizQuestions.map((q, i) => (
+                <View key={i} className="mb-3 pb-3 border-b border-gray-100">
+                  <Text className="font-medium mb-1">
+                    {i + 1}. {q.questionText}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit Max Display Modal */}
+      <Modal
+        visible={editMaxDisplayModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setEditMaxDisplayModal(false)}
+      >
+        <View className="flex-1 bg-black/50 justify-center items-center p-5">
+          <View className="bg-white rounded-xl p-5 w-full">
+            <Text className="text-lg font-bold mb-4 text-center">
+              Edit Max Display Questions
+            </Text>
+
+            <Text className="text-sm text-gray-600 mb-2">
+              Maximum questions to display for this quiz:
+            </Text>
+
+            <TextInput
+              className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4"
+              placeholder="Enter max display"
+              value={newMaxDisplay}
+              onChangeText={setNewMaxDisplay}
+              keyboardType="numeric"
+            />
+
+            <View className="flex-row justify-between">
+              <TouchableOpacity
+                className="bg-gray-300 py-3 px-4 rounded-lg flex-1 mr-2"
+                onPress={() => setEditMaxDisplayModal(false)}
+              >
+                <Text className="text-gray-800 text-center font-medium">
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                className={`py-3 px-4 rounded-lg flex-1 ml-2 ${
+                  loading ? "bg-primary/5" : "bg-primary"
+                }`}
+                onPress={handleUpdateMaxDisplay}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text className="text-white text-center font-medium">
+                    Save
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
