@@ -14,6 +14,7 @@ import {
 import Svg, { Circle } from "react-native-svg";
 import { auth, database } from "../../firebase/firebaseConfig";
 import { battleManager } from "../../utils/battleManager";
+import SoundManager from "../../components/soundManager";
 
 const DEBUG_MODE = true;
 const AUTO_SUBMIT_DELAY = 200;
@@ -107,6 +108,14 @@ export default function BattleScreen() {
   const [showNextQuestionCountdown, setShowNextQuestionCountdown] =
     useState(false);
   const [countdownValue, setCountdownValue] = useState(0);
+
+  useEffect(() => {
+    return () => {
+      // stop both effects just in case
+      SoundManager.stopSound("rightAnswerSoundEffect").catch(() => {});
+      SoundManager.stopSound("wrongAnswerSoundEffect").catch(() => {});
+    };
+  }, []);
 
   // Handle time expiry (only one instance)
   useEffect(() => {
@@ -241,6 +250,28 @@ export default function BattleScreen() {
     return () => unsubscribe();
   }, [roomId, router]);
 
+  // Keep track of who’s already been announced
+  const otherWinnerAnnouncedRef = useRef(false);
+
+  useEffect(() => {
+    if (!roomData?.players) return;
+
+    // find the first winner
+    const winners = Object.entries(roomData.players)
+      .filter(([uid, p]) => p.winner === true)
+      .map(([uid]) => uid);
+
+    // if someone won, and it wasn’t you, and we haven’t played the buzzer yet:
+    if (
+      winners.length > 0 &&
+      winners[0] !== userId &&
+      !otherWinnerAnnouncedRef.current
+    ) {
+      otherWinnerAnnouncedRef.current = true;
+      SoundManager.playSound("wrongAnswerSoundEffect").catch(console.error);
+    }
+  }, [roomData?.players]);
+
   // Timer management
   useEffect(() => {
     if (
@@ -373,6 +404,14 @@ export default function BattleScreen() {
       );
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      // ◀ New code starts
+      if (isFirstCorrect) {
+        await SoundManager.playSound("rightAnswerSoundEffect");
+      } else {
+        await SoundManager.playSound("wrongAnswerSoundEffect");
+      }
+      // New code ends ▶
 
       if (isFirstCorrect) {
         setFeedback("✅ Correct! You got it first! +100 points");

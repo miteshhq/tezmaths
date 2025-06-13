@@ -20,11 +20,12 @@ import {
 } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { auth, database } from "../../firebase/firebaseConfig";
+import SoundManager from "../../components/soundManager";
 
 // Configuration
 const QUIZ_TIME_LIMIT = 15;
 const AUTO_SUBMIT_DELAY = 500; // 200ms delay for auto-submit
-const EXPLANATION_DISPLAY_TIME = 4; // 4 seconds
+const EXPLANATION_DISPLAY_TIME = 400; // 4 seconds
 
 interface Question {
   id: string;
@@ -552,6 +553,8 @@ export default function QuizScreen() {
       stopTimer();
 
       if (isCorrect) {
+        await SoundManager.playSound("rightAnswerSoundEffect");
+
         await Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success
         );
@@ -586,20 +589,23 @@ export default function QuizScreen() {
         //   }
         // }, EXPLANATION_DISPLAY_TIME);
 
-        // WRONG ANSWER - End quiz immediately
+        // WRONG ANSWER:
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
 
+        // 1) play wrong-answer sound
+        await SoundManager.playSound("wrongAnswerSoundEffect");
+
+        // 2) show explanation
         setIsAnswerWrong(true);
         setShowExplanation(true);
-        setIsProcessing(false); // Allow user to click continue
+        setIsProcessing(false);
 
-        // Auto-advance after explanation time
+        // 3) auto-advance after EXPLANATION_DISPLAY_TIME, or wait for user tap
         explanationTimeoutRef.current = setTimeout(() => {
           if (isMountedRef.current && isScreenFocused) {
-            handleNextAfterExplanation();
+            handleLevelCompletion();
           }
         }, EXPLANATION_DISPLAY_TIME);
-        handleLevelCompletion();
       }
     },
     [currentQuestionIndex, questions, isQuizActive, isScreenFocused, stopTimer]
@@ -615,17 +621,17 @@ export default function QuizScreen() {
 
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
 
+    await SoundManager.playSound("wrongAnswerSoundEffect");
+
     setIsTimeOut(true);
     setShowExplanation(true);
     setIsProcessing(false);
 
     explanationTimeoutRef.current = setTimeout(() => {
       if (isMountedRef.current && isScreenFocused) {
-        handleNextAfterExplanation();
+        handleLevelCompletion();
       }
     }, EXPLANATION_DISPLAY_TIME);
-
-    handleLevelCompletion(); // End quiz immediately on timeout
   }, [isQuizActive, isProcessing, isScreenFocused, stopTimer, showExplanation]);
 
   // Move to next question
@@ -769,12 +775,12 @@ export default function QuizScreen() {
     // FIXED: Calculate total score correctly
     const totalScore = quizScore;
 
-    console.log(
-      "Completing quiz with score:",
-      totalScore,
-      "correct:",
-      correctAnswers
-    );
+    // console.log(
+    //   "Completing quiz with score:",
+    //   totalScore,
+    //   "correct:",
+    //   correctAnswers
+    // );
 
     setIsQuizActive(false);
     cleanupQuiz(); // Clean up all timers and processes
@@ -983,7 +989,7 @@ export default function QuizScreen() {
 
           <TouchableOpacity
             className="bg-primary py-3 px-6 rounded-xl"
-            onPress={handleNextAfterExplanation}
+            onPress={handleLevelCompletion}
             disabled={isProcessing}
           >
             <Text className="text-white font-bold">

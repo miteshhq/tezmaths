@@ -1,7 +1,8 @@
+// root - app/user/level-select.tsx
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { get, ref } from "firebase/database";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useState, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -27,70 +28,6 @@ export default function LevelSelect() {
   const [loading, setLoading] = useState(true);
   const [availableLevels, setAvailableLevels] = useState<number[]>([]);
 
-  // Back handler setup
-  useFocusEffect(
-    useCallback(() => {
-      const onBackPress = () => {
-        router.back();
-        return true;
-      };
-      const backHandler = BackHandler.addEventListener(
-        "hardwareBackPress",
-        onBackPress
-      );
-      return () => backHandler.remove();
-    }, [router])
-  );
-
-  // Load available levels from Firebase
-  const loadAvailableLevels = useCallback(async () => {
-    try {
-      const quizzesRef = ref(database, "quizzes");
-      const snapshot = await get(quizzesRef);
-
-      if (!snapshot.exists()) {
-        console.log("No quizzes found in database");
-        return [];
-      }
-
-      const levelsSet = new Set<number>();
-
-      snapshot.forEach((childSnapshot) => {
-        const quiz = childSnapshot.val();
-        if (quiz.level && typeof quiz.level === "number") {
-          levelsSet.add(quiz.level);
-        }
-      });
-
-      // Convert to sorted array and find continuous sequence
-      const allLevels = Array.from(levelsSet).sort((a, b) => a - b);
-
-      if (allLevels.length === 0) {
-        return [];
-      }
-
-      // Find continuous sequence starting from 1
-      const continuousLevels: number[] = [];
-      let expectedLevel = 1;
-
-      for (const level of allLevels) {
-        if (level === expectedLevel) {
-          continuousLevels.push(level);
-          expectedLevel++;
-        } else if (level > expectedLevel) {
-          // Gap found, stop here
-          break;
-        }
-      }
-
-      return continuousLevels;
-    } catch (error) {
-      console.error("Error loading available levels:", error);
-      return [];
-    }
-  }, []);
-
-  // Load user data and completed levels
   const loadUserData = useCallback(async () => {
     const userId = auth.currentUser?.uid;
     if (!userId) {
@@ -172,30 +109,109 @@ export default function LevelSelect() {
         }
       }
     } catch (error) {
-      console.error("Error loading user data:", error);
+    //   console.error("Error loading user data:", error);
       Alert.alert("Error", "Failed to load level data. Please try again.");
     } finally {
       setLoading(false);
     }
   }, [loadAvailableLevels]);
 
-  // Load data on focus
+  // 1. Back handler useFocusEffect
   useFocusEffect(
     useCallback(() => {
-      loadUserData();
-    }, [loadUserData])
+      const onBackPress = () => {
+        // Stop sound before going back
+        SoundManager.stopSound("levelSoundEffect").catch(console.error);
+        router.back();
+        return true;
+      };
+      const backHandler = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress
+      );
+      return () => backHandler.remove();
+    }, [router])
   );
 
-  // Handle level selection
+  const isScreenActiveRef = useRef(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      isScreenActiveRef.current = true;
+
+      loadUserData(); // without sound
+
+      const soundTimer = setTimeout(async () => {
+        if (isScreenActiveRef.current) {
+          try {
+            await SoundManager.playSound("levelSoundEffect", {
+              isLooping: true,
+              volume: 0.7,
+            });
+          } catch (err) {
+            // console.error("Play error", err);
+          }
+        }
+      }, 500);
+
+      return () => {
+        isScreenActiveRef.current = false;
+        clearTimeout(soundTimer);
+        SoundManager.nukeSounds();
+      };
+    }, [])
+  );
+
+  // Load available levels from Firebase
+  const loadAvailableLevels = useCallback(async () => {
+    try {
+      const quizzesRef = ref(database, "quizzes");
+      const snapshot = await get(quizzesRef);
+
+      if (!snapshot.exists()) {
+        return [];
+      }
+
+      const levelsSet = new Set<number>();
+
+      snapshot.forEach((childSnapshot) => {
+        const quiz = childSnapshot.val();
+        if (quiz.level && typeof quiz.level === "number") {
+          levelsSet.add(quiz.level);
+        }
+      });
+
+      // Convert to sorted array and find continuous sequence
+      const allLevels = Array.from(levelsSet).sort((a, b) => a - b);
+
+      if (allLevels.length === 0) {
+        return [];
+      }
+
+      // Find continuous sequence starting from 1
+      const continuousLevels: number[] = [];
+      let expectedLevel = 1;
+
+      for (const level of allLevels) {
+        if (level === expectedLevel) {
+          continuousLevels.push(level);
+          expectedLevel++;
+        } else if (level > expectedLevel) {
+          // Gap found, stop here
+          break;
+        }
+      }
+
+      return continuousLevels;
+    } catch (error) {
+    //   console.error("Error loading available levels:", error);
+      return [];
+    }
+  }, []);
+
   const handleLevelSelect = async (level: number) => {
     try {
-      await Promise.all([
-        SoundManager.stopSound("levelSoundEffect"),
-        SoundManager.stopSound("clappingSoundEffect"),
-        SoundManager.stopSound("victorySoundEffect"),
-        SoundManager.stopSound("failSoundEffect"),
-      ]);
-
+      await SoundManager.nukeSounds(); // ⬅️ Nuke before navigating
       router.push({
         pathname: "/user/quiz-screen",
         params: {
@@ -204,7 +220,7 @@ export default function LevelSelect() {
         },
       });
     } catch (error) {
-      console.error("Error navigating to quiz:", error);
+    //   console.error("Error navigating to quiz:", error);
     }
   };
 
@@ -213,13 +229,12 @@ export default function LevelSelect() {
     handleLevelSelect(currentLevel);
   };
 
-  // Handle back button
   const handleBack = async () => {
     try {
-      await SoundManager.stopSound("levelSoundEffect");
+      await SoundManager.nukeSounds(); // ⬅️ Ensure total stop
       router.back();
     } catch (error) {
-      console.error("Error going back:", error);
+    //   console.error("Error going back:", error);
       router.back();
     }
   };

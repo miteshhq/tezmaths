@@ -9,14 +9,15 @@ import {
   Alert,
   Platform,
 } from "react-native";
-import { useLocalSearchParams, router } from "expo-router";
+import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
+import SoundManager from "../../components/soundManager";
 import logo from "../../assets/branding/tezmaths-full-logo.png";
 
 const shareConfig = {
   additionalText: "Check out my battle results on TezMaths! ⚔️✨",
-  appStoreLink: "https://apps.apple.com/app/tezmaths/id123456789", // Replace with actual link
+  appStoreLink: "https://apps.apple.com/app/tezmaths/id123456789",
   playStoreLink:
-    "https://play.google.com/store/apps/details?id=com.tezmathsteam.tezmaths", // Replace with actual link
+    "https://play.google.com/store/apps/details?id=com.tezmathsteam.tezmaths",
   downloadText: "Join the battle on TezMaths now!",
   hashtags: "#TezMaths #MathBattle #BrainTraining",
 };
@@ -36,6 +37,18 @@ export default function BattleResultsScreen() {
     parsedPlayers.findIndex((p) => p.userId === currentUserId) + 1;
   const userScore =
     parsedPlayers.find((p) => p.userId === currentUserId)?.score || 0;
+
+  // Play victory sound on focus if userRank is 1
+  useFocusEffect(() => {
+    if (userRank === 1) {
+      SoundManager.playSound("victorySoundEffect").catch(console.error);
+    }
+    return () => {
+      if (userRank === 1) {
+        SoundManager.stopSound("victorySoundEffect").catch(console.error);
+      }
+    };
+  });
 
   const firstPlace = parsedPlayers[0];
   const secondPlace = parsedPlayers[1];
@@ -59,14 +72,6 @@ export default function BattleResultsScreen() {
 
   const handleShare = async () => {
     try {
-      // const uri = await captureRef(cardRef.current, {
-      //   format: "png",
-      //   quality: 1.0,
-      //   result: "tmpfile",
-      //   width: 400,
-      //   height: 600,
-      // });
-
       const downloadLinks =
         Platform.OS === "ios"
           ? `📱 iPhone: ${shareConfig.appStoreLink}\n📱 Android: ${shareConfig.playStoreLink}`
@@ -83,7 +88,6 @@ export default function BattleResultsScreen() {
       await Share.share({
         title: "My TezMaths Battle Results",
         message: shareMessage,
-        // url: `file://${uri}`,
       });
     } catch (error) {
       console.error("Share error:", error);
@@ -116,11 +120,11 @@ export default function BattleResultsScreen() {
             {userRank === 1 ? "🏆 You Won!" : `You Ranked #${userRank}`}
           </Text>
           <Text className="text-xl text-center">
-            Your Score: {userScore} pts
-          </Text>
+          Your Score: {userScore} pts
+        </Text>
           <Text className="text-lg text-center italic mt-2">
-            "{getMotivationalQuote()}"
-          </Text>
+          "{getMotivationalQuote()}"
+        </Text>
         </View>
 
         <View className="flex-row items-end justify-center h-48 mb-8 border-b">
@@ -160,9 +164,7 @@ export default function BattleResultsScreen() {
         </View>
 
         {otherPlayers.length > 0 && (
-          <View
-            className={`flex-row justify-between items-center p-4 rounded-lg mb-2 bg-light-orange`}
-          >
+          <View className="flex-row justify-between items-center p-4 rounded-lg mb-2 bg-light-orange">
             <Text className="text-2xl text-black font-bold">Battle Score</Text>
           </View>
         )}
@@ -179,7 +181,7 @@ export default function BattleResultsScreen() {
             >
               <Text className="text-xl font-bold">
                 {index + 4}. {player.username}
-                {player.userId === currentUserId && " (You)"}
+                {player.userId === currentUserId ? " (You)" : ""}
               </Text>
               <Text className="text-xl">{player.score} pts</Text>
             </View>
@@ -192,7 +194,6 @@ export default function BattleResultsScreen() {
 
         <View className="items-center mb-8 mt-3">
           <Image source={logo} style={{ height: 30, width: 140 }} />
-
           <Text className="text-black text-center">
             Sharpen your speed, master your math!
           </Text>

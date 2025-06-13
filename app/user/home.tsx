@@ -77,6 +77,7 @@ export default function HomeScreen() {
   );
 
   useEffect(() => {
+    SoundManager.unloadAll();
     const userId = auth.currentUser?.uid;
     if (!userId) return;
 
@@ -438,12 +439,7 @@ export default function HomeScreen() {
   }, [animatedValue]);
 
   const handleQuizChoice = async (level, isManualSelection) => {
-    await Promise.all([
-      SoundManager.stopSound("levelSoundEffect"),
-      SoundManager.stopSound("clappingSoundEffect"),
-      SoundManager.stopSound("victorySoundEffect"),
-      SoundManager.stopSound("failSoundEffect"),
-    ]);
+    await SoundManager.unloadAll();
 
     router.push({
       pathname: "/user/quiz-screen",

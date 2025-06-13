@@ -1,4 +1,4 @@
-import { Audio } from "expo-audio";
+import { Audio } from "expo-av";
 
 // Define a type for the play options
 interface PlayOptions {
@@ -24,7 +24,7 @@ const SoundManager = {
     victorySoundEffect: require("../assets/audio/victory.mp3"),
     failSoundEffect: require("../assets/audio/failure.mp3"),
   },
-  soundObjects: {} as Record<SoundKey, Audio.AudioPlayer | undefined>,
+  soundObjects: {} as Record<SoundKey, Audio.Sound | undefined>,
   isInitialized: false,
   isInitializing: false,
 
@@ -34,19 +34,17 @@ const SoundManager = {
     this.isInitializing = true;
 
     try {
-      // Configure audio mode for better performance
+      // Simpler audio mode configuration
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         staysActiveInBackground: false,
-        interruptionModeIOS: Audio.InterruptionModeIOS.DoNotMix,
         playsInSilentModeIOS: true,
         shouldDuckAndroid: true,
-        interruptionModeAndroid: Audio.InterruptionModeAndroid.DoNotMix,
         playThroughEarpieceAndroid: false,
       });
 
       this.isInitialized = true;
-      console.log("SoundManager initialized successfully");
+    //   console.log("SoundManager initialized successfully");
     } catch (error) {
       console.error("Error initializing SoundManager:", error);
     } finally {
@@ -61,18 +59,15 @@ const SoundManager = {
 
     try {
       await this.initialize();
-      console.log(`Loading sound: ${key}`);
+    //   console.log(`Loading sound: ${key}`);
 
-      // Create new audio player instance
-      const player = new Audio.AudioPlayer(this.sounds[key]);
+      // Create new sound object
+      const { sound } = await Audio.Sound.createAsync(this.sounds[key]);
 
-      // Wait for the sound to load completely
-      await player.load();
+      // Store the loaded sound
+      this.soundObjects[key] = sound;
 
-      // Store the loaded player
-      this.soundObjects[key] = player;
-
-      console.log(`Successfully loaded sound: ${key}`);
+    //   console.log(`Successfully loaded sound: ${key}`);
       return true;
     } catch (error) {
       console.error(`Error loading sound for ${key}:`, error);
@@ -80,74 +75,120 @@ const SoundManager = {
     }
   },
 
+  async stopSound(key: SoundKey) {
+    const sound = this.soundObjects[key];
+    if (sound) {
+      try {
+        // First set looping to false to ensure it stops completely
+        await sound.setIsLoopingAsync(false);
+        // Then stop the sound
+        await sound.stopAsync();
+        // Reset position to beginning
+        await sound.setPositionAsync(0);
+        // console.log(`Stopped sound: ${key}`);
+      } catch (error) {
+        console.error(`Error stopping sound for ${key}:`, error);
+        // If normal stop fails, try to unload and reload
+        try {
+          await sound.unloadAsync();
+          delete this.soundObjects[key];
+        //   console.log(`Force unloaded sound: ${key}`);
+        } catch (unloadError) {
+          console.error(`Error force unloading sound for ${key}:`, unloadError);
+        }
+      }
+    }
+  },
+
   async playSound(key: SoundKey, playOptions: PlayOptions = {}) {
     try {
-      // Ensure sound is loaded before playing
+      // First, force stop any existing instance
+      await this.forceStopSound(key);
+
+      // Ensure sound is loaded
       const isLoaded = await this.loadSound(key);
       if (!isLoaded) {
         console.error(`Failed to load sound: ${key}`);
         return;
       }
 
-      const player = this.soundObjects[key];
+      const sound = this.soundObjects[key];
 
-      if (!player) {
-        console.error(`Sound player not available for ${key}`);
+      if (!sound) {
+        console.error(`Sound object not available for ${key}`);
         return;
       }
 
-      console.log(`Playing sound: ${key}`);
-
-      // Reset position and stop if playing
-      try {
-        if (player.isPlaying) {
-          await player.stop();
-        }
-
-        // Reset to beginning
-        await player.seekTo(0);
-      } catch (resetError) {
-        console.warn(`Warning: Could not reset player for ${key}:`, resetError);
-      }
+    //   console.log(`Playing sound: ${key}`);
 
       // Set volume if specified (0.0 to 1.0)
       if (typeof playOptions.volume !== "undefined") {
-        player.volume = Math.max(0, Math.min(1, playOptions.volume));
+        await sound.setVolumeAsync(
+          Math.max(0, Math.min(1, playOptions.volume))
+        );
       }
 
       // Set looping if specified
       if (typeof playOptions.isLooping !== "undefined") {
-        player.loop = playOptions.isLooping;
+        await sound.setIsLoopingAsync(playOptions.isLooping);
       }
 
       // Play the sound
-      await player.play();
-      console.log(`Successfully started playing: ${key}`);
+      await sound.playAsync();
+    //   console.log(`Successfully started playing: ${key}`);
     } catch (error) {
       console.error(`Error playing sound for ${key}:`, error);
-
-      // Try to reload the sound if playing failed
-      try {
-        delete this.soundObjects[key];
-        console.log(`Attempting to reload sound: ${key}`);
-        await this.loadSound(key);
-      } catch (reloadError) {
-        console.error(`Failed to reload sound ${key}:`, reloadError);
-      }
     }
   },
 
-  async stopSound(key: SoundKey) {
-    const player = this.soundObjects[key];
-    if (player) {
+  async forceStopSound(key: SoundKey) {
+    const sound = this.soundObjects[key];
+    if (sound) {
       try {
-        if (player.isPlaying) {
-          await player.stop();
-          console.log(`Stopped sound: ${key}`);
-        }
+        // Multiple stop attempts
+        await sound.setIsLoopingAsync(false);
+        await sound.stopAsync();
+        await sound.unloadAsync();
+        delete this.soundObjects[key];
+        // console.log(`Force stopped and unloaded sound: ${key}`);
+        return true;
       } catch (error) {
-        console.error(`Error stopping sound for ${key}:`, error);
+        console.error(`Error force stopping sound for ${key}:`, error);
+        // Even if there's an error, remove from our tracking
+        delete this.soundObjects[key];
+        return false;
       }
+    }
+    return true;
+  },
+
+  // Add this new method to stop ALL instances
+  async nukeSounds() {
+    try {
+    //   console.log("🔥 NUKING ALL SOUNDS");
+
+      // Stop all tracked sounds
+      for (const [key, sound] of Object.entries(this.soundObjects)) {
+        if (sound) {
+          try {
+            await sound.setIsLoopingAsync(false);
+            await sound.stopAsync();
+            await sound.unloadAsync();
+            // console.log(`Nuked sound: ${key}`);
+          } catch (error) {
+            console.error(`Error nuking sound ${key}:`, error);
+          }
+        }
+      }
+
+      // Clear all references
+      this.soundObjects = {} as Record<SoundKey, Audio.Sound | undefined>;
+
+    //   console.log("🔥 ALL SOUNDS NUKED");
+      return true;
+    } catch (error) {
+      console.error("Error nuking sounds:", error);
+      return false;
     }
   },
 
@@ -157,7 +198,7 @@ const SoundManager = {
         this.stopSound(key as SoundKey)
       );
       await Promise.all(stopPromises);
-      console.log("All sounds stopped");
+    //   console.log("All sounds stopped");
     } catch (error) {
       console.error("Error stopping all sounds:", error);
     }
@@ -170,11 +211,11 @@ const SoundManager = {
 
       // Then unload all sound objects
       const unloadPromises = Object.entries(this.soundObjects).map(
-        async ([key, player]) => {
-          if (player) {
+        async ([key, sound]) => {
+          if (sound) {
             try {
-              await player.unload();
-              console.log(`Unloaded sound: ${key}`);
+              await sound.unloadAsync();
+            //   console.log(`Unloaded sound: ${key}`);
             } catch (error) {
               console.error(`Error unloading sound ${key}:`, error);
             }
@@ -185,11 +226,11 @@ const SoundManager = {
       await Promise.all(unloadPromises);
 
       // Clear the soundObjects
-      this.soundObjects = {} as Record<SoundKey, Audio.AudioPlayer | undefined>;
+      this.soundObjects = {} as Record<SoundKey, Audio.Sound | undefined>;
       this.isInitialized = false;
       this.isInitializing = false;
 
-      console.log("All sounds unloaded and SoundManager reset");
+    //   console.log("All sounds unloaded and SoundManager reset");
     } catch (error) {
       console.error("Error unloading sounds:", error);
     }
@@ -198,7 +239,7 @@ const SoundManager = {
   // Utility method to preload all sounds
   async preloadAllSounds() {
     try {
-      console.log("Preloading all sounds...");
+    //   console.log("Preloading all sounds...");
       const loadPromises = Object.keys(this.sounds).map((key) =>
         this.loadSound(key as SoundKey)
       );
@@ -206,9 +247,9 @@ const SoundManager = {
       const results = await Promise.all(loadPromises);
       const successCount = results.filter(Boolean).length;
 
-      console.log(
-        `Preloaded ${successCount}/${Object.keys(this.sounds).length} sounds`
-      );
+    //   console.log(
+    //     `Preloaded ${successCount}/${Object.keys(this.sounds).length} sounds`
+    //   );
       return successCount === Object.keys(this.sounds).length;
     } catch (error) {
       console.error("Error preloading sounds:", error);
