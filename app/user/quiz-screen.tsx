@@ -945,6 +945,7 @@ export default function QuizScreen() {
             value={userAnswer}
             onChangeText={handleInputChange}
             placeholder="Type Your Answer"
+            placeholderTextColor="#777"
             keyboardType="numeric"
             autoFocus={true}
             editable={

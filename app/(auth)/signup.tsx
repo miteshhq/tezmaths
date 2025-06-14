@@ -13,6 +13,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  SafeAreaView,
 } from "react-native";
 import { auth, database } from "../../firebase/firebaseConfig";
 import { useSimpleGoogleSignIn } from "../../utils/useGoogleSignIn";
@@ -206,122 +207,124 @@ export default function SignUpScreen() {
   const displayError = errorMessage;
 
   return (
-    <ScrollView
-      contentContainerStyle={{
-        flexGrow: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        paddingHorizontal: 20,
-        paddingVertical: 40,
-        backgroundColor: "white",
-        paddingBottom: keyboardHeight > 0 ? keyboardHeight - 30 : 30,
-      }}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      <Text className="text-4xl text-black font-black text-center mb-10 font-['Poppins-Bold']">
-        Create Your Account
-      </Text>
-
-      <TextInput
-        className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
-          focusField === "email" ? "border-2 border-primary" : ""
-        }`}
-        placeholder="Email"
-        placeholderTextColor="#9CA3AF"
-        onChangeText={setEmail}
-        value={email}
-        keyboardType="email-address"
-        autoCapitalize="none"
-        autoCorrect={false}
-        returnKeyType="next"
-        onFocus={() => setFocusField("email")}
-        onBlur={() => setFocusField(null)}
-        blurOnSubmit={false}
-      />
-
-      <TextInput
-        className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
-          focusField === "password" ? "border-2 border-primary" : ""
-        }`}
-        placeholder="Password"
-        placeholderTextColor="#9CA3AF"
-        onChangeText={setPassword}
-        value={password}
-        secureTextEntry
-        returnKeyType="next"
-        onFocus={() => setFocusField("password")}
-        onBlur={() => setFocusField(null)}
-        blurOnSubmit={false}
-      />
-
-      <TextInput
-        className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
-          focusField === "confirmPassword" ? "border-2 border-primary" : ""
-        }`}
-        placeholder="Confirm Password"
-        placeholderTextColor="#9CA3AF"
-        onChangeText={setConfirmPassword}
-        value={confirmPassword}
-        secureTextEntry
-        returnKeyType="done"
-        onSubmitEditing={handleSignUp}
-        onFocus={() => setFocusField("confirmPassword")}
-        onBlur={() => setFocusField(null)}
-      />
-
-      {displayError ? (
-        <Text className="text-red-500 text-sm text-center font-['Poppins-Regular'] mb-2">
-          {displayError}
-        </Text>
-      ) : null}
-
-      <TouchableOpacity
-        className="bg-primary py-3 px-20 rounded-2xl items-center justify-center mt-5 mb-4"
-        onPress={handleSignUp}
-        activeOpacity={0.8}
+    <SafeAreaView className="flex-1 bg-white">
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          paddingHorizontal: 20,
+          paddingVertical: 40,
+          backgroundColor: "white",
+          paddingBottom: keyboardHeight > 0 ? keyboardHeight - 30 : 30,
+        }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        <Text className="text-white text-xl font-bold font-['Poppins-SemiBold'] text-center">
-          Sign Up
+        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+        <Text className="text-4xl text-black font-black text-center mb-10 font-['Poppins-Bold']">
+          Create Your Account
         </Text>
-      </TouchableOpacity>
 
-      <View className="flex-row mb-8 items-center">
-        <Text className="text-black text-base font-bold font-['Poppins-Regular']">
-          Already have an account?
-        </Text>
-        <TouchableOpacity onPress={navigateToLogin} activeOpacity={0.7}>
-          <Text className="text-primary text-base font-['Poppins-SemiBold'] font-bold">
-            {" "}
-            Log In
+        <TextInput
+          className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
+            focusField === "email" ? "border-2 border-primary" : ""
+          }`}
+          placeholder="Email"
+          placeholderTextColor="#9CA3AF"
+          onChangeText={setEmail}
+          value={email}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="next"
+          onFocus={() => setFocusField("email")}
+          onBlur={() => setFocusField(null)}
+          blurOnSubmit={false}
+        />
+
+        <TextInput
+          className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
+            focusField === "password" ? "border-2 border-primary" : ""
+          }`}
+          placeholder="Password"
+          placeholderTextColor="#9CA3AF"
+          onChangeText={setPassword}
+          value={password}
+          secureTextEntry
+          returnKeyType="next"
+          onFocus={() => setFocusField("password")}
+          onBlur={() => setFocusField(null)}
+          blurOnSubmit={false}
+        />
+
+        <TextInput
+          className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
+            focusField === "confirmPassword" ? "border-2 border-primary" : ""
+          }`}
+          placeholder="Confirm Password"
+          placeholderTextColor="#9CA3AF"
+          onChangeText={setConfirmPassword}
+          value={confirmPassword}
+          secureTextEntry
+          returnKeyType="done"
+          onSubmitEditing={handleSignUp}
+          onFocus={() => setFocusField("confirmPassword")}
+          onBlur={() => setFocusField(null)}
+        />
+
+        {displayError ? (
+          <Text className="text-red-500 text-sm text-center font-['Poppins-Regular'] mb-2">
+            {displayError}
+          </Text>
+        ) : null}
+
+        <TouchableOpacity
+          className="bg-primary py-3 px-20 rounded-2xl items-center justify-center mt-5 mb-4"
+          onPress={handleSignUp}
+          activeOpacity={0.8}
+        >
+          <Text className="text-white text-xl font-bold font-['Poppins-SemiBold'] text-center">
+            Sign Up
           </Text>
         </TouchableOpacity>
-      </View>
 
-      <Text className="text-black text-sm font-black font-['Poppins-Regular'] mb-4 text-center">
-        OR
-      </Text>
-
-      <TouchableOpacity
-        className="bg-white border border-black py-2 px-8 rounded-full items-center justify-center"
-        style={{
-          opacity: !isReady || isLoading ? 0.5 : 1,
-        }}
-        activeOpacity={0.8}
-        onPress={handleGoogleSignIn}
-        disabled={!isReady || isLoading}
-      >
-        <View className="flex flex-row items-center gap-2">
-          <Image
-            source={require("../../assets/icons/google.png")}
-            style={{ width: 18, height: 18 }}
-          />
-          <Text className="text-black text-lg font-bold font-['Poppins-Regular']">
-            {isLoading ? "Signing in..." : "Sign in with Google"}
+        <View className="flex-row mb-8 items-center">
+          <Text className="text-black text-base font-bold font-['Poppins-Regular']">
+            Already have an account?
           </Text>
+          <TouchableOpacity onPress={navigateToLogin} activeOpacity={0.7}>
+            <Text className="text-primary text-base font-['Poppins-SemiBold'] font-bold">
+              {" "}
+              Log In
+            </Text>
+          </TouchableOpacity>
         </View>
-      </TouchableOpacity>
-    </ScrollView>
+
+        <Text className="text-black text-sm font-black font-['Poppins-Regular'] mb-4 text-center">
+          OR
+        </Text>
+
+        <TouchableOpacity
+          className="bg-white border border-black py-2 px-8 rounded-full items-center justify-center"
+          style={{
+            opacity: !isReady || isLoading ? 0.5 : 1,
+          }}
+          activeOpacity={0.8}
+          onPress={handleGoogleSignIn}
+          disabled={!isReady || isLoading}
+        >
+          <View className="flex flex-row items-center gap-2">
+            <Image
+              source={require("../../assets/icons/google.png")}
+              style={{ width: 18, height: 18 }}
+            />
+            <Text className="text-black text-lg font-bold font-['Poppins-Regular']">
+              {isLoading ? "Signing in..." : "Sign in with Google"}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
