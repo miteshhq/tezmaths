@@ -105,56 +105,56 @@ export const useSimpleGoogleSignIn = () => {
 
             // console.log('Sign-in completed successfully:', {
             // uid: firebaseUser.uid,
-              //  email: firebaseUser.email,
-               //     isNewUser
-    //    });
+            //  email: firebaseUser.email,
+            //     isNewUser
+            //    });
 
-        setError(null);
-        return { user: firebaseUser, isNewUser };
+            setError(null);
+            return { user: firebaseUser, isNewUser };
 
-    } catch (error) {
-        // console.error('Google Sign-In Error:', error);
+        } catch (error) {
+            // console.error('Google Sign-In Error:', error);
 
-        let errorMessage = 'Sign-in failed. Please try again.';
+            let errorMessage = 'Sign-in failed. Please try again.';
 
-        // Handle specific Google Sign-In errors
-        if (error.code === 'auth/network-request-failed') {
-            errorMessage = 'Network error. Check your internet connection.';
-        } else if (error.code === 'auth/invalid-credential') {
-            errorMessage = 'Authentication failed. Please try again.';
-        } else if (error.code === '12501') {
-            // Google Sign-In was cancelled
-            errorMessage = 'Sign-in cancelled';
-        } else if (error.code === '7') {
-            // Network error
-            errorMessage = 'Network error. Check your internet connection.';
-        } else if (error?.message) {
-            errorMessage = error.message;
+            // Handle specific Google Sign-In errors
+            if (error.code === 'auth/network-request-failed') {
+                errorMessage = 'Network error. Check your internet connection.';
+            } else if (error.code === 'auth/invalid-credential') {
+                errorMessage = 'Authentication failed. Please try again.';
+            } else if (error.code === '12501') {
+                // Google Sign-In was cancelled
+                errorMessage = 'Sign-in cancelled';
+            } else if (error.code === '7') {
+                // Network error
+                errorMessage = 'Network error. Check your internet connection.';
+            } else if (error?.message) {
+                errorMessage = error.message;
+            }
+
+            setError(errorMessage);
+            return null;
+        } finally {
+            setIsLoading(false);
         }
+    };
 
-        setError(errorMessage);
-        return null;
-    } finally {
-        setIsLoading(false);
-    }
-};
+    const signOut = async () => {
+        try {
+            // Sign out from both Google and Firebase
+            await GoogleSignin.signOut();
+            await auth.signOut();
+            // console.log('Sign out successful');
+        } catch (error) {
+            // console.error('Sign out error:', error);
+        }
+    };
 
-const signOut = async () => {
-    try {
-        // Sign out from both Google and Firebase
-        await GoogleSignin.signOut();
-        await auth.signOut();
-        // console.log('Sign out successful');
-    } catch (error) {
-        // console.error('Sign out error:', error);
-    }
-};
-
-return {
-    signInWithGoogle,
-    signOut,
-    isLoading,
-    error,
-    isReady
-};
+    return {
+        signInWithGoogle,
+        signOut,
+        isLoading,
+        error,
+        isReady
+    };
 };
