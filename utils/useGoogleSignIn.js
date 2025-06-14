@@ -6,7 +6,8 @@ import { ref, get, set } from 'firebase/database';
 
 export const useSimpleGoogleSignIn = () => {
     const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState < string | null > (null);
+    // const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
     const [isReady, setIsReady] = useState(false);
 
     // Initialize Google Sign-In when hook is created
