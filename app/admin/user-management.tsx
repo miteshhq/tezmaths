@@ -21,7 +21,9 @@ export default function UserManagement() {
       onValue(usersRef, async (snapshot) => {
         const data = snapshot.val();
         const userList = data
-          ? Object.keys(data).map((key) => ({ id: key, ...data[key] }))
+          ? Object.keys(data)
+              .map((key) => ({ id: key, ...data[key] }))
+              .filter((user) => user.email !== "tezmaths@admin.com")
           : [];
         setUsers(userList.reverse());
         setFilteredUsers(userList.reverse());

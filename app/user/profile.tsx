@@ -226,7 +226,6 @@ export default function ProfileScreen() {
   const handleLogout = async () => {
     const LEVEL_STORAGE_KEY = "highestLevelReached";
 
-    // Stop all sound effects
     await SoundManager.stopSound("levelSoundEffect");
     await SoundManager.stopSound("clappingSoundEffect");
     await SoundManager.stopSound("victorySoundEffect");
@@ -235,7 +234,6 @@ export default function ProfileScreen() {
     try {
       const userId = auth.currentUser?.uid;
 
-      // Save user progress before logout
       if (userId) {
         const userRef = ref(database, `users/${userId}`);
         const storedLevel = await AsyncStorage.getItem(LEVEL_STORAGE_KEY);
@@ -246,27 +244,38 @@ export default function ProfileScreen() {
         });
       }
 
-      // Check if user is signed in with Google
-      const isGoogleSignedIn = await GoogleSignin.isSignedIn();
-
-      if (isGoogleSignedIn) {
-        // console.log(
-        //   "[LOGOUT] Google user detected, performing Google logout..."
-        // );
-
-        // For Google users: revoke access and sign out
+      // Always try Google logout operations (even if isSignedIn returns false)
+      try {
+        // Method 1: Try both revoke and signOut
+        await GoogleSignin.revokeAccess();
+        await GoogleSignin.signOut();
+      } catch (error1) {
         try {
-          await GoogleSignin.revokeAccess();
+          // Method 2: Try just signOut if revoke fails
           await GoogleSignin.signOut();
-        } catch (googleError) {
-          //   console.warn("[LOGOUT] Google logout failed:", googleError);
+        } catch (error2) {
+          try {
+            // Method 3: Try clearing tokens manually
+            await GoogleSignin.clearCachedAccessToken();
+          } catch (error3) {
+            // All Google logout methods failed, continue anyway
+          }
         }
       }
 
-      // Always sign out from Firebase Auth (works for both email and Google users)
+      // Always sign out from Firebase
       await signOut(auth);
 
+      // Clear all local storage
       await AsyncStorage.clear();
+
+      // Force clear any remaining Google session data
+      try {
+        await AsyncStorage.removeItem("@google_signin_user");
+        await AsyncStorage.removeItem("google_signin_account");
+      } catch (storageError) {
+        // Ignore storage clearing errors
+      }
 
       router.push("/login");
     } catch (error: any) {
@@ -274,7 +283,7 @@ export default function ProfileScreen() {
         await AsyncStorage.clear();
         router.push("/login");
       } catch (fallbackError) {
-        // // console.error("[PROFILE] Fallback logout failed:", fallbackError);
+        // Fallback failed
       }
     }
   };

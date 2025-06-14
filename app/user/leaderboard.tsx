@@ -49,7 +49,13 @@ export default function LeaderboardScreen() {
               username: user.username || "Unknown",
               totalPoints: user.totalPoints ?? 0,
               fullName: user.fullName || "Unknown",
+              email: user.email || "",
             }))
+            .filter(
+              (user) =>
+                user.email !== "tezmaths@admin.com" &&
+                user.username.toLowerCase() !== "admin"
+            )
             .sort((a, b) => b.totalPoints - a.totalPoints)
             .map((user, index) => ({ ...user, rank: index + 1 }));
 
