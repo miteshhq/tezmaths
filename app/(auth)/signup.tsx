@@ -2,7 +2,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { get, ref } from "firebase/database"; // ADD THIS LINE
+import { get, ref } from "firebase/database";
 import React, { useCallback, useState } from "react";
 import {
   Image,
@@ -16,12 +16,12 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import { auth, database } from "../../firebase/firebaseConfig"; // ADD database import
+import { auth, database } from "../../firebase/firebaseConfig";
 import { useSimpleGoogleSignIn } from "../../utils/useGoogleSignIn";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 6;
-const LEVEL_STORAGE_KEY = "highestLevelReached"; // ADD THIS LINE
+const LEVEL_STORAGE_KEY = "highestLevelReached";
 
 export default function SignUpScreen() {
   const router = useRouter();
