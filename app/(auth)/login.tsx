@@ -5,18 +5,18 @@ import {
   signInWithEmailAndPassword,
 } from "firebase/auth";
 import { get, ref } from "firebase/database";
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   Image,
   Keyboard,
+  SafeAreaView,
   ScrollView,
   StatusBar,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  SafeAreaView,
 } from "react-native";
 import { auth, database } from "../../firebase/firebaseConfig";
 import { useSimpleGoogleSignIn } from "../../utils/useGoogleSignIn";
@@ -57,7 +57,7 @@ export default function LoginScreen() {
   const handleGoogleSignIn = useCallback(async () => {
     try {
       setErrorMessage(""); // Clear any previous errors
-      console.log("Starting Google Sign-In from login screen...");
+      //   console.log("Starting Google Sign-In from login screen...");
 
       const result = await signInWithGoogle();
 
@@ -75,7 +75,7 @@ export default function LoginScreen() {
       // });
 
       if (isNewUser) {
-        console.log("New user detected, redirecting to register...");
+        // console.log("New user detected, redirecting to register...");
         router.push({
           pathname: "/register",
           params: {
@@ -86,14 +86,14 @@ export default function LoginScreen() {
         });
       } else {
         // Check if user data is complete
-        console.log("Existing user, checking profile completion...");
+        // console.log("Existing user, checking profile completion...");
         const userRef = ref(database, `users/${user.uid}`);
         const snapshot = await get(userRef);
 
         if (!snapshot.exists()) {
-          console.log(
-            "User data not found in database, redirecting to register..."
-          );
+          //   console.log(
+          //     "User data not found in database, redirecting to register..."
+          //   );
           router.push({
             pathname: "/register",
             params: {
@@ -106,13 +106,13 @@ export default function LoginScreen() {
         }
 
         const userData = snapshot.val();
-        console.log("User data found:", {
-          hasData: !!userData,
-          isNewUser: userData.isnewuser,
-        });
+        // console.log("User data found:", {
+        //   hasData: !!userData,
+        //   isNewUser: userData.isnewuser,
+        // });
 
         if (userData.isnewuser === true) {
-          console.log("User profile incomplete, redirecting to register...");
+          //   console.log("User profile incomplete, redirecting to register...");
           router.push({
             pathname: "/register",
             params: {
@@ -122,12 +122,12 @@ export default function LoginScreen() {
             },
           });
         } else {
-          console.log("User profile complete, redirecting to home...");
+          //   console.log("User profile complete, redirecting to home...");
           await handleUserRedirect(user, userData);
         }
       }
     } catch (error) {
-      console.error("Google Sign-In failed in login screen:", error);
+      // console.error("Google Sign-In failed in login screen:", error);
 
       // Set a user-friendly error message
       let errorMsg = "Google sign-in failed. Please try again.";
@@ -184,7 +184,7 @@ export default function LoginScreen() {
         [{ text: "OK" }]
       );
     } catch (error) {
-      console.error("Password reset failed:", error);
+      // console.error("Password reset failed:", error);
 
       let errorMsg = "Failed to send password reset email. Please try again.";
 
@@ -253,7 +253,7 @@ export default function LoginScreen() {
       const userData = snapshot.val();
       await handleUserRedirect(user, userData);
     } catch (error) {
-      console.error("Login failed:", error);
+      // console.error("Login failed:", error);
 
       let errorMsg = "Login failed. Please check your credentials.";
 

@@ -49,7 +49,7 @@ export default function ResultsScreen() {
             await SoundManager.playSound("failSoundEffect");
           }
         } catch (error) {
-          console.error("Error playing result sound:", error);
+        //   console.error("Error playing result sound:", error);
         }
       };
       playResultSound();
@@ -125,7 +125,7 @@ export default function ResultsScreen() {
         );
       }
     } catch (error) {
-      console.error("Error sharing:", error);
+    //   console.error("Error sharing:", error);
       Alert.alert("Share Error", "Unable to share. Please try again later.", [
         { text: "OK" },
       ]);

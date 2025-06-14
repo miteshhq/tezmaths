@@ -1,17 +1,17 @@
 // app/register.tsx
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { get, ref, set, update } from "firebase/database";
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Image,
-  StatusBar,
   Keyboard,
+  SafeAreaView,
   ScrollView,
+  StatusBar,
   Text,
   TextInput,
   TouchableOpacity,
-    View,
-  SafeAreaView
+  View,
 } from "react-native";
 import { auth, database } from "../../firebase/firebaseConfig";
 
@@ -108,7 +108,7 @@ export default function RegisterScreen() {
       if (!userData) return null;
       return { userId, userData };
     } catch (error) {
-      console.error(`Error finding user:`, error);
+      // console.error(`Error finding user:`, error);
       return null;
     }
   }, []);
@@ -153,7 +153,7 @@ export default function RegisterScreen() {
 
         return true;
       } catch (error) {
-        console.error(`Error processing referral:`, error);
+        // console.error(`Error processing referral:`, error);
         return false;
       }
     },
@@ -187,7 +187,7 @@ export default function RegisterScreen() {
       setUsernameAvailable(isAvailable);
       return isAvailable;
     } catch (error) {
-      console.error("Error checking username:", error);
+      // console.error("Error checking username:", error);
       setUsernameAvailable(true);
       return true;
     }
@@ -271,13 +271,13 @@ export default function RegisterScreen() {
       const userRef = ref(database, `users/${userId}`);
       await set(userRef, userData);
 
-      console.log(
-        "Registration completed successfully for:",
-        isGoogleUser === "true" ? "Google user" : "regular user"
-      );
+      //   console.log(
+      //     "Registration completed successfully for:",
+      //     isGoogleUser === "true" ? "Google user" : "regular user"
+      //   );
       router.push("/user/home");
     } catch (error) {
-      console.error("Registration failed:", error);
+      // console.error("Registration failed:", error);
       setErrorMessage(
         `Registration failed: ${error.message || "Please try again."}`
       );
@@ -299,178 +299,178 @@ export default function RegisterScreen() {
     router,
   ]);
 
-    return (
-      <SafeAreaView className="flex-1 bg-white">
-        <ScrollView
-          contentContainerStyle={{
-            flexGrow: 1,
-            justifyContent: "center",
-            alignItems: "center",
-            paddingHorizontal: 20,
-            paddingVertical: 40,
-            backgroundColor: "white",
-            paddingBottom: keyboardHeight > 0 ? keyboardHeight - 30 : 30,
-          }}
-          keyboardShouldPersistTaps="handled"
-        >
-          <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-          <Text className="text-4xl text-black font-black text-center mb-4 font-['Poppins-Bold']">
-            {isGoogleUser === "true"
-              ? "Complete Your Profile"
-              : "Setup Your Profile"}
+  return (
+    <SafeAreaView className="flex-1 bg-white">
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          paddingHorizontal: 20,
+          paddingVertical: 40,
+          backgroundColor: "white",
+          paddingBottom: keyboardHeight > 0 ? keyboardHeight - 30 : 30,
+        }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+        <Text className="text-4xl text-black font-black text-center mb-4 font-['Poppins-Bold']">
+          {isGoogleUser === "true"
+            ? "Complete Your Profile"
+            : "Setup Your Profile"}
+        </Text>
+
+        {/* Avatar Selection */}
+        <View className="mb-6 w-full">
+          <Text className="text-lg text-black font-semibold text-center mb-4 font-['Poppins-SemiBold']">
+            Choose your avatar
           </Text>
-
-          {/* Avatar Selection */}
-          <View className="mb-6 w-full">
-            <Text className="text-lg text-black font-semibold text-center mb-4 font-['Poppins-SemiBold']">
-              Choose your avatar
-            </Text>
-            <View className="flex-row flex-wrap justify-center">
-              {avatarOptions.map((avatar) => (
-                <TouchableOpacity
-                  key={avatar.id}
-                  onPress={() => setSelectedAvatar(avatar.id)}
-                  className={`m-2 p-2 rounded-full border-2 ${
-                    selectedAvatar === avatar.id
-                      ? "border-primary"
-                      : "border-gray-300"
-                  }`}
-                  activeOpacity={0.8}
-                >
-                  <Image
-                    source={avatar.source}
-                    className="w-16 h-20 rounded-full"
-                    resizeMode="cover"
-                  />
-                </TouchableOpacity>
-              ))}
-            </View>
+          <View className="flex-row flex-wrap justify-center">
+            {avatarOptions.map((avatar) => (
+              <TouchableOpacity
+                key={avatar.id}
+                onPress={() => setSelectedAvatar(avatar.id)}
+                className={`m-2 p-2 rounded-full border-2 ${
+                  selectedAvatar === avatar.id
+                    ? "border-primary"
+                    : "border-gray-300"
+                }`}
+                activeOpacity={0.8}
+              >
+                <Image
+                  source={avatar.source}
+                  className="w-16 h-20 rounded-full"
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+            ))}
           </View>
+        </View>
 
-          {/* Name Input */}
-          <View className="mb-4 w-full">
-            <Text className="text-base text-black font-medium mb-2 font-['Poppins-Medium']">
-              Name
+        {/* Name Input */}
+        <View className="mb-4 w-full">
+          <Text className="text-base text-black font-medium mb-2 font-['Poppins-Medium']">
+            Name
+          </Text>
+          <TextInput
+            className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
+              focusField === "fullname" ? "border-2 border-primary" : ""
+            }`}
+            onFocus={() => setFocusField("fullname")}
+            onBlur={() => setFocusField(null)}
+            placeholder="Enter your full name"
+            placeholderTextColor="#9CA3AF"
+            onChangeText={setFullName}
+            value={fullName}
+            returnKeyType="next"
+            blurOnSubmit={false}
+          />
+        </View>
+
+        {/* Username Input */}
+        <View className="mb-4 w-full">
+          <View className="flex-row justify-between items-center mb-2">
+            <Text className="text-base text-black font-medium font-['Poppins-Medium']">
+              Username
             </Text>
-            <TextInput
-              className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
-                focusField === "fullname" ? "border-2 border-primary" : ""
-              }`}
-              onFocus={() => setFocusField("fullname")}
-              onBlur={() => setFocusField(null)}
-              placeholder="Enter your full name"
-              placeholderTextColor="#9CA3AF"
-              onChangeText={setFullName}
-              value={fullName}
-              returnKeyType="next"
-              blurOnSubmit={false}
-            />
-          </View>
-
-          {/* Username Input */}
-          <View className="mb-4 w-full">
-            <View className="flex-row justify-between items-center mb-2">
-              <Text className="text-base text-black font-medium font-['Poppins-Medium']">
-                Username
-              </Text>
-              {username ? (
-                <Text
-                  className={`text-sm font-medium font-['Poppins-Medium'] ${
-                    usernameAvailable ? "text-green-600" : "text-red-500"
-                  }`}
-                >
-                  {usernameAvailable ? "Available" : "Taken"}
-                </Text>
-              ) : null}
-            </View>
-            <TextInput
-              className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
-                focusField === "username" ? "border-2 border-primary" : ""
-              }`}
-              onFocus={() => setFocusField("username")}
-              onBlur={() => {
-                setFocusField(null);
-                checkUsernameAvailability;
-              }}
-              placeholder="Choose a username"
-              placeholderTextColor="#9CA3AF"
-              onChangeText={handleUsernameChange}
-              value={username}
-              returnKeyType="next"
-              blurOnSubmit={false}
-            />
-          </View>
-
-          {/* Phone Input */}
-          <View className="mb-4 w-full">
-            <Text className="text-base text-black font-medium mb-2 font-['Poppins-Medium']">
-              Phone
-            </Text>
-            <TextInput
-              className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
-                focusField === "phonenumber" ? "border-2 border-primary" : ""
-              }`}
-              onFocus={() => setFocusField("phonenumber")}
-              onBlur={() => {
-                setFocusField(null);
-                validatePhoneNumber;
-              }}
-              placeholder="Enter your phone number"
-              placeholderTextColor="#9CA3AF"
-              keyboardType="numeric"
-              onChangeText={setPhoneNumber}
-              value={phoneNumber}
-              returnKeyType="next"
-              blurOnSubmit={false}
-            />
-            {phoneError ? (
-              <Text className="text-red-500 text-sm mt-1 font-['Poppins-Regular']">
-                {phoneError}
+            {username ? (
+              <Text
+                className={`text-sm font-medium font-['Poppins-Medium'] ${
+                  usernameAvailable ? "text-green-600" : "text-red-500"
+                }`}
+              >
+                {usernameAvailable ? "Available" : "Taken"}
               </Text>
             ) : null}
           </View>
+          <TextInput
+            className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
+              focusField === "username" ? "border-2 border-primary" : ""
+            }`}
+            onFocus={() => setFocusField("username")}
+            onBlur={() => {
+              setFocusField(null);
+              checkUsernameAvailability;
+            }}
+            placeholder="Choose a username"
+            placeholderTextColor="#9CA3AF"
+            onChangeText={handleUsernameChange}
+            value={username}
+            returnKeyType="next"
+            blurOnSubmit={false}
+          />
+        </View>
 
-          {/* Referral Code Input */}
-          <View className="mb-6 w-full">
-            <Text className="text-base text-black font-medium mb-2 font-['Poppins-Medium']">
-              Referral Code (Optional)
-            </Text>
-            <TextInput
-              className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
-                focusField === "refercode" ? "border-2 border-primary" : ""
-              }`}
-              onFocus={() => setFocusField("refercode")}
-              onBlur={() => setFocusField(null)}
-              placeholder="Enter friend's username"
-              placeholderTextColor="#9CA3AF"
-              onChangeText={setReferralCode}
-              value={referralCode}
-              returnKeyType="done"
-              onSubmitEditing={handleRegister}
-            />
-          </View>
-
-          {/* Error Message */}
-          {errorMessage ? (
-            <Text className="text-red-500 text-sm text-center font-['Poppins-Regular'] mb-4">
-              {errorMessage}
+        {/* Phone Input */}
+        <View className="mb-4 w-full">
+          <Text className="text-base text-black font-medium mb-2 font-['Poppins-Medium']">
+            Phone
+          </Text>
+          <TextInput
+            className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
+              focusField === "phonenumber" ? "border-2 border-primary" : ""
+            }`}
+            onFocus={() => setFocusField("phonenumber")}
+            onBlur={() => {
+              setFocusField(null);
+              validatePhoneNumber;
+            }}
+            placeholder="Enter your phone number"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="numeric"
+            onChangeText={setPhoneNumber}
+            value={phoneNumber}
+            returnKeyType="next"
+            blurOnSubmit={false}
+          />
+          {phoneError ? (
+            <Text className="text-red-500 text-sm mt-1 font-['Poppins-Regular']">
+              {phoneError}
             </Text>
           ) : null}
+        </View>
 
-          {/* Continue Button */}
-          <TouchableOpacity
-            className={`bg-primary py-3 px-8 rounded-2xl items-center justify-center w-full ${
-              isProcessing ? "opacity-70" : ""
+        {/* Referral Code Input */}
+        <View className="mb-6 w-full">
+          <Text className="text-base text-black font-medium mb-2 font-['Poppins-Medium']">
+            Referral Code (Optional)
+          </Text>
+          <TextInput
+            className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
+              focusField === "refercode" ? "border-2 border-primary" : ""
             }`}
-            onPress={handleRegister}
-            disabled={isProcessing}
-            activeOpacity={0.8}
-          >
-            <Text className="text-white text-xl font-bold font-['Poppins-SemiBold'] text-center">
-              {isProcessing ? "Processing..." : "Complete Registration"}
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </SafeAreaView>
-    );
+            onFocus={() => setFocusField("refercode")}
+            onBlur={() => setFocusField(null)}
+            placeholder="Enter friend's username"
+            placeholderTextColor="#9CA3AF"
+            onChangeText={setReferralCode}
+            value={referralCode}
+            returnKeyType="done"
+            onSubmitEditing={handleRegister}
+          />
+        </View>
+
+        {/* Error Message */}
+        {errorMessage ? (
+          <Text className="text-red-500 text-sm text-center font-['Poppins-Regular'] mb-4">
+            {errorMessage}
+          </Text>
+        ) : null}
+
+        {/* Continue Button */}
+        <TouchableOpacity
+          className={`bg-primary py-3 px-8 rounded-2xl items-center justify-center w-full ${
+            isProcessing ? "opacity-70" : ""
+          }`}
+          onPress={handleRegister}
+          disabled={isProcessing}
+          activeOpacity={0.8}
+        >
+          <Text className="text-white text-xl font-bold font-['Poppins-SemiBold'] text-center">
+            {isProcessing ? "Processing..." : "Complete Registration"}
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
+  );
 }

@@ -78,7 +78,7 @@ export default function ReferralPoints() {
         });
       }
     } catch (error) {
-      console.error("Failed to fetch referral data:", error);
+      // console.error("Failed to fetch referral data:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);

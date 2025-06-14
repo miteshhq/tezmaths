@@ -7,20 +7,19 @@ import {
   ref,
   remove,
   serverTimestamp,
-  set,
   update,
 } from "firebase/database";
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   RefreshControl,
   ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  Modal,
 } from "react-native";
 import * as XLSX from "xlsx";
 import { auth, database } from "../../firebase/firebaseConfig";
@@ -104,7 +103,7 @@ export default function QuestionManagement() {
         );
       }
     } catch (error) {
-      console.error("Error checking admin status:", error);
+      // console.error("Error checking admin status:", error);
       setIsAdmin(false);
     }
   };
@@ -131,7 +130,7 @@ export default function QuestionManagement() {
       });
       setExistingQuizzes(quizzes.reverse());
     } catch (error: any) {
-      console.error("Error fetching quizzes:", error);
+      // console.error("Error fetching quizzes:", error);
       if (error.code === "PERMISSION_DENIED") {
         Alert.alert(
           "Permission Denied",
@@ -215,7 +214,7 @@ export default function QuestionManagement() {
       setAutoGenCount("");
       fetchExistingQuizzes();
     } catch (error: any) {
-      console.error("Error generating questions:", error);
+      // console.error("Error generating questions:", error);
       Alert.alert("Error", `Failed to generate questions: ${error.message}`);
     } finally {
       setLoading(false);
@@ -343,7 +342,7 @@ export default function QuestionManagement() {
               await fetchExistingQuizzes();
               Alert.alert("Success", "Quiz deleted successfully");
             } catch (error: any) {
-              console.error("Error deleting quiz:", error);
+              // console.error("Error deleting quiz:", error);
               Alert.alert("Error", `Failed to delete quiz: ${error.message}`);
             }
           },
@@ -367,7 +366,7 @@ export default function QuestionManagement() {
         await parseExcelFile(file.uri);
       }
     } catch (err) {
-      console.error("Error picking file:", err);
+      // console.error("Error picking file:", err);
       Alert.alert("Error", "Failed to pick Excel file. Please try again.");
     }
   };
@@ -477,7 +476,7 @@ export default function QuestionManagement() {
 
           newQuestions.push(question);
         } catch (rowError) {
-          console.error(`Error processing row ${index + 2}:`, rowError);
+          // console.error(`Error processing row ${index + 2}:`, rowError);
         }
       });
 
@@ -496,7 +495,7 @@ export default function QuestionManagement() {
         } from Excel file!`
       );
     } catch (error) {
-      console.error("Error parsing Excel file:", error);
+      // console.error("Error parsing Excel file:", error);
 
       let errorMessage = "Failed to parse Excel file. ";
       if (error instanceof Error) {
@@ -652,7 +651,7 @@ export default function QuestionManagement() {
       resetForm();
       fetchExistingQuizzes();
     } catch (error: any) {
-      console.error("Error saving quiz:", error);
+      // console.error("Error saving quiz:", error);
       Alert.alert("Error", `Failed to save quiz: ${error.message}`);
     } finally {
       setLoading(false);
@@ -730,7 +729,7 @@ export default function QuestionManagement() {
       fetchExistingQuizzes();
       setEditMaxDisplayModal(false);
     } catch (error) {
-      console.error("Error updating max display:", error);
+      // console.error("Error updating max display:", error);
       Alert.alert("Error", `Failed to update: ${error.message}`);
     } finally {
       setLoading(false);

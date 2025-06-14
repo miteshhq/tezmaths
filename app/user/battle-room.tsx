@@ -1,15 +1,15 @@
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
   Text,
   TouchableOpacity,
-  ActivityIndicator,
-  ScrollView,
-  Alert,
+  View,
 } from "react-native";
-import { useRouter, useLocalSearchParams } from "expo-router";
-import { useEffect, useState, useCallback, useRef } from "react";
-import { battleManager } from "../../utils/battleManager";
 import { auth } from "../../firebase/firebaseConfig";
+import { battleManager } from "../../utils/battleManager";
 
 export default function BattleRoom() {
   const router = useRouter();
@@ -40,14 +40,14 @@ export default function BattleRoom() {
       navigationRef.current = true;
       setIsNavigating(true);
 
-      console.log("Navigating to:", path);
+      //   console.log("Navigating to:", path);
 
       setTimeout(() => {
         if (isMounted && navigationRef.current) {
           try {
             router.push(path);
           } catch (error) {
-            console.error("Navigation error:", error);
+            // console.error("Navigation error:", error);
             navigationRef.current = false;
             setIsNavigating(false);
           }
@@ -79,7 +79,7 @@ export default function BattleRoom() {
   useEffect(() => {
     if (!roomId || !isMounted) return;
 
-    console.log("Setting up room listener for:", roomId);
+    // console.log("Setting up room listener for:", roomId);
 
     const validateAndListen = async () => {
       try {
@@ -97,7 +97,7 @@ export default function BattleRoom() {
         const unsubscribe = battleManager.listenToRoom(roomId, (roomData) => {
           if (!isMounted || navigationRef.current) return;
 
-        //   console.log("Room data updated:", roomData);
+          //   console.log("Room data updated:", roomData);
 
           if (!roomData) {
             Alert.alert("Room Closed", "The battle room has been closed", [
@@ -131,7 +131,7 @@ export default function BattleRoom() {
           battleManager.updatePlayerConnection(roomId, false);
         };
       } catch (error) {
-        console.error("Room error:", error);
+        // console.error("Room error:", error);
         if (isMounted) {
           setError(error);
         }
@@ -156,11 +156,11 @@ export default function BattleRoom() {
         return;
       }
 
-      console.log("Starting battle...");
+      //   console.log("Starting battle...");
       await battleManager.startBattle(roomId);
       router.push(`/user/battle-screen?roomId=${roomId}`);
     } catch (error) {
-      console.error("Start battle error:", error);
+      // console.error("Start battle error:", error);
       Alert.alert("Error", error.message);
     }
   };
@@ -169,7 +169,7 @@ export default function BattleRoom() {
     try {
       await battleManager.toggleReady(roomId);
     } catch (error) {
-      console.error("Toggle ready error:", error);
+      // console.error("Toggle ready error:", error);
     }
   };
 
@@ -209,7 +209,7 @@ export default function BattleRoom() {
       await battleManager.startBattle(roomId);
       router.push(`/user/battle-screen?roomId=${roomId}&question=0`);
     } catch (error) {
-      console.error("Error starting battle:", error);
+      // console.error("Error starting battle:", error);
       Alert.alert("Error", "Failed to start the battle. Please try again.");
     }
   };

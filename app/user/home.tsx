@@ -139,7 +139,7 @@ export default function HomeScreen() {
       // Cache the fresh data
       await cacheAllData(userData, quizzesData);
     } catch (error) {
-      console.error("Error loading data:", error);
+      // console.error("Error loading data:", error);
     } finally {
       setLoading(false);
     }
@@ -163,7 +163,7 @@ export default function HomeScreen() {
         updateAppState(appData);
       }
     } catch (error) {
-      console.error("Error loading cached data:", error);
+      // console.error("Error loading cached data:", error);
     }
   };
 
@@ -314,7 +314,7 @@ export default function HomeScreen() {
         AsyncStorage.setItem(APP_DATA_KEY, JSON.stringify(appDataToCache)),
       ]);
     } catch (error) {
-      console.error("Error caching data:", error);
+      // console.error("Error caching data:", error);
     }
   };
 
@@ -370,7 +370,7 @@ export default function HomeScreen() {
         }
       }
     } catch (error) {
-      console.error("Error checking streak:", error);
+      // console.error("Error checking streak:", error);
     }
   }, []);
 
@@ -473,7 +473,7 @@ export default function HomeScreen() {
         );
       }
     } catch (error) {
-      console.error("Error validating quiz code:", error);
+      // console.error("Error validating quiz code:", error);
       Alert.alert(
         "Error",
         "Something went wrong while validating the quiz code. Please try again."

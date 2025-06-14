@@ -20,9 +20,9 @@ export const useSimpleGoogleSignIn = () => {
                 });
 
                 setIsReady(true);
-                console.log('Google Sign-In configured successfully');
+                // console.log('Google Sign-In configured successfully');
             } catch (error) {
-                console.error('Failed to configure Google Sign-In:', error);
+                // console.error('Failed to configure Google Sign-In:', error);
                 setError('Failed to initialize Google Sign-In');
             }
         };
@@ -35,7 +35,7 @@ export const useSimpleGoogleSignIn = () => {
             setIsLoading(true);
             setError(null);
 
-            console.log('Starting Google Sign-In...');
+            // console.log('Starting Google Sign-In...');
 
             // Check if device supports Google Play Services
             await GoogleSignin.hasPlayServices({
@@ -44,7 +44,7 @@ export const useSimpleGoogleSignIn = () => {
 
             // Trigger the sign-in flow
             const signInResult = await GoogleSignin.signIn();
-            console.log('Google sign-in result:', signInResult);
+            // console.log('Google sign-in result:', signInResult);
 
             // Extract ID token (handling both old and new versions of the library)
             let idToken = signInResult.data?.idToken;
@@ -57,7 +57,7 @@ export const useSimpleGoogleSignIn = () => {
                 throw new Error('No ID token found');
             }
 
-            console.log('ID token received, creating Firebase credential...');
+            // console.log('ID token received, creating Firebase credential...');
 
             // Create a Google credential with the token
             const googleCredential = GoogleAuthProvider.credential(idToken);
@@ -71,7 +71,7 @@ export const useSimpleGoogleSignIn = () => {
                 return null;
             }
 
-            console.log('Firebase authentication successful');
+            // console.log('Firebase authentication successful');
 
             // Check if user exists in database
             const userRef = ref(database, `users/${firebaseUser.uid}`);
@@ -100,61 +100,61 @@ export const useSimpleGoogleSignIn = () => {
                 };
 
                 await set(userRef, newUserData);
-                console.log('New user profile created with Google Sign-In');
+                // console.log('New user profile created with Google Sign-In');
             }
 
-            console.log('Sign-in completed successfully:', {
-                uid: firebaseUser.uid,
+            // console.log('Sign-in completed successfully:', {
+            uid: firebaseUser.uid,
                 email: firebaseUser.email,
-                isNewUser
-            });
+                    isNewUser
+        });
 
-            setError(null);
-            return { user: firebaseUser, isNewUser };
+        setError(null);
+        return { user: firebaseUser, isNewUser };
 
-        } catch (error) {
-            console.error('Google Sign-In Error:', error);
+    } catch (error) {
+        // console.error('Google Sign-In Error:', error);
 
-            let errorMessage = 'Sign-in failed. Please try again.';
+        let errorMessage = 'Sign-in failed. Please try again.';
 
-            // Handle specific Google Sign-In errors
-            if (error.code === 'auth/network-request-failed') {
-                errorMessage = 'Network error. Check your internet connection.';
-            } else if (error.code === 'auth/invalid-credential') {
-                errorMessage = 'Authentication failed. Please try again.';
-            } else if (error.code === '12501') {
-                // Google Sign-In was cancelled
-                errorMessage = 'Sign-in cancelled';
-            } else if (error.code === '7') {
-                // Network error
-                errorMessage = 'Network error. Check your internet connection.';
-            } else if (error?.message) {
-                errorMessage = error.message;
-            }
-
-            setError(errorMessage);
-            return null;
-        } finally {
-            setIsLoading(false);
+        // Handle specific Google Sign-In errors
+        if (error.code === 'auth/network-request-failed') {
+            errorMessage = 'Network error. Check your internet connection.';
+        } else if (error.code === 'auth/invalid-credential') {
+            errorMessage = 'Authentication failed. Please try again.';
+        } else if (error.code === '12501') {
+            // Google Sign-In was cancelled
+            errorMessage = 'Sign-in cancelled';
+        } else if (error.code === '7') {
+            // Network error
+            errorMessage = 'Network error. Check your internet connection.';
+        } else if (error?.message) {
+            errorMessage = error.message;
         }
-    };
 
-    const signOut = async () => {
-        try {
-            // Sign out from both Google and Firebase
-            await GoogleSignin.signOut();
-            await auth.signOut();
-            console.log('Sign out successful');
-        } catch (error) {
-            console.error('Sign out error:', error);
-        }
-    };
+        setError(errorMessage);
+        return null;
+    } finally {
+        setIsLoading(false);
+    }
+};
 
-    return {
-        signInWithGoogle,
-        signOut,
-        isLoading,
-        error,
-        isReady
-    };
+const signOut = async () => {
+    try {
+        // Sign out from both Google and Firebase
+        await GoogleSignin.signOut();
+        await auth.signOut();
+        // console.log('Sign out successful');
+    } catch (error) {
+        // console.error('Sign out error:', error);
+    }
+};
+
+return {
+    signInWithGoogle,
+    signOut,
+    isLoading,
+    error,
+    isReady
+};
 };

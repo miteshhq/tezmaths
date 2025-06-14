@@ -19,8 +19,8 @@ import {
   View,
 } from "react-native";
 import Svg, { Circle } from "react-native-svg";
-import { auth, database } from "../../firebase/firebaseConfig";
 import SoundManager from "../../components/soundManager";
+import { auth, database } from "../../firebase/firebaseConfig";
 
 // Configuration
 const QUIZ_TIME_LIMIT = 15;
@@ -169,7 +169,7 @@ export default function QuizScreen() {
       const cacheKey = `quiz-level-${currentLevel}`;
       await AsyncStorage.removeItem(cacheKey);
     } catch (error) {
-      console.error("Error clearing level cache:", error);
+      // console.error("Error clearing level cache:", error);
     }
   }, [currentLevel]);
 
@@ -289,7 +289,7 @@ export default function QuizScreen() {
         setAvatar(data.avatar || 0);
       }
     } catch (error) {
-      console.error("Error loading user data:", error);
+      // console.error("Error loading user data:", error);
     }
   }, []);
 
@@ -363,7 +363,7 @@ export default function QuizScreen() {
       setQuestions(selectedQuestions);
       await AsyncStorage.setItem(cacheKey, JSON.stringify(selectedQuestions));
     } catch (error) {
-      console.error("Error loading questions:", error);
+      // console.error("Error loading questions:", error);
       setNetworkError(true);
       Alert.alert(
         "Network Error",
@@ -749,7 +749,7 @@ export default function QuizScreen() {
 
         return isPassed;
       } catch (error) {
-        console.error("Error updating user progress:", error);
+        // console.error("Error updating user progress:", error);
         Alert.alert(
           "Error",
           "Failed to save progress. Please check your connection."
@@ -805,7 +805,7 @@ export default function QuizScreen() {
         });
       }, 100);
     } catch (error) {
-      console.error("Error completing level:", error);
+      // console.error("Error completing level:", error);
       router.push("/user/home");
     }
   }, [

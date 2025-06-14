@@ -1,5 +1,6 @@
 // app/user/profile.tsx
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
@@ -99,7 +100,7 @@ export default function ProfileScreen() {
         }
       }
     } catch (error) {
-      console.error("[PROFILE] Failed to fetch user rank:", error);
+      // console.error("[PROFILE] Failed to fetch user rank:", error);
       setUserRank(0);
     }
   };
@@ -146,7 +147,7 @@ export default function ProfileScreen() {
 
       const userId = auth.currentUser?.uid;
       if (!userId) {
-        console.warn("[PROFILE] No authenticated user found.");
+        // console.warn("[PROFILE] No authenticated user found.");
         setLoading(false);
         return;
       }
@@ -191,7 +192,7 @@ export default function ProfileScreen() {
       }
       setLoading(false);
     } catch (error) {
-      console.error("[PROFILE] Failed to load user data:", error);
+      // console.error("[PROFILE] Failed to load user data:", error);
       setLoading(false);
     }
   };
@@ -202,7 +203,7 @@ export default function ProfileScreen() {
       await loadUserData();
       setRefreshing(false);
     } catch (error) {
-      console.error("[PROFILE] Error refreshing data:", error);
+      // console.error("[PROFILE] Error refreshing data:", error);
       setRefreshing(false);
     }
   };
@@ -214,7 +215,7 @@ export default function ProfileScreen() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      console.error("[PROFILE] Failed to copy referral code:", error);
+      // console.error("[PROFILE] Failed to copy referral code:", error);
     }
   };
 
@@ -225,6 +226,7 @@ export default function ProfileScreen() {
   const handleLogout = async () => {
     const LEVEL_STORAGE_KEY = "highestLevelReached";
 
+    // Stop all sound effects
     await SoundManager.stopSound("levelSoundEffect");
     await SoundManager.stopSound("clappingSoundEffect");
     await SoundManager.stopSound("victorySoundEffect");
@@ -232,6 +234,8 @@ export default function ProfileScreen() {
 
     try {
       const userId = auth.currentUser?.uid;
+
+      // Save user progress before logout
       if (userId) {
         const userRef = ref(database, `users/${userId}`);
         const storedLevel = await AsyncStorage.getItem(LEVEL_STORAGE_KEY);
@@ -240,14 +244,38 @@ export default function ProfileScreen() {
         await update(userRef, {
           highestCompletedLevelCompleted: highestCompletedLevel,
         });
-
-        await AsyncStorage.clear();
       }
 
+      // Check if user is signed in with Google
+      const isGoogleSignedIn = await GoogleSignin.isSignedIn();
+
+      if (isGoogleSignedIn) {
+        // console.log(
+        //   "[LOGOUT] Google user detected, performing Google logout..."
+        // );
+
+        // For Google users: revoke access and sign out
+        try {
+          await GoogleSignin.revokeAccess();
+          await GoogleSignin.signOut();
+        } catch (googleError) {
+          //   console.warn("[LOGOUT] Google logout failed:", googleError);
+        }
+      }
+
+      // Always sign out from Firebase Auth (works for both email and Google users)
       await signOut(auth);
+
+      await AsyncStorage.clear();
+
       router.push("/login");
     } catch (error: any) {
-      console.error("[PROFILE] Logout failed:", error);
+      try {
+        await AsyncStorage.clear();
+        router.push("/login");
+      } catch (fallbackError) {
+        // // console.error("[PROFILE] Fallback logout failed:", fallbackError);
+      }
     }
   };
 

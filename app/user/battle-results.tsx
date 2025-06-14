@@ -30,7 +30,7 @@ export default function BattleResultsScreen() {
   try {
     parsedPlayers = JSON.parse(players || "[]");
   } catch (error) {
-    console.error("BattleResultsScreen - Parse error:", error);
+    // console.error("BattleResultsScreen - Parse error:", error);
   }
 
   const userRank =
@@ -90,7 +90,7 @@ export default function BattleResultsScreen() {
         message: shareMessage,
       });
     } catch (error) {
-      console.error("Share error:", error);
+    //   console.error("Share error:", error);
       Alert.alert("Share Error", "Unable to share. Please try again.", [
         { text: "OK" },
       ]);

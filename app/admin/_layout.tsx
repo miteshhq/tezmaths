@@ -67,7 +67,7 @@ export default function AdminTabsLayout() {
         // console.log("User is admin, granting access");
       }
     } catch (error) {
-      console.error("Error checking admin status:", error);
+      // console.error("Error checking admin status:", error);
       setIsAdmin(false);
       Alert.alert(
         "Authentication Error",
@@ -93,7 +93,7 @@ export default function AdminTabsLayout() {
       await signOut(auth);
       router.replace("/login");
     } catch (error) {
-      console.error("Error signing out:", error);
+      // console.error("Error signing out:", error);
       Alert.alert("Error", "Failed to logout. Please try again.");
     }
   };
@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
   headerText: {
     fontFamily: "Poppins-Bold",
     fontSize: 18,
-    color: "#000",
+    color: "#fff",
   },
   tabBar: {
     backgroundColor: "#fff",

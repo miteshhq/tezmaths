@@ -77,7 +77,7 @@ export default function EditProfileScreen() {
         setOriginalData(userData);
       }
     } catch (error) {
-      console.error("[EDIT PROFILE] Failed to load user data:", error);
+      // console.error("[EDIT PROFILE] Failed to load user data:", error);
       Alert.alert("Error", "Failed to load profile data");
     } finally {
       setLoading(false);
@@ -125,7 +125,7 @@ export default function EditProfileScreen() {
         { text: "OK", onPress: () => router.push("/user/profile") },
       ]);
     } catch (error) {
-      console.error("[EDIT PROFILE] Failed to update profile:", error);
+      // console.error("[EDIT PROFILE] Failed to update profile:", error);
       Alert.alert("Error", "Failed to update profile. Please try again.");
     } finally {
       setSaving(false);

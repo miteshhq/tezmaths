@@ -16,12 +16,12 @@ import { auth, database } from "../../firebase/firebaseConfig";
 import { battleManager } from "../../utils/battleManager";
 import SoundManager from "../../components/soundManager";
 
-const DEBUG_MODE = true;
+const DEBUG_MODE = false;
 const AUTO_SUBMIT_DELAY = 200;
 
 const debugLog = (message, data = null) => {
   if (DEBUG_MODE) {
-    console.log(`[BattleScreen] ${message}`, data);
+    // console.log(`[BattleScreen] ${message}`, data);
   }
 };
 
@@ -127,7 +127,7 @@ export default function BattleScreen() {
     ) {
       timeExpiryHandled.current = true;
       battleManager.handleTimeExpiry(roomId as string).catch((error) => {
-        console.error("Time expiry handling failed:", error);
+        // console.error("Time expiry handling failed:", error);
       });
     }
   }, [
@@ -153,12 +153,12 @@ export default function BattleScreen() {
       if (transitionTimeLeft > 0) {
         timeoutId = setTimeout(() => {
           battleManager.moveToNextQuestion(roomId as string).catch((error) => {
-            console.error("Failed to move to next question:", error);
+            // console.error("Failed to move to next question:", error);
           });
         }, transitionTimeLeft);
       } else {
         battleManager.moveToNextQuestion(roomId as string).catch((error) => {
-          console.error("Failed to move to next question:", error);
+        //   console.error("Failed to move to next question:", error);
         });
       }
     }
@@ -240,7 +240,7 @@ export default function BattleScreen() {
         setRoomData(data);
       },
       (error) => {
-        console.error("BattleScreen - Database listener error:", error);
+        // console.error("BattleScreen - Database listener error:", error);
         Alert.alert("Error", "Failed to load battle data. Please try again.", [
           { text: "Retry", onPress: () => window.location.reload() },
           { text: "Go Home", onPress: () => router.push("/user/home") },
@@ -425,7 +425,7 @@ export default function BattleScreen() {
         isFirstCorrect
       );
     } catch (error) {
-      console.error("Answer submission error:", error);
+    //   console.error("Answer submission error:", error);
       setFeedback("Error submitting answer");
     } finally {
       setIsProcessing(false);

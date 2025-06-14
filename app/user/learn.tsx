@@ -97,7 +97,7 @@ export default function LearnScreen() {
               setVideos(mockVideosData);
               setFilteredVideos(mockVideosData);
             } catch (error) {
-              console.error("Failed to write mock videos:", error);
+              // console.error("Failed to write mock videos:", error);
               setVideos(mockVideosData);
               setFilteredVideos(mockVideosData);
             }
@@ -112,7 +112,7 @@ export default function LearnScreen() {
           setFilteredVideos(mockVideosData);
         }
       } catch (error) {
-        console.error("Failed to fetch videos, using mock data:", error);
+        // console.error("Failed to fetch videos, using mock data:", error);
         setVideos(mockVideosData);
         setFilteredVideos(mockVideosData);
       } finally {

@@ -109,7 +109,7 @@ export default function LevelSelect() {
         }
       }
     } catch (error) {
-    //   console.error("Error loading user data:", error);
+    //   // console.error("Error loading user data:", error);
       Alert.alert("Error", "Failed to load level data. Please try again.");
     } finally {
       setLoading(false);
@@ -149,7 +149,7 @@ export default function LevelSelect() {
               volume: 0.7,
             });
           } catch (err) {
-            // console.error("Play error", err);
+            // // console.error("Play error", err);
           }
         }
       }, 500);
@@ -204,7 +204,7 @@ export default function LevelSelect() {
 
       return continuousLevels;
     } catch (error) {
-    //   console.error("Error loading available levels:", error);
+    //   // console.error("Error loading available levels:", error);
       return [];
     }
   }, []);
@@ -220,7 +220,7 @@ export default function LevelSelect() {
         },
       });
     } catch (error) {
-    //   console.error("Error navigating to quiz:", error);
+    //   // console.error("Error navigating to quiz:", error);
     }
   };
 
@@ -234,7 +234,7 @@ export default function LevelSelect() {
       await SoundManager.nukeSounds(); // ⬅️ Ensure total stop
       router.back();
     } catch (error) {
-    //   console.error("Error going back:", error);
+    //   // console.error("Error going back:", error);
       router.back();
     }
   };

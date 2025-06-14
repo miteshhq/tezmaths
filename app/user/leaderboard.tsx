@@ -66,7 +66,7 @@ export default function LeaderboardScreen() {
           setQuizMasters(mockLeaderboardData);
         }
       } catch (error) {
-        console.error("Failed to fetch leaderboard, using mock data:", error);
+        // console.error("Failed to fetch leaderboard, using mock data:", error);
         setQuizMasters(mockLeaderboardData);
       } finally {
         setLoading(false);
