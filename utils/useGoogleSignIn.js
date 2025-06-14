@@ -104,10 +104,10 @@ export const useSimpleGoogleSignIn = () => {
             }
 
             // console.log('Sign-in completed successfully:', {
-            uid: firebaseUser.uid,
-                email: firebaseUser.email,
-                    isNewUser
-        });
+            // uid: firebaseUser.uid,
+              //  email: firebaseUser.email,
+               //     isNewUser
+    //    });
 
         setError(null);
         return { user: firebaseUser, isNewUser };
