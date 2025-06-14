@@ -6,8 +6,7 @@ import { ref, get, set } from 'firebase/database';
 
 export const useSimpleGoogleSignIn = () => {
     const [isLoading, setIsLoading] = useState(false);
-    // const [error, setError] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState(null);
     const [isReady, setIsReady] = useState(false);
 
     // Initialize Google Sign-In when hook is created
@@ -51,7 +50,7 @@ export const useSimpleGoogleSignIn = () => {
             let idToken = signInResult.data?.idToken;
             if (!idToken) {
                 // Fallback for older versions of google-signin
-                idToken = (signInResult).idToken;
+                idToken = signInResult?.idToken;
             }
 
             if (!idToken) {
@@ -129,7 +128,7 @@ export const useSimpleGoogleSignIn = () => {
             } else if (error.code === '7') {
                 // Network error
                 errorMessage = 'Network error. Check your internet connection.';
-            } else if (error.message) {
+            } else if (error?.message) {
                 errorMessage = error.message;
             }
 
