@@ -11,8 +11,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  KeyboardAvoidingView,
-  Platform,
   TouchableWithoutFeedback,
   Keyboard,
 } from "react-native";
@@ -34,7 +32,26 @@ export default function MultiplayerModeSelection() {
 
   const [searchingRandom, setSearchingRandom] = useState(false);
 
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
   const MAX_PLAYERS = 4;
+
+  useEffect(() => {
+    const keyboardShowListener = Keyboard.addListener(
+      "keyboardDidShow",
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const keyboardHideListener = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      keyboardShowListener?.remove();
+      keyboardHideListener?.remove();
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -150,146 +167,232 @@ export default function MultiplayerModeSelection() {
   const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
 
   return (
-    <KeyboardAvoidingView
-      className="flex-1"
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
-    >
-      <TouchableWithoutFeedback onPress={dismissKeyboard}>
-        <ScrollView
-          className="flex-1 bg-white"
-          keyboardShouldPersistTaps="handled"
+    <TouchableWithoutFeedback onPress={dismissKeyboard}>
+      <ScrollView
+        className="bg-white"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingBottom: keyboardHeight > 0 ? keyboardHeight - 30 : 30,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        <ImageBackground
+          source={require("../../assets/gradient.jpg")}
+          style={{ overflow: "hidden", marginTop: 20 }}
         >
-          <ImageBackground
-            source={require("../../assets/gradient.jpg")}
-            style={{ overflow: "hidden", marginTop: 20 }}
-          >
-            <View className="px-4 py-4">
-              <View className="flex-row justify-center items-center gap-2">
-                <Image
-                  source={require("../../assets/icons/swords.png")}
-                  style={{ width: 28, height: 28 }}
-                  tintColor="#FF6B35"
-                />
-                <Text className="text-white text-3xl font-black">
-                  Battle Mode
-                </Text>
-              </View>
-            </View>
-          </ImageBackground>
-
           <View className="px-4 py-4">
-            <View className="flex-row justify-center items-center">
-              <Text className="text-custom-purple text-2xl mt-4 font-black">
-                Choose Your Battle Mode!
+            <View className="flex-row justify-center items-center gap-2">
+              <Image
+                source={require("../../assets/icons/swords.png")}
+                style={{ width: 28, height: 28 }}
+                tintColor="#FF6B35"
+              />
+              <Text className="text-white text-3xl font-black">
+                Battle Mode
               </Text>
             </View>
           </View>
+        </ImageBackground>
 
-          <View className="px-4 py-6 flex flex-col gap-4">
-            <View className="border border-black rounded-2xl overflow-hidden">
-              <View className="w-full h-8 bg-primary"></View>
-              <View className="w-full p-4 flex flex-col items-center gap-4">
-                <View className="flex flex-col items-center gap-1">
-                  <Text className="text-2xl text-custom-purple font-black">
-                    Random Player
-                  </Text>
-                  <Text className="text-sm text-center text-custom-purple">
-                    Get matched with a random opponent for an exciting battle!
-                  </Text>
-                </View>
+        <View className="px-4 py-4">
+          <View className="flex-row justify-center items-center">
+            <Text className="text-custom-purple text-2xl mt-4 font-black">
+              Choose Your Battle Mode!
+            </Text>
+          </View>
+        </View>
 
-                {!searchingRandom ? (
-                  <TouchableOpacity onPress={handleRandomMatch}>
-                    <ImageBackground
-                      source={require("../../assets/gradient.jpg")}
-                      style={{ borderRadius: 8, overflow: "hidden" }}
-                      imageStyle={{ borderRadius: 12 }}
-                    >
-                      <View className="py-3">
-                        <Text className="text-white font-bold text-xl w-56 text-center">
-                          Find Random Battle
-                        </Text>
-                      </View>
-                    </ImageBackground>
+        <View className="px-4 py-6 flex flex-col gap-4">
+          <View className="border border-black rounded-2xl overflow-hidden">
+            <View className="w-full h-8 bg-primary"></View>
+            <View className="w-full p-4 flex flex-col items-center gap-4">
+              <View className="flex flex-col items-center gap-1">
+                <Text className="text-2xl text-custom-purple font-black">
+                  Random Player
+                </Text>
+                <Text className="text-sm text-center text-custom-purple">
+                  Get matched with a random opponent for an exciting battle!
+                </Text>
+              </View>
+
+              {!searchingRandom ? (
+                <TouchableOpacity onPress={handleRandomMatch}>
+                  <ImageBackground
+                    source={require("../../assets/gradient.jpg")}
+                    style={{ borderRadius: 8, overflow: "hidden" }}
+                    imageStyle={{ borderRadius: 12 }}
+                  >
+                    <View className="py-3">
+                      <Text className="text-white font-bold text-xl w-56 text-center">
+                        Find Random Battle
+                      </Text>
+                    </View>
+                  </ImageBackground>
+                </TouchableOpacity>
+              ) : (
+                <View className="flex flex-col items-center gap-3">
+                  <ActivityIndicator size="large" color="#9333ea" />
+                  <Text className="text-custom-purple font-bold">
+                    Searching for opponent...
+                  </Text>
+                  <TouchableOpacity
+                    className="px-4 py-2 bg-gray-200 rounded-lg"
+                    onPress={cancelRandomSearch}
+                  >
+                    <Text className="text-custom-purple font-bold">Cancel</Text>
                   </TouchableOpacity>
-                ) : (
-                  <View className="flex flex-col items-center gap-3">
-                    <ActivityIndicator size="large" color="#9333ea" />
-                    <Text className="text-custom-purple font-bold">
-                      Searching for opponent...
-                    </Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          <View className="border border-black rounded-2xl overflow-hidden">
+            <View className="w-full h-8 bg-primary"></View>
+            <View className="w-full p-4 flex flex-col items-center gap-4">
+              <View className="flex flex-col items-center gap-1">
+                <Text className="text-2xl text-custom-purple font-black">
+                  Quiz Code
+                </Text>
+                <Text className="text-sm text-center text-custom-purple">
+                  Join a specific battle using a quiz code from your friend!
+                </Text>
+              </View>
+
+              {!showQuizCodeInput ? (
+                <TouchableOpacity onPress={() => setShowQuizCodeInput(true)}>
+                  <ImageBackground
+                    source={require("../../assets/gradient.jpg")}
+                    style={{ borderRadius: 8, overflow: "hidden" }}
+                    imageStyle={{ borderRadius: 12 }}
+                  >
+                    <View className="py-3">
+                      <Text className="text-white font-bold text-xl w-56 text-center">
+                        Enter Quiz Code
+                      </Text>
+                    </View>
+                  </ImageBackground>
+                </TouchableOpacity>
+              ) : (
+                <View className="w-full flex flex-col gap-3">
+                  <TextInput
+                    className="border-2 border-custom-purple rounded-lg px-4 py-3 text-center text-lg font-bold text-custom-purple"
+                    placeholder="Enter Quiz Code"
+                    placeholderTextColor="#9333ea"
+                    value={quizCode}
+                    onChangeText={setQuizCode}
+                    maxLength={8}
+                    autoCapitalize="characters"
+                    autoFocus={true}
+                    returnKeyType="done"
+                    onSubmitEditing={handleJoinQuizCode}
+                    blurOnSubmit={true}
+                  />
+                  <View className="flex-row gap-2">
                     <TouchableOpacity
-                      className="px-4 py-2 bg-gray-200 rounded-lg"
-                      onPress={cancelRandomSearch}
+                      className="flex-1"
+                      onPress={handleJoinQuizCode}
+                      disabled={joiningRoom}
+                    >
+                      <ImageBackground
+                        source={require("../../assets/gradient.jpg")}
+                        style={{
+                          borderRadius: 8,
+                          overflow: "hidden",
+                          opacity: joiningRoom ? 0.7 : 1,
+                        }}
+                        imageStyle={{ borderRadius: 12 }}
+                      >
+                        <View className="py-3 flex-row justify-center items-center gap-2">
+                          {joiningRoom && (
+                            <ActivityIndicator size="small" color="white" />
+                          )}
+                          <Text className="text-white font-bold text-lg">
+                            {joiningRoom ? "Joining..." : "Join Battle"}
+                          </Text>
+                        </View>
+                      </ImageBackground>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className="px-4 py-3 bg-gray-200 rounded-lg"
+                      onPress={() => {
+                        setShowQuizCodeInput(false);
+                        setQuizCode("");
+                        Keyboard.dismiss();
+                      }}
                     >
                       <Text className="text-custom-purple font-bold">
                         Cancel
                       </Text>
                     </TouchableOpacity>
                   </View>
-                )}
-              </View>
-            </View>
-
-            <View className="border border-black rounded-2xl overflow-hidden">
-              <View className="w-full h-8 bg-primary"></View>
-              <View className="w-full p-4 flex flex-col items-center gap-4">
-                <View className="flex flex-col items-center gap-1">
-                  <Text className="text-2xl text-custom-purple font-black">
-                    Quiz Code
-                  </Text>
-                  <Text className="text-sm text-center text-custom-purple">
-                    Join a specific battle using a quiz code from your friend!
-                  </Text>
                 </View>
+              )}
+            </View>
+          </View>
 
-                {!showQuizCodeInput ? (
-                  <TouchableOpacity onPress={() => setShowQuizCodeInput(true)}>
-                    <ImageBackground
-                      source={require("../../assets/gradient.jpg")}
-                      style={{ borderRadius: 8, overflow: "hidden" }}
-                      imageStyle={{ borderRadius: 12 }}
-                    >
-                      <View className="py-3">
-                        <Text className="text-white font-bold text-xl w-56 text-center">
-                          Enter Quiz Code
-                        </Text>
-                      </View>
-                    </ImageBackground>
-                  </TouchableOpacity>
-                ) : (
-                  <View className="w-full flex flex-col gap-3">
-                    <TextInput
-                      className="border-2 border-custom-purple rounded-lg px-4 py-3 text-center text-lg font-bold text-custom-purple"
-                      placeholder="Enter Quiz Code"
-                      placeholderTextColor="#9333ea"
-                      value={quizCode}
-                      onChangeText={setQuizCode}
-                      maxLength={8}
-                      autoCapitalize="characters"
-                    />
+          <View className="border border-black rounded-2xl overflow-hidden">
+            <View className="w-full h-8 bg-primary"></View>
+            <View className="w-full p-4 flex flex-col items-center gap-4">
+              <View className="flex flex-col items-center gap-1">
+                <Text className="text-2xl text-custom-purple font-black">
+                  Create Room
+                </Text>
+                <Text className="text-sm text-center text-custom-purple">
+                  Create your own battle room and invite friends to join!
+                </Text>
+              </View>
+
+              {!showCreateRoom ? (
+                <TouchableOpacity onPress={() => setShowCreateRoom(true)}>
+                  <ImageBackground
+                    source={require("../../assets/gradient.jpg")}
+                    style={{ borderRadius: 8, overflow: "hidden" }}
+                    imageStyle={{ borderRadius: 12 }}
+                  >
+                    <View className="py-3">
+                      <Text className="text-white font-bold text-xl w-56 text-center">
+                        Create New Room
+                      </Text>
+                    </View>
+                  </ImageBackground>
+                </TouchableOpacity>
+              ) : (
+                <View className="w-full flex flex-col gap-3">
+                  <TextInput
+                    className="border-2 border-custom-purple rounded-lg px-4 py-3 text-center text-lg text-custom-purple"
+                    placeholder="Enter Room Name"
+                    placeholderTextColor="#9333ea"
+                    value={roomName}
+                    onChangeText={setRoomName}
+                    maxLength={20}
+                    returnKeyType="done"
+                    onSubmitEditing={handleCreateRoom}
+                    blurOnSubmit={true}
+                  />
+
+                  {!roomCode ? (
                     <View className="flex-row gap-2">
                       <TouchableOpacity
                         className="flex-1"
-                        onPress={handleJoinQuizCode}
-                        disabled={joiningRoom}
+                        onPress={handleCreateRoom}
+                        disabled={creatingRoom}
                       >
                         <ImageBackground
                           source={require("../../assets/gradient.jpg")}
                           style={{
                             borderRadius: 8,
                             overflow: "hidden",
-                            opacity: joiningRoom ? 0.7 : 1,
+                            opacity: creatingRoom ? 0.7 : 1,
                           }}
                           imageStyle={{ borderRadius: 12 }}
                         >
                           <View className="py-3 flex-row justify-center items-center gap-2">
-                            {joiningRoom && (
+                            {creatingRoom && (
                               <ActivityIndicator size="small" color="white" />
                             )}
                             <Text className="text-white font-bold text-lg">
-                              {joiningRoom ? "Joining..." : "Join Battle"}
+                              {creatingRoom ? "Creating..." : "Generate Code"}
                             </Text>
                           </View>
                         </ImageBackground>
@@ -297,8 +400,9 @@ export default function MultiplayerModeSelection() {
                       <TouchableOpacity
                         className="px-4 py-3 bg-gray-200 rounded-lg"
                         onPress={() => {
-                          setShowQuizCodeInput(false);
-                          setQuizCode("");
+                          setShowCreateRoom(false);
+                          setRoomName("");
+                          Keyboard.dismiss();
                         }}
                       >
                         <Text className="text-custom-purple font-bold">
@@ -306,165 +410,87 @@ export default function MultiplayerModeSelection() {
                         </Text>
                       </TouchableOpacity>
                     </View>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            <View className="border border-black rounded-2xl overflow-hidden">
-              <View className="w-full h-8 bg-primary"></View>
-              <View className="w-full p-4 flex flex-col items-center gap-4">
-                <View className="flex flex-col items-center gap-1">
-                  <Text className="text-2xl text-custom-purple font-black">
-                    Create Room
-                  </Text>
-                  <Text className="text-sm text-center text-custom-purple">
-                    Create your own battle room and invite friends to join!
-                  </Text>
-                </View>
-
-                {!showCreateRoom ? (
-                  <TouchableOpacity onPress={() => setShowCreateRoom(true)}>
-                    <ImageBackground
-                      source={require("../../assets/gradient.jpg")}
-                      style={{ borderRadius: 8, overflow: "hidden" }}
-                      imageStyle={{ borderRadius: 12 }}
-                    >
-                      <View className="py-3">
-                        <Text className="text-white font-bold text-xl w-56 text-center">
-                          Create New Room
+                  ) : (
+                    <View className="flex flex-col gap-3">
+                      <View className="bg-light-orange rounded-lg p-4">
+                        <Text className="text-center text-custom-purple font-bold text-sm">
+                          Room Code
+                        </Text>
+                        <Text className="text-center text-custom-purple font-black text-2xl">
+                          {roomCode}
+                        </Text>
+                        <Text className="text-center text-custom-purple text-xs mt-2">
+                          Players: {Object.keys(playersInRoom).length}/
+                          {MAX_PLAYERS}
                         </Text>
                       </View>
-                    </ImageBackground>
-                  </TouchableOpacity>
-                ) : (
-                  <View className="w-full flex flex-col gap-3">
-                    <TextInput
-                      className="border-2 border-custom-purple rounded-lg px-4 py-3 text-center text-lg text-custom-purple"
-                      placeholder="Enter Room Name"
-                      placeholderTextColor="#9333ea"
-                      value={roomName}
-                      onChangeText={setRoomName}
-                      maxLength={20}
-                    />
 
-                    {!roomCode ? (
+                      {Object.keys(playersInRoom).length > 1 && (
+                        <View className="bg-custom-gray rounded-lg p-3">
+                          <Text className="text-center text-custom-purple font-bold text-sm mb-2">
+                            Players Joined:
+                          </Text>
+                          {Object.entries(playersInRoom).map(
+                            ([playerId, player]) => (
+                              <Text
+                                key={playerId}
+                                className="text-center text-custom-purple text-sm"
+                              >
+                                • {player.name}
+                              </Text>
+                            )
+                          )}
+                        </View>
+                      )}
+
                       <View className="flex-row gap-2">
                         <TouchableOpacity
                           className="flex-1"
-                          onPress={handleCreateRoom}
-                          disabled={creatingRoom}
+                          onPress={copyRoomCode}
+                        >
+                          <View className="py-3 bg-purple-200 rounded-lg">
+                            <Text className="text-custom-purple font-bold text-center">
+                              Copy Code
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          className="flex-1"
+                          onPress={startBattleRoom}
                         >
                           <ImageBackground
                             source={require("../../assets/gradient.jpg")}
                             style={{
                               borderRadius: 8,
                               overflow: "hidden",
-                              opacity: creatingRoom ? 0.7 : 1,
                             }}
                             imageStyle={{ borderRadius: 12 }}
                           >
-                            <View className="py-3 flex-row justify-center items-center gap-2">
-                              {creatingRoom && (
-                                <ActivityIndicator size="small" color="white" />
-                              )}
-                              <Text className="text-white font-bold text-lg">
-                                {creatingRoom ? "Creating..." : "Generate Code"}
+                            <View className="py-3">
+                              <Text className="text-white font-bold text-center">
+                                Start Battle
                               </Text>
                             </View>
                           </ImageBackground>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                          className="px-4 py-3 bg-gray-200 rounded-lg"
-                          onPress={() => {
-                            setShowCreateRoom(false);
-                            setRoomName("");
-                          }}
-                        >
-                          <Text className="text-custom-purple font-bold">
-                            Cancel
-                          </Text>
-                        </TouchableOpacity>
                       </View>
-                    ) : (
-                      <View className="flex flex-col gap-3">
-                        <View className="bg-light-orange rounded-lg p-4">
-                          <Text className="text-center text-custom-purple font-bold text-sm">
-                            Room Code
-                          </Text>
-                          <Text className="text-center text-custom-purple font-black text-2xl">
-                            {roomCode}
-                          </Text>
-                          <Text className="text-center text-custom-purple text-xs mt-2">
-                            Players: {Object.keys(playersInRoom).length}/
-                            {MAX_PLAYERS}
-                          </Text>
-                        </View>
 
-                        {Object.keys(playersInRoom).length > 1 && (
-                          <View className="bg-custom-gray rounded-lg p-3">
-                            <Text className="text-center text-custom-purple font-bold text-sm mb-2">
-                              Players Joined:
-                            </Text>
-                            {Object.entries(playersInRoom).map(
-                              ([playerId, player]) => (
-                                <Text
-                                  key={playerId}
-                                  className="text-center text-custom-purple text-sm"
-                                >
-                                  • {player.name}
-                                </Text>
-                              )
-                            )}
-                          </View>
-                        )}
-
-                        <View className="flex-row gap-2">
-                          <TouchableOpacity
-                            className="flex-1"
-                            onPress={copyRoomCode}
-                          >
-                            <View className="py-3 bg-purple-200 rounded-lg">
-                              <Text className="text-custom-purple font-bold text-center">
-                                Copy Code
-                              </Text>
-                            </View>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            className="flex-1"
-                            onPress={startBattleRoom}
-                          >
-                            <ImageBackground
-                              source={require("../../assets/gradient.jpg")}
-                              style={{ borderRadius: 8, overflow: "hidden" }}
-                              imageStyle={{ borderRadius: 12 }}
-                            >
-                              <View className="py-3">
-                                <Text className="text-white font-bold text-center">
-                                  Start Battle
-                                </Text>
-                              </View>
-                            </ImageBackground>
-                          </TouchableOpacity>
-                        </View>
-
-                        <TouchableOpacity
-                          className="py-2 bg-light-orange rounded-lg"
-                          onPress={cancelRoomCreation}
-                        >
-                          <Text className="text-red-600 font-bold text-center">
-                            Cancel Room
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-                )}
-              </View>
+                      <TouchableOpacity
+                        className="py-2 bg-light-orange rounded-lg"
+                        onPress={cancelRoomCreation}
+                      >
+                        <Text className="text-red-600 font-bold text-center">
+                          Cancel Room
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              )}
             </View>
           </View>
-        </ScrollView>
-      </TouchableWithoutFeedback>
-    </KeyboardAvoidingView>
+        </View>
+      </ScrollView>
+    </TouchableWithoutFeedback>
   );
 }
