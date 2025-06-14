@@ -11,6 +11,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  StatusBar,
 } from "react-native";
 import welcomeImage from "../assets/branding/png-logo.png";
 import { auth } from "../firebase/firebaseConfig";
@@ -55,6 +56,7 @@ export default function WelcomeScreen() {
 
   return (
     <View className="flex-1 justify-center items-center bg-custom-gray px-5 pb-10">
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       <Image source={welcomeImage} style={styles.image} />
 
       <Text className="text-3xl text-black font-semibold text-center mb-2">

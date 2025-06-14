@@ -33,31 +33,71 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isResettingPassword, setIsResettingPassword] = useState(false);
-    const { signInWithGoogle, isLoading, error, isReady } =
-      useSimpleGoogleSignIn();
 
-    const handleGoogleSignIn = useCallback(async () => {
-      try {
-        setErrorMessage(""); // Clear any previous errors
-        console.log("Starting Google Sign-In from login screen...");
+  const [focusField, setFocusField] = useState(null);
 
-        const result = await signInWithGoogle();
+  const { signInWithGoogle, isLoading, error, isReady } =
+    useSimpleGoogleSignIn();
 
-        if (!result) {
-          // Sign-in was cancelled or failed, error is already set by the hook
+  const handleGoogleSignIn = useCallback(async () => {
+    try {
+      setErrorMessage(""); // Clear any previous errors
+      console.log("Starting Google Sign-In from login screen...");
+
+      const result = await signInWithGoogle();
+
+      if (!result) {
+        // Sign-in was cancelled or failed, error is already set by the hook
+        return;
+      }
+
+      const { user, isNewUser } = result;
+
+      // console.log("Google Sign-In completed:", {
+      //   uid: user.uid,
+      //   email: user.email,
+      //   isNewUser,
+      // });
+
+      if (isNewUser) {
+        console.log("New user detected, redirecting to register...");
+        router.push({
+          pathname: "/register",
+          params: {
+            email: user.email,
+            isGoogleUser: "true",
+            displayName: user.displayName || "",
+          },
+        });
+      } else {
+        // Check if user data is complete
+        console.log("Existing user, checking profile completion...");
+        const userRef = ref(database, `users/${user.uid}`);
+        const snapshot = await get(userRef);
+
+        if (!snapshot.exists()) {
+          console.log(
+            "User data not found in database, redirecting to register..."
+          );
+          router.push({
+            pathname: "/register",
+            params: {
+              email: user.email,
+              isGoogleUser: "true",
+              displayName: user.displayName || "",
+            },
+          });
           return;
         }
 
-        const { user, isNewUser } = result;
+        const userData = snapshot.val();
+        console.log("User data found:", {
+          hasData: !!userData,
+          isNewUser: userData.isnewuser,
+        });
 
-        // console.log("Google Sign-In completed:", {
-        //   uid: user.uid,
-        //   email: user.email,
-        //   isNewUser,
-        // });
-
-        if (isNewUser) {
-          console.log("New user detected, redirecting to register...");
+        if (userData.isnewuser === true) {
+          console.log("User profile incomplete, redirecting to register...");
           router.push({
             pathname: "/register",
             params: {
@@ -67,60 +107,23 @@ export default function LoginScreen() {
             },
           });
         } else {
-          // Check if user data is complete
-          console.log("Existing user, checking profile completion...");
-          const userRef = ref(database, `users/${user.uid}`);
-          const snapshot = await get(userRef);
-
-          if (!snapshot.exists()) {
-            console.log(
-              "User data not found in database, redirecting to register..."
-            );
-            router.push({
-              pathname: "/register",
-              params: {
-                email: user.email,
-                isGoogleUser: "true",
-                displayName: user.displayName || "",
-              },
-            });
-            return;
-          }
-
-          const userData = snapshot.val();
-          console.log("User data found:", {
-            hasData: !!userData,
-            isNewUser: userData.isnewuser,
-          });
-
-          if (userData.isnewuser === true) {
-            console.log("User profile incomplete, redirecting to register...");
-            router.push({
-              pathname: "/register",
-              params: {
-                email: user.email,
-                isGoogleUser: "true",
-                displayName: user.displayName || "",
-              },
-            });
-          } else {
-            console.log("User profile complete, redirecting to home...");
-            await handleUserRedirect(user, userData);
-          }
+          console.log("User profile complete, redirecting to home...");
+          await handleUserRedirect(user, userData);
         }
-      } catch (error) {
-        console.error("Google Sign-In failed in login screen:", error);
-
-        // Set a user-friendly error message
-        let errorMsg = "Google sign-in failed. Please try again.";
-
-        if (error.message) {
-          errorMsg = error.message;
-        }
-
-        setErrorMessage(errorMsg);
       }
-    }, [signInWithGoogle, router]);
+    } catch (error) {
+      console.error("Google Sign-In failed in login screen:", error);
+
+      // Set a user-friendly error message
+      let errorMsg = "Google sign-in failed. Please try again.";
+
+      if (error.message) {
+        errorMsg = error.message;
+      }
+
+      setErrorMessage(errorMsg);
+    }
+  }, [signInWithGoogle, router]);
 
   const isValidEmail = useCallback(
     (email: string) => EMAIL_REGEX.test(email),
@@ -273,9 +276,9 @@ export default function LoginScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       <TouchableWithoutFeedback onPress={dismissKeyboard}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
           className="flex-1"
-          keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
         >
           <ScrollView
             contentContainerStyle={{
@@ -287,15 +290,17 @@ export default function LoginScreen() {
               minHeight: "100%",
             }}
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            enableOnAndroid={true}
           >
             <Text className="text-4xl text-black font-black text-center mb-10 font-['Poppins-Bold']">
               Login to Your Account
             </Text>
 
             <TextInput
-              className="bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular']"
+              className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
+                focusField === "email" ? "border-2 border-primary" : ""
+              }`}
+              onFocus={() => setFocusField("email")}
+              onBlur={() => setFocusField(null)}
               placeholder="Email"
               placeholderTextColor="#9CA3AF"
               onChangeText={setEmail}
@@ -308,7 +313,11 @@ export default function LoginScreen() {
             />
 
             <TextInput
-              className="bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular']"
+              className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
+                focusField === "password" ? "border-2 border-primary" : ""
+              }`}
+              onFocus={() => setFocusField("password")}
+              onBlur={() => setFocusField(null)}
               placeholder="Password"
               placeholderTextColor="#9CA3AF"
               onChangeText={setPassword}
