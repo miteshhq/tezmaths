@@ -390,7 +390,7 @@ export default function RegisterScreen() {
             onFocus={() => setFocusField("username")}
             onBlur={() => {
               setFocusField(null);
-              checkUsernameAvailability;
+              checkUsernameAvailability();
             }}
             placeholder="Choose a username"
             placeholderTextColor="#9CA3AF"
@@ -413,7 +413,7 @@ export default function RegisterScreen() {
             onFocus={() => setFocusField("phonenumber")}
             onBlur={() => {
               setFocusField(null);
-              validatePhoneNumber;
+              validatePhoneNumber();
             }}
             placeholder="Enter your phone number"
             placeholderTextColor="#9CA3AF"
