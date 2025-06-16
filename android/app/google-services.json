@@ -1,48 +1,55 @@
 {
     "project_info": {
-        "project_number": "235143806197",
-        "firebase_url": "https://tezmathsinnovations-default-rtdb.asia-southeast1.firebasedatabase.app",
-        "project_id": "tezmathsinnovations",
-        "storage_bucket": "tezmathsinnovations.firebasestorage.app"
+      "project_number": "235143806197",
+      "firebase_url": "https://tezmathsinnovations-default-rtdb.asia-southeast1.firebasedatabase.app",
+      "project_id": "tezmathsinnovations",
+      "storage_bucket": "tezmathsinnovations.firebasestorage.app"
     },
     "client": [
-        {
-            "client_info": {
-                "mobilesdk_app_id": "1:235143806197:android:47b8add4721cf8495a19bc",
-                "android_client_info": {
-                    "package_name": "com.tezmathsteam.tezmaths"
-                }
-            },
-            "oauth_client": [
-                {
-                    "client_id": "235143806197-cc779nqb3gq5lvkj7b92jrm6fcpkerhl.apps.googleusercontent.com",
-                    "client_type": 1,
-                    "android_info": {
-                        "package_name": "com.tezmathsteam.tezmaths",
-                        "certificate_hash": "01ec743d9ba72a2167b21fdd0de10304d31e480d"
-                    }
-                },
-                {
-                    "client_id": "235143806197-1k7eq1jcq6gc5h6th0opmvtm03gqt7gs.apps.googleusercontent.com",
-                    "client_type": 3
-                }
-            ],
-            "api_key": [
-                {
-                    "current_key": "AIzaSyDantXIjUPt0Tl7HSmZ-iKDcuirKRykDPE"
-                }
-            ],
-            "services": {
-                "appinvite_service": {
-                    "other_platform_oauth_client": [
-                        {
-                            "client_id": "235143806197-1k7eq1jcq6gc5h6th0opmvtm03gqt7gs.apps.googleusercontent.com",
-                            "client_type": 3
-                        }
-                    ]
-                }
+      {
+        "client_info": {
+          "mobilesdk_app_id": "1:235143806197:android:47b8add4721cf8495a19bc",
+          "android_client_info": {
+            "package_name": "com.tezmathsteam.tezmaths"
+          }
+        },
+        "oauth_client": [
+          {
+            "client_id": "235143806197-rijgreiqgn4ue4vanqvqbomgmgba0o67.apps.googleusercontent.com",
+            "client_type": 1,
+            "android_info": {
+              "package_name": "com.tezmathsteam.tezmaths",
+              "certificate_hash": "1006c053e6ac23961e3871fad5d933148c4da53f"
             }
+          },
+          {
+            "client_id": "235143806197-1k7eq1jcq6gc5h6th0opmvtm03gqt7gs.apps.googleusercontent.com",
+            "client_type": 3
+          }
+        ],
+        "api_key": [
+          {
+            "current_key": "AIzaSyDantXIjUPt0Tl7HSmZ-iKDcuirKRykDPE"
+          }
+        ],
+        "services": {
+          "appinvite_service": {
+            "other_platform_oauth_client": [
+              {
+                "client_id": "235143806197-1k7eq1jcq6gc5h6th0opmvtm03gqt7gs.apps.googleusercontent.com",
+                "client_type": 3
+              },
+              {
+                "client_id": "235143806197-mn9dvnf0cllvd8av9nt3m2079kqj29ft.apps.googleusercontent.com",
+                "client_type": 2,
+                "ios_info": {
+                  "bundle_id": "com.tezmathsteam.tezmaths"
+                }
+              }
+            ]
+          }
         }
+      }
     ],
     "configuration_version": "1"
-}
+  }
