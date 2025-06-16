@@ -17,12 +17,12 @@ import { auth, database } from "../../firebase/firebaseConfig";
 
 // Avatar options
 const avatarOptions = [
-  { id: 1, source: require("../../assets/avatars/avatar1.jpg") },
-  { id: 2, source: require("../../assets/avatars/avatar2.jpg") },
-  { id: 3, source: require("../../assets/avatars/avatar3.jpg") },
-  { id: 4, source: require("../../assets/avatars/avatar4.jpg") },
-  { id: 5, source: require("../../assets/avatars/avatar5.jpg") },
-  { id: 6, source: require("../../assets/avatars/avatar6.jpg") },
+  { id: 0, source: require("../../assets/avatars/avatar1.jpg") },
+  { id: 1, source: require("../../assets/avatars/avatar2.jpg") },
+  { id: 2, source: require("../../assets/avatars/avatar3.jpg") },
+  { id: 3, source: require("../../assets/avatars/avatar4.jpg") },
+  { id: 4, source: require("../../assets/avatars/avatar5.jpg") },
+  { id: 5, source: require("../../assets/avatars/avatar6.jpg") },
 ];
 
 export default function RegisterScreen() {
