@@ -3,21 +3,23 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>416608871397-cs2qbmdo4gft960erm9h7qtfcbja5o7i.apps.googleusercontent.com</string>
+	<string>235143806197-mn9dvnf0cllvd8av9nt3m2079kqj29ft.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.416608871397-cs2qbmdo4gft960erm9h7qtfcbja5o7i</string>
+	<string>com.googleusercontent.apps.235143806197-mn9dvnf0cllvd8av9nt3m2079kqj29ft</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>235143806197-cc779nqb3gq5lvkj7b92jrm6fcpkerhl.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
-	<string>AIzaSyD0AjE_DAV-hQtZWyyMCe3ZwNMkfCRmOFQ</string>
+	<string>AIzaSyAy1z5n5Axt7Pga3At-ziF4WRAzGmwnCSA</string>
 	<key>GCM_SENDER_ID</key>
-	<string>416608871397</string>
+	<string>235143806197</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.miteshhq.tezmaths</string>
+	<string>com.tezmathsteam.tezmaths</string>
 	<key>PROJECT_ID</key>
-	<string>tezmaths-56cc1</string>
+	<string>tezmathsinnovations</string>
 	<key>STORAGE_BUCKET</key>
-	<string>tezmaths-56cc1.firebasestorage.app</string>
+	<string>tezmathsinnovations.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -29,8 +31,8 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:416608871397:ios:85fdf2d17beded5157c50c</string>
+	<string>1:235143806197:ios:20050935e37ed0615a19bc</string>
 	<key>DATABASE_URL</key>
-	<string>https://tezmaths-56cc1-default-rtdb.asia-southeast1.firebasedatabase.app</string>
+	<string>https://tezmathsinnovations-default-rtdb.asia-southeast1.firebasedatabase.app</string>
 </dict>
 </plist>

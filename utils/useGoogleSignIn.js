@@ -15,7 +15,7 @@ export const useSimpleGoogleSignIn = () => {
             try {
                 // Configure Google Sign-In
                 GoogleSignin.configure({
-                    webClientId: '416608871397-0da1u3thq1oes30ss5ba7vql8je4rrmq.apps.googleusercontent.com',
+                    webClientId: '235143806197-1k7eq1jcq6gc5h6th0opmvtm03gqt7gs.apps.googleusercontent.com',
                     offlineAccess: true, // if you want to access Google API on behalf of the user FROM YOUR SERVER
                 });
 

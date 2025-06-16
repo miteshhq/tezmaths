@@ -3,7 +3,7 @@
 ## Admin Credentials
 
 adminEmail: <tezmaths@admin.com>
-password: admin@tezmaths
+password: admin@t32m392s
 
 Make account in firebase and get web client info then also get the service-key and place in the firebase folder - in the file setAdminToken.ts set the id of admin account and set the location of the service-key.json file
 
