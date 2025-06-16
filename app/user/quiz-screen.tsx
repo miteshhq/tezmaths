@@ -537,7 +537,7 @@ export default function QuizScreen() {
     if (normalizedUserAnswer === normalizedCorrect) {
       handleSubmitAnswer(true);
     } else {
-      handleSubmitAnswer(false);
+      //   handleSubmitAnswer(false);
     }
   };
 
@@ -1083,3 +1083,7 @@ export default function QuizScreen() {
     </>
   );
 }
+
+// in this file we need to make a very little updtae, only in case of when the answer is wrong, when the answer is right , it auto submist and moves to enxt auestion, but when the answer is wrong on auto checking, it should not submit, let the 15s tiemr be utilized to user, means if answer is wrong, then don't autosubmit until the user enters right answer ( or end when the quiz timer gets over)
+
+// what do you understand, tell me and tell me what update to make where only. ohk.

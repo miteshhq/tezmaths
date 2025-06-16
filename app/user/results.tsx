@@ -49,7 +49,7 @@ export default function ResultsScreen() {
             await SoundManager.playSound("failSoundEffect");
           }
         } catch (error) {
-        //   console.error("Error playing result sound:", error);
+          //   console.error("Error playing result sound:", error);
         }
       };
       playResultSound();
@@ -125,7 +125,7 @@ export default function ResultsScreen() {
         );
       }
     } catch (error) {
-    //   console.error("Error sharing:", error);
+      //   console.error("Error sharing:", error);
       Alert.alert("Share Error", "Unable to share. Please try again later.", [
         { text: "OK" },
       ]);
@@ -145,17 +145,17 @@ export default function ResultsScreen() {
 
   const avatarImages = (avatar) => {
     switch (avatar) {
-      case "1":
+      case "0":
         return require("../../assets/avatars/avatar1.jpg");
-      case "2":
+      case "1":
         return require("../../assets/avatars/avatar2.jpg");
-      case "3":
+      case "2":
         return require("../../assets/avatars/avatar3.jpg");
-      case "4":
+      case "3":
         return require("../../assets/avatars/avatar4.jpg");
-      case "5":
+      case "4":
         return require("../../assets/avatars/avatar5.jpg");
-      case "6":
+      case "5":
         return require("../../assets/avatars/avatar6.jpg");
       default:
         return require("../../assets/avatars/avatar1.jpg");
@@ -244,7 +244,7 @@ export default function ResultsScreen() {
       </View>
 
       <View className="flex-row justify-between mt-6 w-full max-w-md">
-      {isPassed && currentLevel < 6 && (
+        {isPassed && currentLevel < 6 && (
           <TouchableOpacity
             className={`py-3 px-6 flex-1 w-full ml-2 border border-black rounded-full`}
             onPress={handleNextLevel}
@@ -260,7 +260,7 @@ export default function ResultsScreen() {
               />
             </View>
           </TouchableOpacity>
-      )}
+        )}
       </View>
 
       {/* Footer */}
