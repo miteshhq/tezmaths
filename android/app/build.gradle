@@ -92,9 +92,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.miteshhq.tezmaths'
+    namespace 'com.tezmathsteam.tezmaths'
     defaultConfig {
-        applicationId 'com.miteshhq.tezmaths'
+        applicationId 'com.tezmathsteam.tezmaths'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

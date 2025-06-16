@@ -1,4 +1,4 @@
-package com.miteshhq.tezmaths
+package com.tezmathsteam.tezmaths
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
