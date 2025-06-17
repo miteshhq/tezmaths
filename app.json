@@ -2,7 +2,7 @@
     "expo": {
         "name": "TezMaths",
         "slug": "tezmaths",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "orientation": "portrait",
         "icon": "./assets/branding/logo.png",
         "scheme": "tezmaths",
@@ -11,7 +11,8 @@
         "ios": {
             "supportsTablet": true,
             "bundleIdentifier": "com.tezmathsteam.tezmaths",
-            "googleServicesFile": "./GoogleService-Info.plist"
+            "googleServicesFile": "./GoogleService-Info.plist",
+            "buildNumber": "2"
         },
         "android": {
             "adaptiveIcon": {
@@ -20,7 +21,8 @@
             },
             "edgeToEdgeEnabled": true,
             "package": "com.tezmathsteam.tezmaths",
-            "googleServicesFile": "./google-services.json"
+            "googleServicesFile": "./google-services.json",
+            "versionCode": 2
         },
         "web": {
             "bundler": "metro",
