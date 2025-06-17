@@ -24,7 +24,7 @@ import { auth, database } from "../../firebase/firebaseConfig";
 
 // Configuration
 const QUIZ_TIME_LIMIT = 15;
-const AUTO_SUBMIT_DELAY = 500; // 200ms delay for auto-submit
+const AUTO_SUBMIT_DELAY = 150; // 300ms delay for auto-submit
 const EXPLANATION_DISPLAY_TIME = 400; // 4 seconds
 
 interface Question {
@@ -321,11 +321,11 @@ export default function QuizScreen() {
       // First pass: Find maxDisplayQuestions value
       snapshot.forEach((childSnapshot) => {
         const quiz = childSnapshot.val();
-        if (
-          quiz.level === currentLevel &&
-          typeof quiz.maxDisplayQuestions === "number"
-        ) {
-          maxDisplayQuestions = Math.max(1, quiz.maxDisplayQuestions);
+        if (quiz.level === currentLevel && quiz.maxDisplayQuestions) {
+          maxDisplayQuestions = Math.max(
+            1,
+            Number.parseInt(quiz.maxDisplayQuestions)
+          );
           setMaxDisplayQuestions(maxDisplayQuestions);
         }
       });
@@ -340,7 +340,6 @@ export default function QuizScreen() {
               questionText: q.questionText,
               correctAnswer: q.correctAnswer.toString(),
               explanation: q.explanation || "",
-              //   point: currentLevel * 20,
               timeLimit: QUIZ_TIME_LIMIT,
             });
           });
@@ -536,8 +535,6 @@ export default function QuizScreen() {
 
     if (normalizedUserAnswer === normalizedCorrect) {
       handleSubmitAnswer(true);
-    } else {
-      //   handleSubmitAnswer(false);
     }
   };
 
@@ -554,61 +551,139 @@ export default function QuizScreen() {
 
       if (isCorrect) {
         await SoundManager.playSound("rightAnswerSoundEffect");
-
         await Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success
         );
 
-        // FIXED: Each correct answer adds points equal to level number
         const pointsPerQuestion = currentLevel;
-        setQuizScore((prev) => prev + pointsPerQuestion);
-        setCorrectAnswers((prev) => prev + 1);
+
+        // FIXED: Use functional updates and handle completion logic here
+        let finalScore = 0;
+        let finalCorrectAnswers = 0;
+
+        setQuizScore((prevScore) => {
+          const newScore = prevScore + pointsPerQuestion;
+          finalScore = newScore;
+          console.log(
+            `Score updated: ${prevScore} + ${pointsPerQuestion} = ${newScore}`
+          );
+          return newScore;
+        });
+
+        setCorrectAnswers((prevCorrect) => {
+          const newCorrect = prevCorrect + 1;
+          finalCorrectAnswers = newCorrect;
+          console.log(
+            `Correct answers updated: ${prevCorrect} + 1 = ${newCorrect}`
+          );
+          return newCorrect;
+        });
+
+        // FIXED: Check if this is the last question and handle completion here
+        if (currentQuestionIndex >= questions.length - 1) {
+          // This is the last question - complete the quiz with updated values
+          setTimeout(() => {
+            console.log("Last question - Final Quiz Stats:", {
+              score: finalScore,
+              correct: finalCorrectAnswers,
+              total: questions.length,
+            });
+
+            handleLevelCompletionWithValues(finalScore, finalCorrectAnswers);
+          }, 100);
+        }
+
         setIsAnswerWrong(false);
 
-        // Move to next question immediately for correct answers
-        Animated.timing(questionTransition, {
-          toValue: 0,
-          duration: 100,
-          useNativeDriver: true,
-        }).start(() => {
-          moveToNextQuestion();
-          questionTransition.setValue(1);
-        });
+        // Only move to next question if it's not the last question
+        if (currentQuestionIndex < questions.length - 1) {
+          Animated.timing(questionTransition, {
+            toValue: 0,
+            duration: 100,
+            useNativeDriver: true,
+          }).start(() => {
+            moveToNextQuestion();
+            questionTransition.setValue(1);
+          });
+        }
       } else {
-        // WRONG ANSWER - Only show explanation, don't move to next question yet
-        // await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-
-        // setIsAnswerWrong(true);
-        // setShowExplanation(true);
-        // setIsProcessing(false); // Allow user to click continue
-
-        // // Auto-advance after explanation time
-        // explanationTimeoutRef.current = setTimeout(() => {
-        //   if (isMountedRef.current && isScreenFocused) {
-        //     handleNextAfterExplanation();
-        //   }
-        // }, EXPLANATION_DISPLAY_TIME);
-
-        // WRONG ANSWER:
+        // WRONG ANSWER - Show explanation and end quiz
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-
-        // 1) play wrong-answer sound
         await SoundManager.playSound("wrongAnswerSoundEffect");
 
-        // 2) show explanation
         setIsAnswerWrong(true);
         setShowExplanation(true);
         setIsProcessing(false);
 
-        // 3) auto-advance after EXPLANATION_DISPLAY_TIME, or wait for user tap
         explanationTimeoutRef.current = setTimeout(() => {
           if (isMountedRef.current && isScreenFocused) {
+            // For wrong answers, use current state values
             handleLevelCompletion();
           }
         }, EXPLANATION_DISPLAY_TIME);
       }
     },
-    [currentQuestionIndex, questions, isQuizActive, isScreenFocused, stopTimer]
+    [
+      currentQuestionIndex,
+      questions,
+      isQuizActive,
+      isScreenFocused,
+      stopTimer,
+      currentLevel,
+    ]
+  );
+
+  const handleLevelCompletionWithValues = useCallback(
+    async (finalScore: number, finalCorrectAnswers: number) => {
+      // Prevent multiple calls
+      if (!isQuizActive) return;
+
+      setIsQuizActive(false);
+      cleanupQuiz();
+
+      try {
+        // Calculate pass status
+        const passThreshold = Math.ceil(questions.length * 0.7);
+        const isPassed = finalCorrectAnswers >= passThreshold;
+
+        console.log("Pass calculation with specific values:", {
+          correctAnswers: finalCorrectAnswers,
+          passThreshold,
+          isPassed,
+        });
+
+        await updateUserProgress(finalScore, finalCorrectAnswers, isPassed);
+
+        // Navigate to results
+        setTimeout(() => {
+          router.push({
+            pathname: "/user/results",
+            params: {
+              quizScore: finalScore.toString(),
+              correctAnswers: finalCorrectAnswers.toString(),
+              totalQuestions: questions.length.toString(),
+              currentLevel: currentLevel.toString(),
+              username: username || "player",
+              fullname: fullname || "Player",
+              avatar: avatar.toString(),
+              isPassed: isPassed.toString(),
+            },
+          });
+        }, 100);
+      } catch (error) {
+        console.error("Error completing level:", error);
+        router.push("/user/home");
+      }
+    },
+    [
+      questions.length,
+      currentLevel,
+      username,
+      fullname,
+      avatar,
+      isQuizActive,
+      cleanupQuiz,
+    ]
   );
 
   // Handle time up
@@ -644,9 +719,6 @@ export default function QuizScreen() {
       setUserAnswer("");
       setTimeLeft(QUIZ_TIME_LIMIT);
       setIsProcessing(false);
-    } else {
-      // Quiz completed
-      handleLevelCompletion();
     }
   }, [currentQuestionIndex, questions.length]);
 
@@ -689,11 +761,15 @@ export default function QuizScreen() {
   }, [isScreenFocused, currentQuestionIndex, questions.length]);
 
   const updateUserProgress = useCallback(
-    async (totalScore: number) => {
+    async (
+      totalScore: number,
+      finalCorrectAnswers: number,
+      isPassed: boolean
+    ) => {
       const userId = auth.currentUser?.uid;
       if (!userId) {
-        //   console.log("User not authenticated");
-        return;
+        console.log("User not authenticated");
+        return isPassed;
       }
 
       try {
@@ -724,9 +800,7 @@ export default function QuizScreen() {
         await AsyncStorage.setItem("totalPoints", newPoints.toString());
         await AsyncStorage.setItem("streak", newStreak.toString());
 
-        // Calculate pass threshold
-        const passThreshold = Math.ceil(questions.length * 0.7);
-        const isPassed = correctAnswers >= passThreshold;
+        console.log("Pass status in updateUserProgress:", isPassed);
 
         // Only update progress if user passed
         if (isPassed) {
@@ -749,15 +823,15 @@ export default function QuizScreen() {
 
         return isPassed;
       } catch (error) {
-        // console.error("Error updating user progress:", error);
+        console.error("Error updating user progress:", error);
         Alert.alert(
           "Error",
           "Failed to save progress. Please check your connection."
         );
-        return false;
+        return isPassed;
       }
     },
-    [currentLevel, questions.length]
+    [currentLevel]
   );
 
   // Check consecutive days
@@ -772,42 +846,50 @@ export default function QuizScreen() {
     // Prevent multiple calls
     if (!isQuizActive) return;
 
-    // FIXED: Calculate total score correctly
-    const totalScore = quizScore;
-
-    // console.log(
-    //   "Completing quiz with score:",
-    //   totalScore,
-    //   "correct:",
-    //   correctAnswers
-    // );
-
     setIsQuizActive(false);
-    cleanupQuiz(); // Clean up all timers and processes
+    cleanupQuiz();
 
-    try {
-      const isPassed = await updateUserProgress(totalScore);
+    // For non-correct answer completions, use a timeout to get final state
+    setTimeout(async () => {
+      try {
+        const finalScore = quizScore;
+        const finalCorrectAnswers = correctAnswers;
 
-      // Small delay to ensure cleanup is complete
-      setTimeout(() => {
+        console.log("General completion - Final Quiz Stats:", {
+          score: finalScore,
+          correct: finalCorrectAnswers,
+          total: questions.length,
+        });
+
+        const passThreshold = Math.ceil(questions.length * 0.7);
+        const isPassed = finalCorrectAnswers >= passThreshold;
+
+        console.log("Pass calculation:", {
+          correctAnswers: finalCorrectAnswers,
+          passThreshold,
+          isPassed,
+        });
+
+        await updateUserProgress(finalScore, finalCorrectAnswers, isPassed);
+
         router.push({
           pathname: "/user/results",
           params: {
-            quizScore: totalScore.toString(),
-            correctAnswers: correctAnswers.toString(),
+            quizScore: finalScore.toString(),
+            correctAnswers: finalCorrectAnswers.toString(),
             totalQuestions: questions.length.toString(),
             currentLevel: currentLevel.toString(),
             username: username || "player",
             fullname: fullname || "Player",
             avatar: avatar.toString(),
-            isPassed: (isPassed || false).toString(),
+            isPassed: isPassed.toString(),
           },
         });
-      }, 100);
-    } catch (error) {
-      // console.error("Error completing level:", error);
-      router.push("/user/home");
-    }
+      } catch (error) {
+        console.error("Error completing level:", error);
+        router.push("/user/home");
+      }
+    }, 200);
   }, [
     quizScore,
     correctAnswers,
@@ -817,7 +899,6 @@ export default function QuizScreen() {
     fullname,
     avatar,
     isQuizActive,
-    updateUserProgress,
     cleanupQuiz,
   ]);
 

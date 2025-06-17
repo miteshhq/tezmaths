@@ -173,100 +173,109 @@ export default function BattleResultsScreen() {
   };
 
   return (
-    <View className="flex-1 bg-white justify-center items-center p-4">
-      <View
-        ref={cardRef}
-        collapsable={false}
-        className="bg-custom-gray border-4 border-white p-4 rounded-3xl shadow-xl w-full max-w-md"
-        style={{
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 4.65,
-          elevation: 8,
-        }}
-      >
-        <Text className="text-3xl font-bold text-black text-center mb-6">
-          Battle With Friends
-        </Text>
+    <ScrollView
+      className="bg-white"
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={{
+        flexGrow: 1,
+      }}
+      showsVerticalScrollIndicator={false}
+    >
+      <View className="flex-1 bg-white justify-center items-center p-4">
+        <View
+          ref={cardRef}
+          collapsable={false}
+          className="bg-custom-gray border-4 border-white p-4 rounded-3xl shadow-xl w-full max-w-md"
+          style={{
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 4.65,
+            elevation: 8,
+          }}
+        >
+          <Text className="text-3xl font-bold text-black text-center mb-6">
+            Battle With Friends
+          </Text>
 
-        <View className="mb-6">
-          <Text className="text-2xl font-bold text-center">
-            {userRank === 1 ? "🏆 You Won!" : `You Ranked #${userRank}`}
+          <View className="mb-6">
+            <Text className="text-2xl font-bold text-center">
+              {userRank === 1 ? "🏆 You Won!" : `You Ranked #${userRank}`}
+            </Text>
+            <Text className="text-xl text-center">
+              Your Score: {userScore} pts
+            </Text>
+            <Text className="text-lg text-center italic mt-2">
+              "{getMotivationalQuote()}"
+            </Text>
+          </View>
+
+          {renderProfileImages()}
+
+          <Text className="text-2xl text-black font-bold text-center w-full mb-2">
+            Battle Score
           </Text>
-          <Text className="text-xl text-center">
-            Your Score: {userScore} pts
+
+          <ScrollView className="w-full max-w-md mb-4">
+            {parsedPlayers.map((player, index) => (
+              <View
+                key={player.userId}
+                className={`flex-row justify-between items-center p-4 py-2 rounded-lg mb-2 bg-light-orange ${
+                  player.userId === currentUserId
+                    ? "border-2 border-primary"
+                    : "border-transparent border-2"
+                }`}
+              >
+                <Text className="text-xl font-bold">
+                  {index + 1}. {player.username}
+                  {player.userId === currentUserId ? " (You)" : ""}
+                </Text>
+                <Text className="text-xl">{player.score} pts</Text>
+              </View>
+            ))}
+          </ScrollView>
+
+          <Text className="text-3xl mt-2 mb-2 font-black text-center text-white p-2 bg-primary rounded-xl">
+            Download Now
           </Text>
-          <Text className="text-lg text-center italic mt-2">
-            "{getMotivationalQuote()}"
-          </Text>
+
+          <View className="items-center mb-8 mt-3">
+            <Image source={logo} style={{ height: 30, width: 140 }} />
+            <Text className="text-black text-center">
+              Sharpen your speed, master your math!
+            </Text>
+          </View>
         </View>
 
-        {renderProfileImages()}
-
-        <Text className="text-2xl text-black font-bold text-center w-full mb-2">
-          Battle Score
-        </Text>
-
-        <ScrollView className="w-full max-w-md mb-4">
-          {parsedPlayers.map((player, index) => (
-            <View
-              key={player.userId}
-              className={`flex-row justify-between items-center p-4 py-2 rounded-lg mb-2 bg-light-orange ${
-                player.userId === currentUserId
-                  ? "border-2 border-primary"
-                  : "border-transparent border-2"
-              }`}
-            >
-              <Text className="text-xl font-bold">
-                {index + 1}. {player.username}
-                {player.userId === currentUserId ? " (You)" : ""}
-              </Text>
-              <Text className="text-xl">{player.score} pts</Text>
+        <View className="flex-row justify-between mt-6 w-full max-w-md">
+          <TouchableOpacity
+            className="py-3 px-6 border border-black rounded-full flex-1 mr-2"
+            onPress={() => router.push("/user/home")}
+          >
+            <View className="flex-row items-center justify-center gap-2">
+              <Text className="font-black text-2xl">Home</Text>
+              <Image
+                source={require("../../assets/icons/home.png")}
+                style={{ width: 20, height: 20 }}
+                tintColor="#FF6B35"
+              />
             </View>
-          ))}
-        </ScrollView>
-
-        <Text className="text-3xl mt-2 mb-2 font-black text-center text-white p-2 bg-primary rounded-xl">
-          Download Now
-        </Text>
-
-        <View className="items-center mb-8 mt-3">
-          <Image source={logo} style={{ height: 30, width: 140 }} />
-          <Text className="text-black text-center">
-            Sharpen your speed, master your math!
-          </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            className="py-3 px-6 border border-black rounded-full flex-1 ml-2"
+            onPress={handleShare}
+          >
+            <View className="flex-row items-center justify-center gap-2">
+              <Text className="font-black text-2xl">Share</Text>
+              <Image
+                source={require("../../assets/icons/share.png")}
+                style={{ width: 20, height: 20 }}
+                tintColor="#FF6B35"
+              />
+            </View>
+          </TouchableOpacity>
         </View>
       </View>
-
-      <View className="flex-row justify-between mt-6 w-full max-w-md">
-        <TouchableOpacity
-          className="py-3 px-6 border border-black rounded-full flex-1 mr-2"
-          onPress={() => router.push("/user/home")}
-        >
-          <View className="flex-row items-center justify-center gap-2">
-            <Text className="font-black text-2xl">Home</Text>
-            <Image
-              source={require("../../assets/icons/home.png")}
-              style={{ width: 20, height: 20 }}
-              tintColor="#FF6B35"
-            />
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          className="py-3 px-6 border border-black rounded-full flex-1 ml-2"
-          onPress={handleShare}
-        >
-          <View className="flex-row items-center justify-center gap-2">
-            <Text className="font-black text-2xl">Share</Text>
-            <Image
-              source={require("../../assets/icons/share.png")}
-              style={{ width: 20, height: 20 }}
-              tintColor="#FF6B35"
-            />
-          </View>
-        </TouchableOpacity>
-      </View>
-    </View>
+    </ScrollView>
   );
 }

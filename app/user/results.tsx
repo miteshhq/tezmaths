@@ -8,6 +8,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ScrollView,
 } from "react-native";
 import SoundManager from "../../components/soundManager";
 import logo from "../../assets/branding/tezmaths-full-logo.png";
@@ -163,96 +164,88 @@ export default function ResultsScreen() {
   };
 
   return (
-    <View className="flex-1 bg-white justify-center items-center p-4">
-      {/* Shareable Card */}
-      <View
-        ref={cardRef}
-        collapsable={false}
-        className="bg-custom-gray border-4 border-white p-4 rounded-3xl shadow-xl w-full max-w-md"
-      >
-        <View className="items-center mb-6">
-          <Text className="text-2xl font-bold text-gray-500">@{username}</Text>
-        </View>
-
-        <View className="rounded-full h-40 w-40 border-4 border-primary bg-white overflow-hidden mx-auto">
-          <Image
-            source={avatarImages(avatar)}
-            style={{ width: "100%", height: "100%" }}
-          />
-        </View>
-
-        <View className="items-center mb-6">
-          <Text className="text-4xl text-center mt-4 font-black uppercase text-primary">
-            {fullname}
-          </Text>
-        </View>
-
-        <Text className="text-2xl font-bold text-center text-black mb-4">
-          {getMotivationalQuote()}
-        </Text>
-        <Text className="text-3xl font-black text-center text-black mb-2">
-          Score: {quizScore}
-        </Text>
-
-        <Text className="text-3xl mt-2 mb-2 font-black text-center text-white p-2 bg-primary rounded-xl">
-          Download Now
-        </Text>
-
-        <View className="items-center mb-8 mt-3">
-          <Image source={logo} style={{ height: 30, width: 140 }} />
-
-          <Text className="text-black text-center">
-            Sharpen your speed, master your math!
-          </Text>
-        </View>
-
-        <View className="items-center">
-          <Text className="text-lg font-bold text-center text-gray-600">
-            Level {currentLevel} {isPassed ? "✅ Completed" : "💪 In Progress"}
-          </Text>
-        </View>
-      </View>
-
-      {/* Action Buttons */}
-      <View className="flex-row justify-between mt-6 w-full max-w-md">
-        <TouchableOpacity
-          className="py-3 px-6 flex-1 mr-2 border border-black rounded-full"
-          onPress={() => router.push("/user/home")}
+    <ScrollView
+      className="bg-white"
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={{
+        flexGrow: 1,
+      }}
+      showsVerticalScrollIndicator={false}
+    >
+      <View className="flex-1 bg-white justify-center items-center p-4">
+        {/* Shareable Card */}
+        <View
+          ref={cardRef}
+          collapsable={false}
+          className="bg-custom-gray border-4 border-white p-4 rounded-3xl shadow-xl w-full max-w-md"
         >
-          <View className="flex flex-row items-center justify-center gap-2">
-            <Text className="font-black text-2xl text-center">Home</Text>
+          <View className="items-center mb-6">
+            <Text className="text-2xl font-bold text-gray-500">
+              @{username}
+            </Text>
+          </View>
+
+          <View className="rounded-full h-40 w-40 border-4 border-primary bg-white overflow-hidden mx-auto">
             <Image
-              source={require("../../assets/icons/home.png")}
-              style={{ width: 20, height: 20 }}
+              source={avatarImages(avatar)}
+              style={{ width: "100%", height: "100%" }}
             />
           </View>
-        </TouchableOpacity>
 
-        <TouchableOpacity
-          className="py-3 px-6 flex-1 ml-2 border border-black rounded-full"
-          onPress={handleShare}
-        >
-          <View className="flex flex-row items-center justify-center gap-2">
-            <Text className="font-black text-2xl text-center">Share</Text>
-            <Image
-              source={require("../../assets/icons/share.png")}
-              style={{ width: 20, height: 20 }}
-              tintColor={"#FF6B35"}
-            />
+          <View className="items-center mb-6">
+            <Text className="text-4xl text-center mt-4 font-black uppercase text-primary">
+              {fullname}
+            </Text>
           </View>
-        </TouchableOpacity>
-      </View>
 
-      <View className="flex-row justify-between mt-6 w-full max-w-md">
-        {isPassed && currentLevel < 6 && (
+          <Text className="text-2xl font-bold text-center text-black mb-4">
+            {getMotivationalQuote()}
+          </Text>
+          <Text className="text-3xl font-black text-center text-black mb-2">
+            Score: {quizScore}
+          </Text>
+
+          <Text className="text-3xl mt-2 mb-2 font-black text-center text-white p-2 bg-primary rounded-xl">
+            Download Now
+          </Text>
+
+          <View className="items-center mb-8 mt-3">
+            <Image source={logo} style={{ height: 30, width: 140 }} />
+
+            <Text className="text-black text-center">
+              Sharpen your speed, master your math!
+            </Text>
+          </View>
+
+          <View className="items-center">
+            <Text className="text-lg font-bold text-center text-gray-600">
+              Level {currentLevel}{" "}
+              {isPassed ? "✅ Completed" : "💪 In Progress"}
+            </Text>
+          </View>
+        </View>
+
+        {/* Action Buttons */}
+        <View className="flex-row justify-between mt-6 w-full max-w-md">
           <TouchableOpacity
-            className={`py-3 px-6 flex-1 w-full ml-2 border border-black rounded-full`}
-            onPress={handleNextLevel}
+            className="py-3 px-6 flex-1 mr-2 border border-black rounded-full"
+            onPress={() => router.push("/user/home")}
           >
             <View className="flex flex-row items-center justify-center gap-2">
-              <Text className="font-black text-2xl text-center">
-                Next Level
-              </Text>
+              <Text className="font-black text-2xl text-center">Home</Text>
+              <Image
+                source={require("../../assets/icons/home.png")}
+                style={{ width: 20, height: 20 }}
+              />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className="py-3 px-6 flex-1 ml-2 border border-black rounded-full"
+            onPress={handleShare}
+          >
+            <View className="flex flex-row items-center justify-center gap-2">
+              <Text className="font-black text-2xl text-center">Share</Text>
               <Image
                 source={require("../../assets/icons/share.png")}
                 style={{ width: 20, height: 20 }}
@@ -260,13 +253,33 @@ export default function ResultsScreen() {
               />
             </View>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
 
-      {/* Footer */}
-      <Text className="text-primary text-sm mt-3">
-        TezMaths - Sharpen Your Speed
-      </Text>
-    </View>
+        <View className="flex-row justify-between mt-6 w-full max-w-md">
+          {isPassed && currentLevel < 6 && (
+            <TouchableOpacity
+              className={`py-3 px-6 flex-1 w-full ml-2 border border-black rounded-full`}
+              onPress={handleNextLevel}
+            >
+              <View className="flex flex-row items-center justify-center gap-2">
+                <Text className="font-black text-2xl text-center">
+                  Next Level
+                </Text>
+                <Image
+                  source={require("../../assets/icons/share.png")}
+                  style={{ width: 20, height: 20 }}
+                  tintColor={"#FF6B35"}
+                />
+              </View>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Footer */}
+        <Text className="text-primary text-sm mt-3">
+          TezMaths - Sharpen Your Speed
+        </Text>
+      </View>
+    </ScrollView>
   );
 }
