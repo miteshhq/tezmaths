@@ -10,6 +10,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Image,
 } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { auth, database } from "../../firebase/firebaseConfig";
@@ -17,7 +18,26 @@ import { battleManager } from "../../utils/battleManager";
 import SoundManager from "../../components/soundManager";
 
 const DEBUG_MODE = false;
-const AUTO_SUBMIT_DELAY = 200;
+const AUTO_SUBMIT_DELAY = 400;
+
+const avatarImages = (avatar) => {
+  switch (avatar) {
+    case "0":
+      return require("../../assets/avatars/avatar1.jpg");
+    case "1":
+      return require("../../assets/avatars/avatar2.jpg");
+    case "2":
+      return require("../../assets/avatars/avatar3.jpg");
+    case "3":
+      return require("../../assets/avatars/avatar4.jpg");
+    case "4":
+      return require("../../assets/avatars/avatar5.jpg");
+    case "5":
+      return require("../../assets/avatars/avatar6.jpg");
+    default:
+      return require("../../assets/avatars/avatar1.jpg");
+  }
+};
 
 const debugLog = (message, data = null) => {
   if (DEBUG_MODE) {
@@ -105,6 +125,9 @@ export default function BattleScreen() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const timeExpiryHandled = useRef(false);
 
+  const [showBetterLuckMessage, setShowBetterLuckMessage] = useState(false);
+  const [betterLuckCountdown, setBetterLuckCountdown] = useState(0);
+
   const [showNextQuestionCountdown, setShowNextQuestionCountdown] =
     useState(false);
   const [countdownValue, setCountdownValue] = useState(0);
@@ -117,26 +140,86 @@ export default function BattleScreen() {
     };
   }, []);
 
-  // Handle time expiry (only one instance)
+  useEffect(() => {
+    if (
+      timeLeft === 0 && // Only trigger when time is exactly 0
+      !roomData?.questionTransition &&
+      !roomData?.currentWinner &&
+      !showBetterLuckMessage
+    ) {
+      setShowBetterLuckMessage(true);
+      setBetterLuckCountdown(2);
+
+      const interval = setInterval(() => {
+        setBetterLuckCountdown((prev) => {
+          if (prev <= 1) {
+            setShowBetterLuckMessage(false);
+            clearInterval(interval);
+            if (roomData?.hostId === userId) {
+              battleManager.startQuestionTransition(roomId as string, 2000);
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [
+    timeLeft, // This should only trigger when timeLeft changes to 0
+    roomData?.questionTransition,
+    roomData?.currentWinner,
+    roomData?.hostId,
+    userId,
+    roomId,
+    showBetterLuckMessage,
+  ]);
+
+  // Add this new useEffect for handling stuck states
   useEffect(() => {
     if (
       timeLeft === 0 &&
       !roomData?.questionTransition &&
-      roomData?.hostId === userId &&
-      !timeExpiryHandled.current
+      !roomData?.currentWinner
     ) {
-      timeExpiryHandled.current = true;
-      battleManager.handleTimeExpiry(roomId as string).catch((error) => {
-        // console.error("Time expiry handling failed:", error);
-      });
+      // Fallback handler if the host isn't moving to next question
+      const fallbackTimeout = setTimeout(() => {
+        if (roomData?.hostId === userId) {
+          console.log("Fallback: Moving to next question");
+          battleManager.startQuestionTransition(roomId as string, 1000);
+        }
+      }, 5000); // 5 second fallback
+
+      return () => clearTimeout(fallbackTimeout);
     }
   }, [
     timeLeft,
     roomData?.questionTransition,
+    roomData?.currentWinner,
     roomData?.hostId,
     userId,
     roomId,
   ]);
+
+  useEffect(() => {
+    if (roomData?.currentQuestion !== undefined) {
+      // Reset states for new question
+      setUserAnswer("");
+      setFeedback("");
+      setIsAnswered(false);
+      setIsProcessing(false);
+      setShowBetterLuckMessage(false);
+      setBetterLuckCountdown(0);
+      timeExpiryHandled.current = false;
+
+      // Clear any pending timeouts
+      if (submitTimeoutRef.current) {
+        clearTimeout(submitTimeoutRef.current);
+        submitTimeoutRef.current = null;
+      }
+    }
+  }, [roomData?.currentQuestion]);
 
   // Handle transition to next question (only one instance)
   useEffect(() => {
@@ -158,7 +241,7 @@ export default function BattleScreen() {
         }, transitionTimeLeft);
       } else {
         battleManager.moveToNextQuestion(roomId as string).catch((error) => {
-        //   console.error("Failed to move to next question:", error);
+          //   console.error("Failed to move to next question:", error);
         });
       }
     }
@@ -173,6 +256,38 @@ export default function BattleScreen() {
     userId,
     roomId,
   ]);
+
+  // Add this useEffect to ensure host always handles progression
+  //   useEffect(() => {
+  //     if (
+  //       roomData?.hostId === userId &&
+  //       timeLeft === 0 &&
+  //       !roomData?.questionTransition &&
+  //       !roomData?.currentWinner
+  //     ) {
+  //       const progressTimeout = setTimeout(() => {
+  //         battleManager.handleTimeExpiry(roomId as string);
+  //       }, 1000);
+
+  //       return () => clearTimeout(progressTimeout);
+  //     }
+  //   }, [
+  //     timeLeft,
+  //     roomData?.hostId,
+  //     roomData?.questionTransition,
+  //     roomData?.currentWinner,
+  //     userId,
+  //     roomId,
+  //   ]);
+
+  // Clear messages when transition starts
+  useEffect(() => {
+    if (roomData?.questionTransition) {
+      setShowBetterLuckMessage(false);
+      setBetterLuckCountdown(0);
+      setFeedback("");
+    }
+  }, [roomData?.questionTransition]);
 
   // Add cleanup for question transitions
   useEffect(() => {
@@ -272,7 +387,7 @@ export default function BattleScreen() {
     }
   }, [roomData?.players]);
 
-  // Timer management
+  // In the timer management useEffect, change the interval from 100ms to 1000ms for more precision
   useEffect(() => {
     if (
       roomData &&
@@ -283,7 +398,6 @@ export default function BattleScreen() {
       const startTime = roomData.questionStartedAt;
       const timeLimit = roomData.questionTimeLimit || 15;
 
-      // Clear existing timer
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
@@ -300,11 +414,10 @@ export default function BattleScreen() {
         }
       };
 
-      // Initial update
       updateTimer();
 
-      // Set up interval
-      timerRef.current = setInterval(updateTimer, 100);
+      // Change from 100ms to 1000ms for more accurate timing
+      timerRef.current = setInterval(updateTimer, 1000);
 
       return () => {
         if (timerRef.current) {
@@ -313,7 +426,6 @@ export default function BattleScreen() {
         }
       };
     } else {
-      // Clear timer if not in playing state or in transition
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -328,23 +440,30 @@ export default function BattleScreen() {
   // Navigate to results when battle finishes
   useEffect(() => {
     if (roomData?.status === "finished") {
-      const playerArray = Object.entries(roomData.players || {})
-        .map(([id, data]) => ({
-          userId: id,
-          username: data.username || data.name,
-          score: data.score || 0,
-        }))
-        .sort((a, b) => b.score - a.score);
+      // Add a small delay for smooth transition
+      const timeout = setTimeout(() => {
+        const playerArray = Object.entries(roomData.players || {})
+          .map(([id, data]) => ({
+            userId: id,
+            username: data.username || data.name,
+            score: data.score || 0,
+            avatar: data.avatar || null,
+          }))
+          .sort((a, b) => b.score - a.score);
 
-      router.push({
-        pathname: "/user/battle-results",
-        params: {
-          players: JSON.stringify(playerArray),
-          totalQuestions: roomData.totalQuestions?.toString() || "0",
-        },
-      });
+        router.push({
+          pathname: "/user/battle-results",
+          params: {
+            players: JSON.stringify(playerArray),
+            totalQuestions: roomData.totalQuestions?.toString() || "0",
+            currentUserId: userId,
+          },
+        });
+      }, 500); // 500ms delay instead of 3-4 seconds
+
+      return () => clearTimeout(timeout);
     }
-  }, [roomData?.status]);
+  }, [roomData?.status, roomData?.players, roomData?.totalQuestions, userId]);
 
   const handleInputChange = (text: string) => {
     if (
@@ -425,7 +544,7 @@ export default function BattleScreen() {
         isFirstCorrect
       );
     } catch (error) {
-    //   console.error("Answer submission error:", error);
+      //   console.error("Answer submission error:", error);
       setFeedback("Error submitting answer");
     } finally {
       setIsProcessing(false);
@@ -437,6 +556,62 @@ export default function BattleScreen() {
     if (percentage > 0.6) return "#10B981";
     if (percentage > 0.3) return "#F59E0B";
     return "#EF4444";
+  };
+
+  const renderProfileImages = () => {
+    if (!roomData?.players) return null;
+
+    const players = Object.entries(roomData.players).map(([id, player]) => ({
+      id,
+      ...player,
+    }));
+
+    const elements = [];
+    players.forEach((player, index) => {
+      // Add player profile
+      elements.push(
+        <View key={`player-${player.id}`} className="items-center">
+          <View className="rounded-full bg-gray-300 items-center justify-center border-2 border-primary">
+            {player ? (
+              <Image
+                source={avatarImages(player.avatar)}
+                className="w-full h-full rounded-full"
+                style={{ width: 48, height: 48 }}
+                resizeMode="cover"
+              />
+            ) : (
+              <Text className="text-primary font-bold">
+                {(player.username || player.name || "P")
+                  .charAt(0)
+                  .toUpperCase()}
+              </Text>
+            )}
+          </View>
+          <Text className="text-xs mt-1 text-center max-w-16" numberOfLines={1}>
+            {player.username || player.name}
+          </Text>
+        </View>
+      );
+
+      // Add sword between players (except after last player)
+      if (index < players.length - 1) {
+        elements.push(
+          <View key={`sword-${index}`} className="items-center justify-center">
+            <Image
+              source={require("../../assets/icons/swords.png")}
+              style={{ width: 20, height: 20 }}
+              tintColor="#F05A2A"
+            />
+          </View>
+        );
+      }
+    });
+
+    return (
+      <View className="flex-row items-center justify-center space-x-2 mb-4">
+        {elements}
+      </View>
+    );
   };
 
   // Loading states
@@ -529,7 +704,7 @@ export default function BattleScreen() {
           </View>
         </View>
       </View>
-
+      {renderProfileImages()}
       <View className="bg-white rounded-2xl border border-black p-4">
         <Text className="text-3xl font-black text-custom-purple text-center">
           What is {currentQuestion?.question} ?
@@ -560,7 +735,6 @@ export default function BattleScreen() {
           <Text className="text-blue-500 text-center mt-2">Processing...</Text>
         )}
       </View>
-
       {/* Show players who got it right */}
       {Object.values(roomData?.players || {}).map((player, index) => {
         if (player.winner) {
@@ -575,24 +749,19 @@ export default function BattleScreen() {
         }
         return null;
       })}
-
-      {/* Question transition countdown */}
-      {showNextQuestionCountdown && (
-        <View className="absolute inset-0 bg-black bg-opacity-70 justify-center items-center">
-          <Text className="text-white text-6xl font-bold">
-            {countdownValue}
-          </Text>
-          <Text className="text-white text-xl mt-4">
-            Next question starting...
-          </Text>
-        </View>
-      )}
-
-      {/* Time's up message */}
       {timeLeft === 0 && !roomData.questionTransition && (
-        <Text className="text-red-500 text-center mt-4">
-          ⏰ Time's up! The correct answer was {currentQuestion?.correctAnswer}.
-        </Text>
+        <View className="mt-4">
+          {showBetterLuckMessage ? (
+            <Text className="text-red-500 text-sm text-center font-semibold">
+              Better luck next time! Next question in {betterLuckCountdown}s
+            </Text>
+          ) : (
+            <Text className="text-red-500 text-center">
+              ⏰ Time's up! The correct answer was{" "}
+              {currentQuestion?.correctAnswer}.
+            </Text>
+          )}
+        </View>
       )}
     </View>
   );

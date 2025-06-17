@@ -515,12 +515,18 @@ export default function HomeScreen() {
           <View className="flex-row justify-between items-center">
             <Text className="text-white text-3xl font-black">TezMaths</Text>
             <View className="flex-row items-center gap-4">
-              <View className="flex-row items-center bg-primary px-3 py-1 rounded-full">
-                <Text className="text-white text-sm font-black">
-                  Day {userStreak}
-                </Text>
-                <Text className="text-white text-lg ml-1">🔥</Text>
-              </View>
+              {" "}
+              <TouchableOpacity
+                className="items-center"
+                onPress={() => setShowStreakPopup(true)}
+              >
+                <View className="flex-row items-center bg-primary px-3 py-1 rounded-full">
+                  <Text className="text-white text-sm font-black">
+                    Day {userStreak}
+                  </Text>
+                  <Text className="text-white text-lg ml-1">🔥</Text>
+                </View>
+              </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => router.push("/user/achievements")}
               >

@@ -28,6 +28,53 @@ export default function LevelSelect() {
   const [loading, setLoading] = useState(true);
   const [availableLevels, setAvailableLevels] = useState<number[]>([]);
 
+  // Load available levels from Firebase
+  const loadAvailableLevels = useCallback(async () => {
+    try {
+      const quizzesRef = ref(database, "quizzes");
+      const snapshot = await get(quizzesRef);
+
+      if (!snapshot.exists()) {
+        return [];
+      }
+
+      const levelsSet = new Set<number>();
+
+      snapshot.forEach((childSnapshot) => {
+        const quiz = childSnapshot.val();
+        if (quiz.level && typeof quiz.level === "number") {
+          levelsSet.add(quiz.level);
+        }
+      });
+
+      // Convert to sorted array and find continuous sequence
+      const allLevels = Array.from(levelsSet).sort((a, b) => a - b);
+
+      if (allLevels.length === 0) {
+        return [];
+      }
+
+      // Find continuous sequence starting from 1
+      const continuousLevels: number[] = [];
+      let expectedLevel = 1;
+
+      for (const level of allLevels) {
+        if (level === expectedLevel) {
+          continuousLevels.push(level);
+          expectedLevel++;
+        } else if (level > expectedLevel) {
+          // Gap found, stop here
+          break;
+        }
+      }
+
+      return continuousLevels;
+    } catch (error) {
+      //   // console.error("Error loading available levels:", error);
+      return [];
+    }
+  }, []);
+
   const loadUserData = useCallback(async () => {
     const userId = auth.currentUser?.uid;
     if (!userId) {
@@ -109,7 +156,7 @@ export default function LevelSelect() {
         }
       }
     } catch (error) {
-    //   // console.error("Error loading user data:", error);
+      //   // console.error("Error loading user data:", error);
       Alert.alert("Error", "Failed to load level data. Please try again.");
     } finally {
       setLoading(false);
@@ -162,53 +209,6 @@ export default function LevelSelect() {
     }, [])
   );
 
-  // Load available levels from Firebase
-  const loadAvailableLevels = useCallback(async () => {
-    try {
-      const quizzesRef = ref(database, "quizzes");
-      const snapshot = await get(quizzesRef);
-
-      if (!snapshot.exists()) {
-        return [];
-      }
-
-      const levelsSet = new Set<number>();
-
-      snapshot.forEach((childSnapshot) => {
-        const quiz = childSnapshot.val();
-        if (quiz.level && typeof quiz.level === "number") {
-          levelsSet.add(quiz.level);
-        }
-      });
-
-      // Convert to sorted array and find continuous sequence
-      const allLevels = Array.from(levelsSet).sort((a, b) => a - b);
-
-      if (allLevels.length === 0) {
-        return [];
-      }
-
-      // Find continuous sequence starting from 1
-      const continuousLevels: number[] = [];
-      let expectedLevel = 1;
-
-      for (const level of allLevels) {
-        if (level === expectedLevel) {
-          continuousLevels.push(level);
-          expectedLevel++;
-        } else if (level > expectedLevel) {
-          // Gap found, stop here
-          break;
-        }
-      }
-
-      return continuousLevels;
-    } catch (error) {
-    //   // console.error("Error loading available levels:", error);
-      return [];
-    }
-  }, []);
-
   const handleLevelSelect = async (level: number) => {
     try {
       await SoundManager.nukeSounds(); // ⬅️ Nuke before navigating
@@ -220,7 +220,7 @@ export default function LevelSelect() {
         },
       });
     } catch (error) {
-    //   // console.error("Error navigating to quiz:", error);
+      //   // console.error("Error navigating to quiz:", error);
     }
   };
 
@@ -234,7 +234,7 @@ export default function LevelSelect() {
       await SoundManager.nukeSounds(); // ⬅️ Ensure total stop
       router.back();
     } catch (error) {
-    //   // console.error("Error going back:", error);
+      //   // console.error("Error going back:", error);
       router.back();
     }
   };

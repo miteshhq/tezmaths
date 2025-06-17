@@ -568,7 +568,7 @@ export default function QuizScreen() {
         // Move to next question immediately for correct answers
         Animated.timing(questionTransition, {
           toValue: 0,
-          duration: 300,
+          duration: 100,
           useNativeDriver: true,
         }).start(() => {
           moveToNextQuestion();

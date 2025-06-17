@@ -611,9 +611,6 @@ export class BattleManager {
             // console.log("Answer is correct:", isCorrect);
 
             if (isCorrect && !room.currentWinner) {
-                // This is the first correct answer
-                // console.log("First correct answer, updating score and starting transition");
-
                 await update(ref(database, `rooms/${roomId}`), {
                     [`players/${userId}/score`]: (room.players[userId]?.score || 0) + 100,
                     [`players/${userId}/winner`]: true,
@@ -621,14 +618,14 @@ export class BattleManager {
                     lastActivity: serverTimestamp()
                 });
 
-                // Start transition immediately with 2 second delay
+                // Start transition after 1 second instead of 500ms
                 setTimeout(async () => {
                     try {
                         await this.startQuestionTransition(roomId, 2000);
                     } catch (error) {
-                        // console.error("Error starting transition:", error);
+                        console.error("Error starting transition:", error);
                     }
-                }, 500);
+                }, 1000);
 
                 return true;
             }
@@ -653,7 +650,7 @@ export class BattleManager {
 
             // Convert questions to array if stored as object
             const questionsArray = roomData.questions
-                ? Object.values(roomData.questions)
+                ? (Array.isArray(roomData.questions) ? roomData.questions : Object.values(roomData.questions))
                 : [];
 
             const hasMoreQuestions = nextIndex < questionsArray.length;
@@ -666,10 +663,11 @@ export class BattleManager {
             });
 
             if (hasMoreQuestions) {
+                // Fixed: Make sure we're incrementing correctly
                 await update(roomRef, {
                     ...playerUpdates,
                     currentWinner: null,
-                    currentQuestion: nextIndex,
+                    currentQuestion: nextIndex, // This should be the fixed increment
                     questionStartedAt: now,
                     questionTransition: false,
                     nextQuestionStartTime: null,
@@ -679,27 +677,23 @@ export class BattleManager {
                 await this.endBattle(roomId);
             }
         } catch (error) {
-            // console.error("Move to next question error:", error);
+            console.error("Move to next question error:", error);
             throw error;
         }
     }
 
     async handleTimeExpiry(roomId) {
         try {
-            // console.log("Handling time expiry for room:", roomId);
-
             const roomRef = ref(database, `rooms/${roomId}`);
             const snapshot = await get(roomRef);
             const room = snapshot.val();
 
             if (!room || room.status !== "playing" || room.questionTransition) {
-                // console.log("Room not in valid state for time expiry");
                 return;
             }
 
-            // Start transition if no winner yet
+            // Force transition if no winner and time is up
             if (!room.currentWinner) {
-                // console.log("No winner found, starting transition due to time expiry");
                 await this.startQuestionTransition(roomId, 2000);
             }
         } catch (error) {
@@ -710,22 +704,19 @@ export class BattleManager {
 
     async endBattle(roomId) {
         try {
-            // console.log("Ending battle for room:", roomId);
-
             const roomRef = ref(database, `rooms/${roomId}`);
             const snapshot = await get(roomRef);
             const roomData = snapshot.val();
 
-            if (!roomData) {
-                // console.log("Room not found for ending battle");
-                return;
-            }
+            if (!roomData) return;
 
             const playerArray = Object.entries(roomData.players || {})
                 .map(([id, data]) => ({
                     userId: id,
-                    username: data.username || data.name,
+                    username: data.username || data.name || "Unknown Player",
                     score: data.score || 0,
+                    avatar: data.avatar || 0,
+                    isHost: data.isHost || false
                 }))
                 .sort((a, b) => b.score - a.score);
 
@@ -736,10 +727,16 @@ export class BattleManager {
                 lastActivity: serverTimestamp()
             });
 
-            // immediately clear the room data to prevent garbage storage
-            await remove(ref(database, `rooms/${roomId}`));
+            // Schedule room cleanup after 30 seconds to allow users to see results
+            setTimeout(async () => {
+                try {
+                    await remove(ref(database, `rooms/${roomId}`));
+                } catch (error) {
+                    console.error("Room cleanup error:", error);
+                }
+            }, 30000);
         } catch (error) {
-            // console.error("End battle error:", error);
+            console.error("End battle error:", error);
             throw error;
         }
     }

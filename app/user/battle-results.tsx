@@ -12,6 +12,7 @@ import {
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
 import SoundManager from "../../components/soundManager";
 import logo from "../../assets/branding/tezmaths-full-logo.png";
+import { auth } from "../../firebase/firebaseConfig";
 
 const shareConfig = {
   additionalText: "Check out my battle results on TezMaths! ⚔️✨",
@@ -22,9 +23,31 @@ const shareConfig = {
   hashtags: "#TezMaths #MathBattle #BrainTraining",
 };
 
+const avatarImages = (avatar) => {
+  switch (avatar) {
+    case "0":
+      return require("../../assets/avatars/avatar1.jpg");
+    case "1":
+      return require("../../assets/avatars/avatar2.jpg");
+    case "2":
+      return require("../../assets/avatars/avatar3.jpg");
+    case "3":
+      return require("../../assets/avatars/avatar4.jpg");
+    case "4":
+      return require("../../assets/avatars/avatar5.jpg");
+    case "5":
+      return require("../../assets/avatars/avatar6.jpg");
+    default:
+      return require("../../assets/avatars/avatar1.jpg");
+  }
+};
+
 export default function BattleResultsScreen() {
-  const { players, totalQuestions, currentUserId } = useLocalSearchParams();
+  const { players, totalQuestions } = useLocalSearchParams();
   const cardRef = useRef();
+
+  const currentUserId = auth.currentUser?.uid;
+
   let parsedPlayers = [];
 
   try {
@@ -32,6 +55,9 @@ export default function BattleResultsScreen() {
   } catch (error) {
     // console.error("BattleResultsScreen - Parse error:", error);
   }
+
+  // Sort players by score (highest first)
+  parsedPlayers = parsedPlayers.sort((a, b) => b.score - a.score);
 
   const userRank =
     parsedPlayers.findIndex((p) => p.userId === currentUserId) + 1;
@@ -49,6 +75,55 @@ export default function BattleResultsScreen() {
       }
     };
   });
+
+  const renderProfileImages = () => {
+    if (!parsedPlayers || parsedPlayers.length === 0) return null;
+
+    const elements = [];
+    parsedPlayers.forEach((player, index) => {
+      // Add player profile
+      elements.push(
+        <View key={`player-${player.userId}`} className="items-center">
+          <View className="rounded-full bg-gray-300 items-center justify-center border-2 border-primary">
+            {player ? (
+              <Image
+                source={avatarImages(player.avatar)}
+                className="w-full h-full rounded-full"
+                style={{ width: 48, height: 48 }}
+                resizeMode="cover"
+              />
+            ) : (
+              <Text className="text-primary font-bold">
+                {(player.username || "P").charAt(0).toUpperCase()}
+              </Text>
+            )}
+          </View>
+          <Text className="text-xs mt-1 text-center max-w-16" numberOfLines={1}>
+            {player.username}
+          </Text>
+        </View>
+      );
+
+      // Add sword between players (except after last player)
+      if (index < parsedPlayers.length - 1) {
+        elements.push(
+          <View key={`sword-${index}`} className="items-center justify-center">
+            <Image
+              source={require("../../assets/icons/swords.png")} // You'll add this later
+              style={{ width: 12, height: 12 }}
+              tintColor="#F05A2A"
+            />
+          </View>
+        );
+      }
+    });
+
+    return (
+      <View className="flex-row items-center justify-center space-x-2 mb-4">
+        {elements}
+      </View>
+    );
+  };
 
   const firstPlace = parsedPlayers[0];
   const secondPlace = parsedPlayers[1];
@@ -90,7 +165,7 @@ export default function BattleResultsScreen() {
         message: shareMessage,
       });
     } catch (error) {
-    //   console.error("Share error:", error);
+      //   console.error("Share error:", error);
       Alert.alert("Share Error", "Unable to share. Please try again.", [
         { text: "OK" },
       ]);
@@ -120,67 +195,31 @@ export default function BattleResultsScreen() {
             {userRank === 1 ? "🏆 You Won!" : `You Ranked #${userRank}`}
           </Text>
           <Text className="text-xl text-center">
-          Your Score: {userScore} pts
-        </Text>
+            Your Score: {userScore} pts
+          </Text>
           <Text className="text-lg text-center italic mt-2">
-          "{getMotivationalQuote()}"
+            "{getMotivationalQuote()}"
+          </Text>
+        </View>
+
+        {renderProfileImages()}
+
+        <Text className="text-2xl text-black font-bold text-center w-full mb-2">
+          Battle Score
         </Text>
-        </View>
-
-        <View className="flex-row items-end justify-center h-48 mb-8 border-b">
-          {secondPlace && (
-            <View className="bg-gray-300 p-2 w-20 h-32 rounded-t-lg justify-end items-center mx-1">
-              <Text className="text-black font-bold text-lg">🥈</Text>
-              <Text className="font-bold text-center p-1">
-                {secondPlace.username}
-              </Text>
-              <Text className="font-bold text-center">
-                {secondPlace.score} pts
-              </Text>
-            </View>
-          )}
-          {firstPlace && (
-            <View className="bg-yellow-400 p-2 w-24 h-40 rounded-t-lg justify-end items-center mx-1">
-              <Text className="text-black font-bold text-lg">🥇</Text>
-              <Text className="font-bold text-center p-1">
-                {firstPlace.username}
-              </Text>
-              <Text className="font-bold text-center">
-                {firstPlace.score} pts
-              </Text>
-            </View>
-          )}
-          {thirdPlace && (
-            <View className="bg-amber-600 p-2 w-20 h-24 rounded-t-lg justify-end items-center mx-1">
-              <Text className="text-black font-bold text-lg">🥉</Text>
-              <Text className="font-bold text-center p-1">
-                {thirdPlace.username}
-              </Text>
-              <Text className="font-bold text-center">
-                {thirdPlace.score} pts
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {otherPlayers.length > 0 && (
-          <View className="flex-row justify-between items-center p-4 rounded-lg mb-2 bg-light-orange">
-            <Text className="text-2xl text-black font-bold">Battle Score</Text>
-          </View>
-        )}
 
         <ScrollView className="w-full max-w-md mb-4">
-          {otherPlayers.map((player, index) => (
+          {parsedPlayers.map((player, index) => (
             <View
               key={player.userId}
-              className={`flex-row justify-between items-center p-4 rounded-lg mb-2 bg-light-orange ${
+              className={`flex-row justify-between items-center p-4 py-2 rounded-lg mb-2 bg-light-orange ${
                 player.userId === currentUserId
-                  ? "border border-primary"
-                  : "border-none"
+                  ? "border-2 border-primary"
+                  : "border-transparent border-2"
               }`}
             >
               <Text className="text-xl font-bold">
-                {index + 4}. {player.username}
+                {index + 1}. {player.username}
                 {player.userId === currentUserId ? " (You)" : ""}
               </Text>
               <Text className="text-xl">{player.score} pts</Text>
