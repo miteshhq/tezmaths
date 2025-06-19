@@ -44,7 +44,7 @@ export default function ResultsScreen() {
       let active = true;
       const playResultSound = async () => {
         try {
-          console.log(quizScore);
+        //   console.log(quizScore);
           if (quizScore > 0) {
             await SoundManager.playSound("victorySoundEffect");
           } else {

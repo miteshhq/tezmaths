@@ -217,7 +217,7 @@ export default function QuizScreen() {
       params.isSelectedLevel === "true"
         ? 0
         : Number(params.accumulatedScore) || 0;
-    console.log(`Setting accumulated score from params: ${accScore}`);
+    // console.log(`Setting accumulated score from params: ${accScore}`);
     setAccumulatedScore(accScore);
     setStartingLevel(currentLevel);
 
@@ -225,11 +225,11 @@ export default function QuizScreen() {
     if (params.gameStartTime) {
       const startTime = Number(params.gameStartTime);
       setGameStartTime(startTime);
-      console.log(
-        `Retrieved game start time from params: ${new Date(
-          startTime
-        ).toLocaleTimeString()}`
-      );
+      //   console.log(
+      //     `Retrieved game start time from params: ${new Date(
+      //       startTime
+      //     ).toLocaleTimeString()}`
+      //   );
     }
   }, [
     params.accumulatedScore,
@@ -272,13 +272,13 @@ export default function QuizScreen() {
       if (params.isSelectedLevel === "true" || !params.accumulatedScore) {
         const startTime = Date.now();
         setGameStartTime(startTime);
-        console.log(
-          `Game timer started at: ${new Date(startTime).toLocaleTimeString()}`
-        );
+        // console.log(
+        //   `Game timer started at: ${new Date(startTime).toLocaleTimeString()}`
+        // );
       } else {
         // Continuing from previous level - keep existing start time
         // The start time should be passed in params, or keep the existing one
-        console.log(`Continuing game - keeping existing start time`);
+        // console.log(`Continuing game - keeping existing start time`);
       }
 
       // Clear any existing questions first
@@ -624,15 +624,15 @@ export default function QuizScreen() {
   const updateScoreInDatabase = useCallback(async (levelScore: number) => {
     const userId = auth.currentUser?.uid;
     if (!userId || levelScore <= 0) {
-      console.log("Skipping DB update - No user or zero score:", {
-        userId,
-        levelScore,
-      });
+      //   console.log("Skipping DB update - No user or zero score:", {
+      //     userId,
+      //     levelScore,
+      //   });
       return;
     }
 
     try {
-      console.log(`Updating score in DB: +${levelScore} points`);
+      //   console.log(`Updating score in DB: +${levelScore} points`);
 
       const userRef = ref(database, `users/${userId}`);
       const snapshot = await get(userRef);
@@ -682,9 +682,9 @@ export default function QuizScreen() {
       };
 
       await update(userRef, updates);
-      console.log(
-        `Score updated: ${currentTotalPoints} -> ${newTotalPoints}, Streak: ${currentStreak} -> ${newStreak}`
-      );
+      //   console.log(
+      //     `Score updated: ${currentTotalPoints} -> ${newTotalPoints}, Streak: ${currentStreak} -> ${newStreak}`
+      //   );
 
       // Update local storage
       await AsyncStorage.setItem("totalPoints", newTotalPoints.toString());
@@ -693,21 +693,13 @@ export default function QuizScreen() {
       // Update accumulated score for this game session
       setAccumulatedScore((prev) => {
         const newAccumulated = prev + levelScore;
-        console.log(`Accumulated score updated: ${prev} -> ${newAccumulated}`);
+        // console.log(`Accumulated score updated: ${prev} -> ${newAccumulated}`);
         return newAccumulated;
       });
     } catch (error) {
-      console.error("Error updating score in database:", error);
+      //   console.error("Error updating score in database:", error);
     }
   }, []);
-
-  const isWithinOneDay = (lastDate: string, today: string) => {
-    const last = new Date(lastDate);
-    const current = new Date(today);
-    const diffInHours =
-      Math.abs(current.getTime() - last.getTime()) / (1000 * 3600);
-    return diffInHours <= 48; // Within 48 hours is acceptable
-  };
 
   const handleSubmitAnswer = useCallback(
     async (isCorrect: boolean) => {
@@ -731,11 +723,11 @@ export default function QuizScreen() {
         const newQuizScore = quizScore + pointsPerQuestion;
         const newCorrectAnswers = correctAnswers + 1;
 
-        console.log(
-          `Correct answer! Points earned: ${pointsPerQuestion}, New quiz score: ${newQuizScore}, Total accumulated will be: ${
-            accumulatedScore + newQuizScore
-          }`
-        );
+        // console.log(
+        //   `Correct answer! Points earned: ${pointsPerQuestion}, New quiz score: ${newQuizScore}, Total accumulated will be: ${
+        //     accumulatedScore + newQuizScore
+        //   }`
+        // );
 
         // Update state
         setQuizScore(newQuizScore);
@@ -743,17 +735,17 @@ export default function QuizScreen() {
 
         // Check if this is the last question of current level
         if (currentQuestionIndex >= questions.length - 1) {
-          console.log(
-            `Last question completed. Total correct: ${newCorrectAnswers}/${questions.length}`
-          );
+          //   console.log(
+          //     `Last question completed. Total correct: ${newCorrectAnswers}/${questions.length}`
+          //   );
 
           if (newCorrectAnswers === questions.length) {
-            console.log("All questions correct - continuing to next level");
+            // console.log("All questions correct - continuing to next level");
             await updateScoreAndContinue(newQuizScore, newCorrectAnswers);
           } else {
-            console.log(
-              "Not all questions correct - ending game, no level unlock"
-            );
+            // console.log(
+            //   "Not all questions correct - ending game, no level unlock"
+            // );
             await updateScoreInDatabase(newQuizScore);
             handleGameEnd(
               accumulatedScore + newQuizScore,
@@ -777,11 +769,11 @@ export default function QuizScreen() {
         }
       } else {
         // WRONG ANSWER - Update current score in DB and end game
-        console.log(
-          `Wrong answer! Current quiz score: ${quizScore}, Session total: ${
-            accumulatedScore + quizScore
-          }`
-        );
+        // console.log(
+        //   `Wrong answer! Current quiz score: ${quizScore}, Session total: ${
+        //     accumulatedScore + quizScore
+        //   }`
+        // );
 
         if (quizScore > 0) {
           await updateScoreInDatabase(quizScore);
@@ -798,9 +790,9 @@ export default function QuizScreen() {
           if (isMountedRef.current && isScreenFocused) {
             // FIXED: Pass total accumulated score
             const finalScore = accumulatedScore + quizScore;
-            console.log(
-              `Wrong answer - Final total accumulated score: ${finalScore}`
-            );
+            // console.log(
+            //   `Wrong answer - Final total accumulated score: ${finalScore}`
+            // );
             handleGameEnd(finalScore, correctAnswers, false);
           }
         }, EXPLANATION_DISPLAY_TIME);
@@ -826,9 +818,9 @@ export default function QuizScreen() {
       if (!userId) return;
 
       try {
-        console.log(
-          `Updating score and continuing. Level score: ${levelScore}`
-        );
+        // console.log(
+        //   `Updating score and continuing. Level score: ${levelScore}`
+        // );
 
         // First, update the score in database
         const userRef = ref(database, `users/${userId}`);
@@ -900,20 +892,20 @@ export default function QuizScreen() {
           nextLevelExists
         ) {
           updates.currentLevel = nextLevel;
-          console.log(
-            `Unlocking next level ${nextLevel} - all questions correct`
-          );
+          //   console.log(
+          //     `Unlocking next level ${nextLevel} - all questions correct`
+          //   );
         } else {
-          console.log(
-            `Not unlocking next level - correctAnswers: ${levelCorrectAnswers}/${questions.length}`
-          );
+          //   console.log(
+          //     `Not unlocking next level - correctAnswers: ${levelCorrectAnswers}/${questions.length}`
+          //   );
         }
 
         // Wait for database update to complete
         await update(userRef, updates);
-        console.log(
-          `Database updated: Total points ${currentTotalPoints} -> ${newTotalPoints}`
-        );
+        // console.log(
+        //   `Database updated: Total points ${currentTotalPoints} -> ${newTotalPoints}`
+        // );
 
         // Update local storage
         await AsyncStorage.setItem("totalPoints", newTotalPoints.toString());
@@ -928,14 +920,14 @@ export default function QuizScreen() {
         // Update accumulated score for this game session
         const newAccumulatedScore = accumulatedScore + levelScore;
         setAccumulatedScore(newAccumulatedScore);
-        console.log(
-          `Accumulated score updated: ${accumulatedScore} -> ${newAccumulatedScore}`
-        );
+        // console.log(
+        //   `Accumulated score updated: ${accumulatedScore} -> ${newAccumulatedScore}`
+        // );
 
         if (nextLevelExists) {
-          console.log(
-            `Moving to level ${nextLevel} with accumulated score: ${newAccumulatedScore}`
-          );
+          //   console.log(
+          //     `Moving to level ${nextLevel} with accumulated score: ${newAccumulatedScore}`
+          //   );
 
           // Reset current level score for next level
           setQuizScore(0);
@@ -953,11 +945,11 @@ export default function QuizScreen() {
           });
         } else {
           // No more levels - game complete
-          console.log("Game complete - no more levels");
+          //   console.log("Game complete - no more levels");
           handleGameEnd(newAccumulatedScore, levelCorrectAnswers, true);
         }
       } catch (error) {
-        console.error("Error updating score and continuing:", error);
+        // console.error("Error updating score and continuing:", error);
         // Fallback - still update accumulated score and end game
         const newAccumulatedScore = accumulatedScore + levelScore;
         handleGameEnd(newAccumulatedScore, levelCorrectAnswers, false);
@@ -970,11 +962,11 @@ export default function QuizScreen() {
     if (!isQuizActive || isProcessing || !isScreenFocused || showExplanation)
       return;
 
-    console.log(
-      `Time up! Current quiz score: ${quizScore}, Total accumulated: ${
-        accumulatedScore + quizScore
-      }`
-    );
+    // console.log(
+    //   `Time up! Current quiz score: ${quizScore}, Total accumulated: ${
+    //     accumulatedScore + quizScore
+    //   }`
+    // );
 
     setIsProcessing(true);
     stopTimer();
@@ -995,7 +987,7 @@ export default function QuizScreen() {
       if (isMountedRef.current && isScreenFocused) {
         // FIXED: Pass total accumulated score
         const finalScore = accumulatedScore + quizScore;
-        console.log(`Time up - Final total accumulated score: ${finalScore}`);
+        // console.log(`Time up - Final total accumulated score: ${finalScore}`);
         handleGameEnd(finalScore, correctAnswers, false);
       }
     }, EXPLANATION_DISPLAY_TIME);
@@ -1015,7 +1007,7 @@ export default function QuizScreen() {
 
     // Don't change question if user is actively typing
     if (isUserTyping && Date.now() - lastInputTime < 2000) {
-      console.log("Prevented question change - user is typing");
+      //   console.log("Prevented question change - user is typing");
       return;
     }
 
@@ -1027,14 +1019,6 @@ export default function QuizScreen() {
       setIsUserTyping(false); // Reset typing state
     }
   }, [currentQuestionIndex, questions.length, isUserTyping, lastInputTime]);
-
-  // Check consecutive days
-  const isConsecutiveDay = (lastDate: string, today: string) => {
-    const last = new Date(lastDate);
-    const current = new Date(today);
-    const diff = (current.getTime() - last.getTime()) / (1000 * 3600 * 24);
-    return diff === 1;
-  };
 
   const handleGameEnd = useCallback(
     async (
@@ -1054,9 +1038,9 @@ export default function QuizScreen() {
       const minutes = Math.floor(totalTimeSeconds / 60);
       const seconds = totalTimeSeconds % 60;
 
-      console.log(
-        `Game ended. Total time: ${minutes}m ${seconds}s (${totalTimeMs}ms)`
-      );
+      //   console.log(
+      //     `Game ended. Total time: ${minutes}m ${seconds}s (${totalTimeMs}ms)`
+      //   );
 
       setIsQuizActive(false);
       cleanupQuiz();
@@ -1075,14 +1059,14 @@ export default function QuizScreen() {
 
       const gameCorrectAnswers = finalCorrectAnswers ?? correctAnswers;
 
-      console.log("Game End - Final Stats:", {
-        totalAccumulatedScore,
-        gameCorrectAnswers,
-        isGameComplete,
-        accumulatedScore,
-        currentQuizScore: quizScore,
-        totalQuestions: questions.length,
-      });
+      //   console.log("Game End - Final Stats:", {
+      //     totalAccumulatedScore,
+      //     gameCorrectAnswers,
+      //     isGameComplete,
+      //     accumulatedScore,
+      //     currentQuizScore: quizScore,
+      //     totalQuestions: questions.length,
+      //   });
 
       try {
         const isPassed =
@@ -1090,13 +1074,13 @@ export default function QuizScreen() {
           (finalCorrectAnswers === questions.length ||
             gameCorrectAnswers === questions.length);
 
-        console.log("DEBUG PARAMS:", {
-          totalAccumulatedScore,
-          gameCorrectAnswers,
-          questionsLength: questions.length,
-          isPassed,
-          isGameComplete,
-        });
+        // console.log("DEBUG PARAMS:", {
+        //   totalAccumulatedScore,
+        //   gameCorrectAnswers,
+        //   questionsLength: questions.length,
+        //   isPassed,
+        //   isGameComplete,
+        // });
 
         router.push({
           pathname: "/user/results",
@@ -1114,7 +1098,7 @@ export default function QuizScreen() {
           },
         });
       } catch (error) {
-        console.error("Error ending game:", error);
+        // console.error("Error ending game:", error);
         router.push("/user/home");
       }
     },
