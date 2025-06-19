@@ -481,14 +481,6 @@ export default function HomeScreen() {
     }
   };
 
-  const showStreakInfo = () => {
-    Alert.alert(
-      "Streak Rules 🔥",
-      "If you don't play the quiz for two consecutive days, your streak will reset to 0.",
-      [{ text: "Got it!", style: "default" }]
-    );
-  };
-
   // Show loading screen if initial load
   if (loading) {
     return (
@@ -520,11 +512,13 @@ export default function HomeScreen() {
                 className="items-center"
                 onPress={() => setShowStreakPopup(true)}
               >
-                <View className="flex-row items-center bg-primary px-3 py-1 rounded-full">
+                <View className="flex-row items-center bg-primary p-1 pl-4 rounded-full">
                   <Text className="text-white text-sm font-black">
                     Day {userStreak}
                   </Text>
-                  <Text className="text-white text-lg ml-1">🔥</Text>
+                  <View className="w-8 h-8 rounded-full bg-white ml-2 flex items-center justify-center">
+                    <Text className="text-white text-lg">🔥</Text>
+                  </View>
                 </View>
               </TouchableOpacity>
               <TouchableOpacity
@@ -652,8 +646,8 @@ export default function HomeScreen() {
 
       {/* Streak Popup */}
       <Modal visible={showStreakPopup} transparent animationType="fade">
-        <View className="flex-1 justify-center items-center bg-white bg-opacity-30">
-          <View className="bg-primary rounded-2xl p-6 mx-8 items-center">
+        <View className="flex-1 justify-center items-center bg-black/60">
+          <View className="bg-white rounded-2xl p-6 mx-8 items-center">
             <Text className="text-3xl font-bold text-center mb-2">
               Streak Rules 🔥
             </Text>

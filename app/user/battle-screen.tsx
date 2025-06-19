@@ -706,7 +706,7 @@ export default function BattleScreen() {
       </View>
       {renderProfileImages()}
       <View className="bg-white rounded-2xl border border-black p-4">
-        <Text className="text-3xl font-black text-custom-purple text-center">
+        <Text className="text-3xl font-black text-black text-center">
           What is {currentQuestion?.question} ?
         </Text>
         <TextInput

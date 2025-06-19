@@ -15,7 +15,6 @@ import logo from "../../assets/branding/tezmaths-full-logo.png";
 
 const shareConfig = {
   additionalText: "Check out my math quiz results! 🧠✨",
-  appStoreLink: "https://apps.apple.com/app/tezmaths/id123456789",
   playStoreLink:
     "https://play.google.com/store/apps/details?id=com.tezmathsteam.tezmaths",
   downloadText: "Download TezMaths now and challenge yourself!",
@@ -27,14 +26,15 @@ export default function ResultsScreen() {
   const params = useLocalSearchParams();
   const cardRef = useRef();
 
-  const quizScore = Number(params.quizScore) || 0;
-  const correctAnswers = Number(params.correctAnswers) || 0;
-  const totalQuestions = Number(params.totalQuestions) || 1;
-  const currentLevel = Number(params.currentLevel) || 1;
+  const totalGameTimeMs = Number.parseInt(params.totalGameTime) || 0;
+  const quizScore = Number.parseInt(params.quizScore) || 0;
+  const correctAnswers = Number.parseInt(params.correctAnswers) || 0;
+  const totalQuestions = Number.parseInt(params.totalQuestions) || 1;
+  const currentLevel = Number.parseInt(params.currentLevel) || 1;
   const username = params.username || "player";
   const fullname = params.fullname || "Player";
   const avatar = params.avatar || "1";
-  const isPassed = params.isPassed === "true";
+  const isPassed = params.isPassed;
 
   const percentage = Math.round((correctAnswers / totalQuestions) * 100);
 
@@ -44,7 +44,8 @@ export default function ResultsScreen() {
       let active = true;
       const playResultSound = async () => {
         try {
-          if (isPassed) {
+          console.log(quizScore);
+          if (quizScore > 0) {
             await SoundManager.playSound("victorySoundEffect");
           } else {
             await SoundManager.playSound("failSoundEffect");
@@ -77,6 +78,21 @@ export default function ResultsScreen() {
     "Math is not about numbers, but understanding!",
   ];
 
+  const formatTime = (milliseconds: number) => {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    if (hours >= 1) {
+      return `${hours}h ${minutes}m ${seconds}s`;
+    } else if (minutes >= 1) {
+      return `${minutes}m ${seconds}s`;
+    } else {
+      return `${seconds}s`;
+    }
+  };
+
   const getMotivationalQuote = () => {
     if (percentage >= 90) return motivationalQuotes[0];
     if (percentage >= 75) return motivationalQuotes[1];
@@ -85,21 +101,9 @@ export default function ResultsScreen() {
     return motivationalQuotes[4];
   };
 
-  const getResultMessage = () => {
-    if (isPassed) {
-      return currentLevel < 6
-        ? `🎉 Level ${currentLevel + 1} Unlocked!`
-        : "🏆 All Levels Completed!";
-    }
-    return "💪 Keep Practicing!";
-  };
-
   const handleShare = async () => {
     try {
-      const downloadLinks =
-        Platform.OS === "ios"
-          ? `📱 iPhone: ${shareConfig.appStoreLink}\n📱 Android: ${shareConfig.playStoreLink}`
-          : `📱 Android: ${shareConfig.playStoreLink}\n📱 iPhone: ${shareConfig.appStoreLink}`;
+      const downloadLinks = `📱 Android: ${shareConfig.playStoreLink}`;
 
       const shareMessage =
         `${shareConfig.additionalText}\n\n` +
@@ -201,11 +205,15 @@ export default function ResultsScreen() {
           <Text className="text-2xl font-bold text-center text-black mb-4">
             {getMotivationalQuote()}
           </Text>
-          <Text className="text-3xl font-black text-center text-black mb-2">
+          <Text className="text-3xl font-black text-center text-black mb-1">
             Score: {quizScore}
           </Text>
 
-          <Text className="text-3xl mt-2 mb-2 font-black text-center text-white p-2 bg-primary rounded-xl">
+          <Text className="text-primary text-base font-medium text-center mb-2">
+            Time Spent: {formatTime(totalGameTimeMs)}
+          </Text>
+
+          <Text className="text-2xl mt-2 mb-2 font-black text-center text-white py-2 px-4 mx-auto bg-primary rounded-xl">
             Download Now
           </Text>
 
@@ -216,19 +224,12 @@ export default function ResultsScreen() {
               Sharpen your speed, master your math!
             </Text>
           </View>
-
-          <View className="items-center">
-            <Text className="text-lg font-bold text-center text-gray-600">
-              Level {currentLevel}{" "}
-              {isPassed ? "✅ Completed" : "💪 In Progress"}
-            </Text>
-          </View>
         </View>
 
         {/* Action Buttons */}
         <View className="flex-row justify-between mt-6 w-full max-w-md">
           <TouchableOpacity
-            className="py-3 px-6 flex-1 mr-2 border border-black rounded-full"
+            className="py-3 px-6 flex-1 mr-1 border border-black rounded-full"
             onPress={() => router.push("/user/home")}
           >
             <View className="flex flex-row items-center justify-center gap-2">
@@ -236,12 +237,13 @@ export default function ResultsScreen() {
               <Image
                 source={require("../../assets/icons/home.png")}
                 style={{ width: 20, height: 20 }}
+                tintColor={"#FF6B35"}
               />
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity
-            className="py-3 px-6 flex-1 ml-2 border border-black rounded-full"
+            className="py-3 px-6 flex-1 ml-1 border border-black rounded-full"
             onPress={handleShare}
           >
             <View className="flex flex-row items-center justify-center gap-2">
@@ -253,26 +255,6 @@ export default function ResultsScreen() {
               />
             </View>
           </TouchableOpacity>
-        </View>
-
-        <View className="flex-row justify-between mt-6 w-full max-w-md">
-          {isPassed && currentLevel < 6 && (
-            <TouchableOpacity
-              className={`py-3 px-6 flex-1 w-full ml-2 border border-black rounded-full`}
-              onPress={handleNextLevel}
-            >
-              <View className="flex flex-row items-center justify-center gap-2">
-                <Text className="font-black text-2xl text-center">
-                  Next Level
-                </Text>
-                <Image
-                  source={require("../../assets/icons/share.png")}
-                  style={{ width: 20, height: 20 }}
-                  tintColor={"#FF6B35"}
-                />
-              </View>
-            </TouchableOpacity>
-          )}
         </View>
 
         {/* Footer */}

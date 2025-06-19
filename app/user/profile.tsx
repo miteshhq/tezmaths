@@ -23,9 +23,20 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Share,
 } from "react-native";
 import SoundManager from "../../components/soundManager";
 import { auth, database } from "../../firebase/firebaseConfig";
+
+const shareConfig = {
+  additionalText:
+    "Discover TezMaths - the ultimate free math-boosting app! Features multiple quizzes, proven tricks, comprehensive guides, and so much more to supercharge your mathematical skills!",
+  playStoreLink:
+    "https://play.google.com/store/apps/details?id=com.tezmathsteam.tezmaths",
+  downloadText: "Download TezMaths now and unlock your mathematical potential!",
+  hashtags:
+    "#TezMaths #MathQuiz #BrainTraining #Education #MathSkills #LearningApp",
+};
 
 // Predefined avatar options
 const avatarOptions = [
@@ -219,6 +230,39 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleCopyShareMessage = async () => {
+    try {
+      const shareMessage = `${
+        shareConfig.additionalText
+      }\n\nUse my referral code: ${userData.username.toUpperCase()}\n\n${
+        shareConfig.playStoreLink
+      }\n\n${shareConfig.downloadText}\n\n${shareConfig.hashtags}`;
+
+      await Clipboard.setStringAsync(shareMessage);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      // console.error("[PROFILE] Failed to copy share message:", error);
+    }
+  };
+
+  const handleShareMessage = async () => {
+    try {
+      const shareMessage = `${
+        shareConfig.additionalText
+      }\n\nUse my referral code: ${userData.username.toUpperCase()}\n\n${
+        shareConfig.playStoreLink
+      }\n\n${shareConfig.downloadText}\n\n${shareConfig.hashtags}`;
+
+      await Share.share({
+        message: shareMessage,
+        title: "Join me on TezMaths!",
+      });
+    } catch (error) {
+      // console.error("[PROFILE] Failed to share message:", error);
+    }
+  };
+
   const handleEditProfile = () => {
     router.push("/user/edit-profile");
   };
@@ -380,7 +424,7 @@ export default function ProfileScreen() {
             </View>
             <View className="items-center">
               <Text className="text-2xl font-black text-custom-purple">
-                0{userData.currentLevel - 1}
+                {Number.parseInt(userData.currentLevel) - 1}
               </Text>
               <Text className="text-custom-purple text-lg">Levels</Text>
             </View>
@@ -428,7 +472,7 @@ export default function ProfileScreen() {
                 <Text className="text-white font-semibold">
                   {userData.username.toUpperCase()}
                 </Text>
-                <TouchableOpacity onPress={handleCopyReferralCode}>
+                <TouchableOpacity onPress={handleCopyShareMessage}>
                   <View className="bg-primary px-3 py-1 rounded">
                     <Text className="text-white text-md font-semibold">
                       Copy
@@ -462,7 +506,7 @@ export default function ProfileScreen() {
 
             {/* Invite Button */}
             <TouchableOpacity
-              onPress={handleCopyReferralCode}
+              onPress={handleShareMessage}
               className="bg-primary py-3 rounded-xl"
             >
               <Text className="text-white text-center font-bold">

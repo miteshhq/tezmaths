@@ -16,7 +16,6 @@ import { auth } from "../../firebase/firebaseConfig";
 
 const shareConfig = {
   additionalText: "Check out my battle results on TezMaths! ⚔️✨",
-  appStoreLink: "https://apps.apple.com/app/tezmaths/id123456789",
   playStoreLink:
     "https://play.google.com/store/apps/details?id=com.tezmathsteam.tezmaths",
   downloadText: "Join the battle on TezMaths now!",
@@ -147,10 +146,7 @@ export default function BattleResultsScreen() {
 
   const handleShare = async () => {
     try {
-      const downloadLinks =
-        Platform.OS === "ios"
-          ? `📱 iPhone: ${shareConfig.appStoreLink}\n📱 Android: ${shareConfig.playStoreLink}`
-          : `📱 Android: ${shareConfig.playStoreLink}\n📱 iPhone: ${shareConfig.appStoreLink}`;
+      const downloadLinks = `📱 Android: ${shareConfig.playStoreLink}`;
 
       const shareMessage =
         `${shareConfig.additionalText}\n\n` +
@@ -249,7 +245,7 @@ export default function BattleResultsScreen() {
 
         <View className="flex-row justify-between mt-6 w-full max-w-md">
           <TouchableOpacity
-            className="py-3 px-6 border border-black rounded-full flex-1 mr-2"
+            className="py-3 px-6 border border-black rounded-full flex-1 mr-1"
             onPress={() => router.push("/user/home")}
           >
             <View className="flex-row items-center justify-center gap-2">
@@ -262,7 +258,7 @@ export default function BattleResultsScreen() {
             </View>
           </TouchableOpacity>
           <TouchableOpacity
-            className="py-3 px-6 border border-black rounded-full flex-1 ml-2"
+            className="py-3 px-6 border border-black rounded-full flex-1 ml-1"
             onPress={handleShare}
           >
             <View className="flex-row items-center justify-center gap-2">
