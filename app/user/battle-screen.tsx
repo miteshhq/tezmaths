@@ -186,7 +186,7 @@ export default function BattleScreen() {
       // Fallback handler if the host isn't moving to next question
       const fallbackTimeout = setTimeout(() => {
         if (roomData?.hostId === userId) {
-        //   console.log("Fallback: Moving to next question");
+          //   console.log("Fallback: Moving to next question");
           battleManager.startQuestionTransition(roomId as string, 1000);
         }
       }, 5000); // 5 second fallback
