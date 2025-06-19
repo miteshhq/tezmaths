@@ -10,6 +10,9 @@ import {
   View,
   ScrollView,
 } from "react-native";
+import ViewShot from "react-native-view-shot";
+import * as Sharing from "expo-sharing"; // Add this import
+import * as FileSystem from "expo-file-system"; // Add this import
 import SoundManager from "../../components/soundManager";
 import logo from "../../assets/branding/tezmaths-full-logo.png";
 
@@ -25,6 +28,7 @@ export default function ResultsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const cardRef = useRef();
+  const viewShotRef = useRef();
 
   const totalGameTimeMs = Number.parseInt(params.totalGameTime) || 0;
   const quizScore = Number.parseInt(params.quizScore) || 0;
@@ -44,7 +48,6 @@ export default function ResultsScreen() {
       let active = true;
       const playResultSound = async () => {
         try {
-        //   console.log(quizScore);
           if (quizScore > 0) {
             await SoundManager.playSound("victorySoundEffect");
           } else {
@@ -101,10 +104,21 @@ export default function ResultsScreen() {
     return motivationalQuotes[4];
   };
 
-  const handleShare = async () => {
+  const captureAndShare = async () => {
     try {
-      const downloadLinks = `📱 Android: ${shareConfig.playStoreLink}`;
+      // Show loading state (optional)
+      console.log("Starting capture and share...");
 
+      // Capture the screenshot with PNG format for better quality
+      const uri = await viewShotRef.current.capture({
+        format: "png",
+        quality: 0.9,
+        result: "tmpfile",
+      });
+
+      console.log("Captured screenshot at:", uri);
+
+      const downloadLinks = `📱 Android: ${shareConfig.playStoreLink}`;
       const shareMessage =
         `${shareConfig.additionalText}\n\n` +
         `🏆 I scored ${quizScore} points on Level ${currentLevel}!\n` +
@@ -114,27 +128,67 @@ export default function ResultsScreen() {
         `${shareConfig.hashtags}`;
 
       if (Platform.OS === "ios") {
+        // iOS - Use built-in Share with file URL
         await Share.share({
-          title: "My TezMaths Quiz Results",
           message: shareMessage,
+          url: uri,
         });
       } else {
-        await Share.share(
-          {
-            title: "My TezMaths Quiz Results",
+        // Android - Use expo-sharing for better image support
+        const isAvailable = await Sharing.isAvailableAsync();
+
+        if (isAvailable) {
+          // Create a new filename with timestamp to avoid conflicts
+          const timestamp = Date.now();
+          const newUri = `${FileSystem.documentDirectory}tezmaths_result_${timestamp}.png`;
+
+          // Copy the file to a more accessible location
+          await FileSystem.copyAsync({
+            from: uri,
+            to: newUri,
+          });
+
+          // Share the image with text as dialog title
+          await Sharing.shareAsync(newUri, {
+            mimeType: "image/png",
+            dialogTitle: shareMessage,
+            UTI: "public.png",
+          });
+        } else {
+          // Fallback - share only text if image sharing not available
+          console.log("Sharing not available, falling back to text only");
+          await Share.share({
             message: shareMessage,
-          },
-          {
-            dialogTitle: "Share your TezMaths results",
-          }
-        );
+          });
+        }
       }
     } catch (error) {
-      //   console.error("Error sharing:", error);
-      Alert.alert("Share Error", "Unable to share. Please try again later.", [
-        { text: "OK" },
-      ]);
+      console.error("Error capturing or sharing:", error);
+
+      // Fallback - try to share just the text
+      try {
+        const downloadLinks = `📱 Android: ${shareConfig.playStoreLink}`;
+        const shareMessage =
+          `${shareConfig.additionalText}\n\n` +
+          `🏆 I scored ${quizScore} points on Level ${currentLevel}!\n` +
+          `"${getMotivationalQuote()}"\n\n` +
+          `${shareConfig.downloadText}\n\n` +
+          `${downloadLinks}\n\n` +
+          `${shareConfig.hashtags}`;
+
+        await Share.share({
+          message: shareMessage,
+        });
+      } catch (fallbackError) {
+        Alert.alert("Share Error", "Unable to share. Please try again later.", [
+          { text: "OK" },
+        ]);
+      }
     }
+  };
+
+  const handleShare = async () => {
+    await captureAndShare();
   };
 
   const handleNextLevel = () => {
@@ -177,54 +231,69 @@ export default function ResultsScreen() {
       showsVerticalScrollIndicator={false}
     >
       <View className="flex-1 bg-white justify-center items-center p-4">
-        {/* Shareable Card */}
-        <View
-          ref={cardRef}
-          collapsable={false}
-          className="bg-custom-gray border-4 border-white p-4 rounded-3xl shadow-xl w-full max-w-md"
+        {/* Shareable Card wrapped in ViewShot */}
+        <ViewShot
+          ref={viewShotRef}
+          options={{
+            format: "png",
+            quality: 0.9,
+            result: "tmpfile",
+            snapshotContentContainer: false,
+          }}
+          style={{ backgroundColor: "white" }} // Ensure white background
         >
-          <View className="items-center mb-6">
-            <Text className="text-2xl font-bold text-gray-500">
-              @{username}
+          <View
+            ref={cardRef}
+            collapsable={false}
+            className="bg-custom-gray border-4 border-white p-4 rounded-3xl shadow-xl w-full"
+            style={{
+              // Add explicit styling to ensure proper rendering in screenshot
+              backgroundColor: "#f5f5f5", // or whatever your custom-gray color is
+            }}
+          >
+            <View className="items-center mb-6">
+              <Text className="text-2xl font-bold text-gray-500">
+                @{username}
+              </Text>
+            </View>
+
+            <View className="rounded-full h-40 w-40 border-4 border-primary bg-white overflow-hidden mx-auto">
+              <Image
+                source={avatarImages(avatar)}
+                style={{ width: "100%", height: "100%" }}
+              />
+            </View>
+
+            <View className="items-center mb-6">
+              <Text className="text-4xl text-center mt-4 font-black uppercase text-primary">
+                {fullname}
+              </Text>
+            </View>
+
+            <Text className="text-2xl font-bold text-center text-black mb-4">
+              {getMotivationalQuote()}
             </Text>
-          </View>
-
-          <View className="rounded-full h-40 w-40 border-4 border-primary bg-white overflow-hidden mx-auto">
-            <Image
-              source={avatarImages(avatar)}
-              style={{ width: "100%", height: "100%" }}
-            />
-          </View>
-
-          <View className="items-center mb-6">
-            <Text className="text-4xl text-center mt-4 font-black uppercase text-primary">
-              {fullname}
+            <Text className="text-3xl font-black text-center text-black mb-1">
+              Score: {quizScore}
             </Text>
-          </View>
 
-          <Text className="text-2xl font-bold text-center text-black mb-4">
-            {getMotivationalQuote()}
-          </Text>
-          <Text className="text-3xl font-black text-center text-black mb-1">
-            Score: {quizScore}
-          </Text>
-
-          <Text className="text-primary text-base font-medium text-center mb-2">
-            Time Spent: {formatTime(totalGameTimeMs)}
-          </Text>
-
-          <Text className="text-2xl mt-2 mb-2 font-black text-center text-white py-2 px-4 mx-auto bg-primary rounded-xl">
-            Download Now
-          </Text>
-
-          <View className="items-center mb-8 mt-3">
-            <Image source={logo} style={{ height: 30, width: 140 }} />
-
-            <Text className="text-black text-center">
-              Sharpen your speed, master your math!
+            <Text className="text-primary text-base font-medium text-center mb-2">
+              Time Spent: {formatTime(totalGameTimeMs)}
             </Text>
+
+            <Text className="text-2xl mt-2 mb-2 font-black text-center text-white py-2 px-4 mx-auto bg-primary rounded-xl">
+              Download Now
+            </Text>
+
+            <View className="items-center mb-8 mt-3">
+              <Image source={logo} style={{ height: 30, width: 140 }} />
+
+              <Text className="text-black text-center">
+                Sharpen your speed, master your math!
+              </Text>
+            </View>
           </View>
-        </View>
+        </ViewShot>
 
         {/* Action Buttons */}
         <View className="flex-row justify-between mt-6 w-full max-w-md">
