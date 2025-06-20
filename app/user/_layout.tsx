@@ -21,10 +21,10 @@ export default function TabsLayout() {
   const isFirstMount = useRef(true);
 
   const user = auth.currentUser;
-  if (!user) {
-    router.replace("/login");
-    return null;
-  }
+  //   if (!user) {
+  //     router.replace("/login");
+  //     return null;
+  //   }
 
   // Clear navigation stack when first entering tabs
   useFocusEffect(

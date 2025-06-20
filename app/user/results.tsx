@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
-import React, { useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import {
   Alert,
   Image,
@@ -9,6 +9,9 @@ import {
   TouchableOpacity,
   View,
   ScrollView,
+  Modal,
+  StyleSheet,
+  ActivityIndicator,
 } from "react-native";
 import ViewShot from "react-native-view-shot";
 import * as Sharing from "expo-sharing"; // Add this import
@@ -30,6 +33,9 @@ export default function ResultsScreen() {
   const cardRef = useRef();
   const viewShotRef = useRef();
 
+  const [isPopupVisible, setPopupVisible] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+
   const totalGameTimeMs = Number.parseInt(params.totalGameTime) || 0;
   const quizScore = Number.parseInt(params.quizScore) || 0;
   const correctAnswers = Number.parseInt(params.correctAnswers) || 0;
@@ -37,7 +43,7 @@ export default function ResultsScreen() {
   const currentLevel = Number.parseInt(params.currentLevel) || 1;
   const username = params.username || "player";
   const fullname = params.fullname || "Player";
-  const avatar = params.avatar || "1";
+  const avatar = params.avatar || "0";
   const isPassed = params.isPassed;
 
   const percentage = Math.round((correctAnswers / totalQuestions) * 100);
@@ -104,102 +110,66 @@ export default function ResultsScreen() {
     return motivationalQuotes[4];
   };
 
-  const captureAndShare = async () => {
+  const getShareMessage = () => {
+    const downloadLinks = `📱 Android: ${shareConfig.playStoreLink}`;
+    return (
+      `${shareConfig.additionalText}\n\n` +
+      `🏆 I scored total ${quizScore} points on TezMaths Quiz!\n` +
+      `"${getMotivationalQuote()}"\n\n` +
+      `${shareConfig.downloadText}\n\n` +
+      `${downloadLinks}\n\n` +
+      `${shareConfig.hashtags}`
+    );
+  };
+
+  const shareImageOnly = async () => {
+    setIsSharing(true);
     try {
-      // Show loading state (optional)
-      console.log("Starting capture and share...");
-
-      // Capture the screenshot with PNG format for better quality
-      const uri = await viewShotRef.current.capture({
-        format: "png",
-        quality: 0.9,
-        result: "tmpfile",
-      });
-
-      console.log("Captured screenshot at:", uri);
-
-      const downloadLinks = `📱 Android: ${shareConfig.playStoreLink}`;
-      const shareMessage =
-        `${shareConfig.additionalText}\n\n` +
-        `🏆 I scored ${quizScore} points on Level ${currentLevel}!\n` +
-        `"${getMotivationalQuote()}"\n\n` +
-        `${shareConfig.downloadText}\n\n` +
-        `${downloadLinks}\n\n` +
-        `${shareConfig.hashtags}`;
-
-      if (Platform.OS === "ios") {
-        // iOS - Use built-in Share with file URL
-        await Share.share({
-          message: shareMessage,
-          url: uri,
-        });
+      const newUri = await captureImage();
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(newUri);
       } else {
-        // Android - Use expo-sharing for better image support
-        const isAvailable = await Sharing.isAvailableAsync();
-
-        if (isAvailable) {
-          // Create a new filename with timestamp to avoid conflicts
-          const timestamp = Date.now();
-          const newUri = `${FileSystem.documentDirectory}tezmaths_result_${timestamp}.png`;
-
-          // Copy the file to a more accessible location
-          await FileSystem.copyAsync({
-            from: uri,
-            to: newUri,
-          });
-
-          // Share the image with text as dialog title
-          await Sharing.shareAsync(newUri, {
-            mimeType: "image/png",
-            dialogTitle: shareMessage,
-            UTI: "public.png",
-          });
-        } else {
-          // Fallback - share only text if image sharing not available
-          console.log("Sharing not available, falling back to text only");
-          await Share.share({
-            message: shareMessage,
-          });
-        }
+        await Share.share({ url: newUri });
       }
     } catch (error) {
-      console.error("Error capturing or sharing:", error);
-
-      // Fallback - try to share just the text
-      try {
-        const downloadLinks = `📱 Android: ${shareConfig.playStoreLink}`;
-        const shareMessage =
-          `${shareConfig.additionalText}\n\n` +
-          `🏆 I scored ${quizScore} points on Level ${currentLevel}!\n` +
-          `"${getMotivationalQuote()}"\n\n` +
-          `${shareConfig.downloadText}\n\n` +
-          `${downloadLinks}\n\n` +
-          `${shareConfig.hashtags}`;
-
-        await Share.share({
-          message: shareMessage,
-        });
-      } catch (fallbackError) {
-        Alert.alert("Share Error", "Unable to share. Please try again later.", [
-          { text: "OK" },
-        ]);
-      }
+      console.error("Error sharing image:", error);
+      Alert.alert("Error", "Couldn't share image. Please try again.");
+    } finally {
+      setIsSharing(false);
+      setPopupVisible(false);
     }
   };
 
-  const handleShare = async () => {
-    await captureAndShare();
+  // Share only the text
+  const shareTextOnly = async () => {
+    setIsSharing(true);
+    try {
+      const shareMessage = getShareMessage();
+      await Share.share({ message: shareMessage });
+    } catch (error) {
+      console.error("Error sharing text:", error);
+    } finally {
+      setIsSharing(false);
+      setPopupVisible(false);
+    }
   };
 
-  const handleNextLevel = () => {
-    if (isPassed && currentLevel < 6) {
-      router.push({
-        pathname: "/user/quiz-screen",
-        params: { level: currentLevel + 1 },
-      });
-    } else {
-      router.push("/user/home");
-    }
+  const captureImage = async () => {
+    const uri = await viewShotRef.current.capture({
+      format: "png",
+      quality: 0.9,
+      result: "tmpfile",
+    });
+
+    const timestamp = Date.now();
+    const newUri = `${FileSystem.documentDirectory}tezmaths_result_${timestamp}.png`;
+
+    await FileSystem.copyAsync({ from: uri, to: newUri });
+    return newUri;
+  };
+
+  const handleShare = () => {
+    setPopupVisible(true);
   };
 
   const avatarImages = (avatar) => {
@@ -314,15 +284,20 @@ export default function ResultsScreen() {
           <TouchableOpacity
             className="py-3 px-6 flex-1 ml-1 border border-black rounded-full"
             onPress={handleShare}
+            disabled={isSharing}
           >
-            <View className="flex flex-row items-center justify-center gap-2">
-              <Text className="font-black text-2xl text-center">Share</Text>
-              <Image
-                source={require("../../assets/icons/share.png")}
-                style={{ width: 20, height: 20 }}
-                tintColor={"#FF6B35"}
-              />
-            </View>
+            {isSharing ? (
+              <ActivityIndicator color="#FF6B35" />
+            ) : (
+              <View className="flex flex-row items-center justify-center gap-2">
+                <Text className="font-black text-2xl text-center">Share</Text>
+                <Image
+                  source={require("../../assets/icons/share.png")}
+                  style={{ width: 20, height: 20 }}
+                  tintColor={"#FF6B35"}
+                />
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -331,6 +306,92 @@ export default function ResultsScreen() {
           TezMaths - Sharpen Your Speed
         </Text>
       </View>
+
+      {/* Share Options Popup */}
+      <Modal
+        visible={isPopupVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setPopupVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Share Your Results</Text>
+
+            <TouchableOpacity
+              style={styles.optionButton}
+              onPress={shareImageOnly}
+              disabled={isSharing}
+            >
+              <Text style={styles.optionText}>Share Image</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.optionButton}
+              onPress={shareTextOnly}
+              disabled={isSharing}
+            >
+              <Text style={styles.optionText}>Share Text</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setPopupVisible(false)}
+              disabled={isSharing}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  modalContent: {
+    width: "80%",
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 20,
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 20,
+    color: "#333",
+  },
+  optionButton: {
+    width: "100%",
+    padding: 15,
+    marginVertical: 5,
+    backgroundColor: "#FF6B35",
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  optionText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  cancelButton: {
+    width: "100%",
+    padding: 15,
+    marginTop: 10,
+    backgroundColor: "#e0e0e0",
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  cancelText: {
+    color: "#333",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+});

@@ -177,7 +177,7 @@ export default function BattleRoom() {
     return (
       <View className="flex-1 justify-center items-center">
         <Text className="text-red-500 text-xl">{error.message}</Text>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.replace("/user/home")}>
           <Text className="text-blue-500 mt-4">Go Back</Text>
         </TouchableOpacity>
       </View>

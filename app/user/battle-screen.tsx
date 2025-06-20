@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
-import { onValue, ref } from "firebase/database";
+import { onValue, ref, serverTimestamp } from "firebase/database";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -230,7 +230,7 @@ export default function BattleScreen() {
       roomData?.nextQuestionStartTime &&
       roomData?.hostId === userId
     ) {
-      const now = Date.now();
+      const now = serverTimestamp();
       const transitionTimeLeft = roomData.nextQuestionStartTime - now;
 
       if (transitionTimeLeft > 0) {
@@ -308,7 +308,7 @@ export default function BattleScreen() {
     setShowNextQuestionCountdown(true);
 
     const interval = setInterval(() => {
-      const now = Date.now();
+      const now = serverTimestamp();
       const timeLeft = Math.max(0, roomData.nextQuestionStartTime - now);
       const seconds = Math.ceil(timeLeft / 1000);
 
@@ -403,7 +403,7 @@ export default function BattleScreen() {
       }
 
       const updateTimer = () => {
-        const now = Date.now();
+        const now = serverTimestamp();
         const elapsed = Math.floor((now - startTime) / 1000);
         const remaining = Math.max(0, timeLimit - elapsed);
         setTimeLeft(remaining);
@@ -447,7 +447,7 @@ export default function BattleScreen() {
             userId: id,
             username: data.username || data.name,
             score: data.score || 0,
-            avatar: data.avatar || null,
+            avatar: data.avatar || 0,
           }))
           .sort((a, b) => b.score - a.score);
 
@@ -535,7 +535,7 @@ export default function BattleScreen() {
       if (isFirstCorrect) {
         setFeedback("✅ Correct! You got it first! +100 points");
       } else {
-        setFeedback("✅ Correct! Well done!");
+        setFeedback("✅ Correct! +50 points");
       }
 
       setIsAnswered(true);
@@ -574,7 +574,7 @@ export default function BattleScreen() {
           <View className="rounded-full bg-gray-300 items-center justify-center border-2 border-primary">
             {player ? (
               <Image
-                source={avatarImages(player.avatar)}
+                source={avatarImages(player.avatar || 0)}
                 className="w-full h-full rounded-full"
                 style={{ width: 48, height: 48 }}
                 resizeMode="cover"

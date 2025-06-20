@@ -67,9 +67,9 @@ export default function MultiplayerModeSelection() {
   const handleRandomMatch = async () => {
     setSearchingRandom(true);
     try {
-    //   console.log("Starting random match search...");
+      //   console.log("Starting random match search...");
       const { roomId } = await battleManager.findRandomMatch();
-    //   console.log("Found/created room:", roomId);
+      //   console.log("Found/created room:", roomId);
 
       // Add longer delay to ensure room is properly set up
       setTimeout(() => {
@@ -77,7 +77,7 @@ export default function MultiplayerModeSelection() {
         router.push(`/user/battle-room?roomId=${roomId}&isHost=true`);
       }, 500);
     } catch (error) {
-    //   console.error("Random match error:", error);
+      //   console.error("Random match error:", error);
       Alert.alert("Matchmaking Failed", error.message);
       setSearchingRandom(false);
     }
@@ -96,7 +96,7 @@ export default function MultiplayerModeSelection() {
       setJoiningRoom(false);
       router.push(`/user/battle-room?roomId=${foundRoomId}&isHost=false`);
     } catch (error) {
-    //   console.error("Join room error:", error);
+      //   console.error("Join room error:", error);
       Alert.alert("Error", error.message);
       setJoiningRoom(false);
     }
@@ -144,7 +144,7 @@ export default function MultiplayerModeSelection() {
       await battleManager.startBattle(roomId);
       router.push(`/user/battle-room?roomId=${roomId}&isHost=true`);
     } catch (error) {
-    //   console.error("Start battle error:", error);
+      //   console.error("Start battle error:", error);
       Alert.alert("Error", error.message || "Failed to start battle");
     }
   };

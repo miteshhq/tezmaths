@@ -66,6 +66,11 @@ export default function BattleResultsScreen() {
     // console.error("BattleResultsScreen - Parse error:", error);
   }
 
+  parsedPlayers = parsedPlayers.map((p) => ({
+    ...p,
+    avatar: p.avatar || "0",
+  }));
+
   // Sort players by score (highest first)
   parsedPlayers = parsedPlayers.sort((a, b) => b.score - a.score);
 
@@ -306,7 +311,7 @@ export default function BattleResultsScreen() {
               ))}
             </ScrollView>
 
-            <Text className="text-3xl mt-2 mb-2 font-black text-center text-white p-2 bg-primary rounded-xl">
+            <Text className="text-2xl mt-2 mb-2 font-black text-center text-white py-2 px-4 mx-auto bg-primary rounded-xl">
               Download Now
             </Text>
 
