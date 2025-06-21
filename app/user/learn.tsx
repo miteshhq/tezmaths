@@ -197,23 +197,6 @@ export default function LearnScreen() {
 
   const renderHeader = () => (
     <View className="mb-6">
-      {/* HEADER HERE */}
-      <ImageBackground
-        source={require("../../assets/gradient.jpg")}
-        style={{ overflow: "hidden", marginTop: 20 }}
-      >
-        <View className="px-4 py-4">
-          <View className="flex-row justify-center items-center gap-2">
-            <Image
-              source={require("../../assets/icons/learn.png")}
-              style={{ width: 24, height: 24 }}
-              tintColor="#FF6B35"
-            />
-            <Text className="text-white text-3xl font-black">Learning</Text>
-          </View>
-        </View>
-      </ImageBackground>
-
       <View className="mx-4 mt-4">
         <View className="relative">
           <TextInput
@@ -293,18 +276,36 @@ export default function LearnScreen() {
           </Text>
         </View>
       ) : (
-        <FlatList
-          data={filteredVideos}
-          keyExtractor={(item) => item.id}
-          renderItem={renderVideoItem}
-          ListHeaderComponent={renderHeader}
-          ListEmptyComponent={renderEmptyState}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{
-            paddingBottom: 20,
-            ...(filteredVideos.length === 0 && { flexGrow: 1 }),
-          }}
-        />
+        <View className="flex-1 bg-white">
+          {/* HEADER HERE */}
+          <ImageBackground
+            source={require("../../assets/gradient.jpg")}
+            style={{ overflow: "hidden", marginTop: 20 }}
+          >
+            <View className="px-4 py-4">
+              <View className="flex-row justify-center items-center gap-2">
+                <Image
+                  source={require("../../assets/icons/learn.png")}
+                  style={{ width: 24, height: 24 }}
+                  tintColor="#FF6B35"
+                />
+                <Text className="text-white text-3xl font-black">Learning</Text>
+              </View>
+            </View>
+          </ImageBackground>
+          <FlatList
+            data={filteredVideos}
+            keyExtractor={(item) => item.id}
+            renderItem={renderVideoItem}
+            ListHeaderComponent={renderHeader}
+            ListEmptyComponent={renderEmptyState}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{
+              paddingBottom: 20,
+              ...(filteredVideos.length === 0 && { flexGrow: 1 }),
+            }}
+          />
+        </View>
       )}
     </View>
   );

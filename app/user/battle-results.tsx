@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from "react";
+import React, { useRef, useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import * as FileSystem from "expo-file-system";
 import SoundManager from "../../components/soundManager";
 import logo from "../../assets/branding/tezmaths-full-logo.png";
 import { auth } from "../../firebase/firebaseConfig";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const shareConfig = {
   additionalText: "Check out my battle results on TezMaths! ⚔️✨",
@@ -56,6 +57,8 @@ export default function BattleResultsScreen() {
   const [isPopupVisible, setPopupVisible] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
 
+  const [userData, setUserData] = useState({ avatar: 0 });
+
   const currentUserId = auth.currentUser?.uid;
 
   let parsedPlayers = [];
@@ -78,6 +81,21 @@ export default function BattleResultsScreen() {
     parsedPlayers.findIndex((p) => p.userId === currentUserId) + 1;
   const userScore =
     parsedPlayers.find((p) => p.userId === currentUserId)?.score || 0;
+
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const cachedData = await AsyncStorage.getItem("userData");
+        if (cachedData) {
+          const data = JSON.parse(cachedData);
+          setUserData(data);
+        }
+      } catch (error) {
+        console.error("Error loading user data:", error);
+      }
+    };
+    loadUserData();
+  }, []);
 
   // Play victory sound on focus if userRank is 1
   useFocusEffect(
@@ -110,22 +128,17 @@ export default function BattleResultsScreen() {
 
     const elements = [];
     parsedPlayers.forEach((player, index) => {
-      // Add player profile
+      const avatarToUse = player.avatar || "0"; // Use room data avatar for all players
+
       elements.push(
         <View key={`player-${player.userId}`} className="items-center">
           <View className="rounded-full bg-gray-300 items-center justify-center border-2 border-primary">
-            {player ? (
-              <Image
-                source={avatarImages(player.avatar)}
-                className="w-full h-full rounded-full"
-                style={{ width: 48, height: 48 }}
-                resizeMode="cover"
-              />
-            ) : (
-              <Text className="text-primary font-bold">
-                {(player.username || "P").charAt(0).toUpperCase()}
-              </Text>
-            )}
+            <Image
+              source={avatarImages(avatarToUse)}
+              className="w-full h-full rounded-full"
+              style={{ width: 48, height: 48 }}
+              resizeMode="cover"
+            />
           </View>
           <Text className="text-xs mt-1 text-center max-w-16" numberOfLines={1}>
             {player.username}
@@ -133,7 +146,6 @@ export default function BattleResultsScreen() {
         </View>
       );
 
-      // Add sword between players (except after last player)
       if (index < parsedPlayers.length - 1) {
         elements.push(
           <View key={`sword-${index}`} className="items-center justify-center">
@@ -260,7 +272,7 @@ export default function BattleResultsScreen() {
           <View
             ref={cardRef}
             collapsable={false}
-            className="bg-custom-gray border-4 border-white p-4 rounded-3xl shadow-xl w-full max-w-md"
+            className="bg-custom-gray border-4 border-white p-4 rounded-3xl shadow-xl w-full"
             style={{
               backgroundColor: "#f5f5f5", // Ensure proper background for screenshot
               shadowColor: "#000",
@@ -288,15 +300,15 @@ export default function BattleResultsScreen() {
 
             {renderProfileImages()}
 
-            <Text className="text-2xl text-black font-bold text-center w-full mb-2">
+            <Text className="text-2xl text-black font-bold text-center mx-auto w-full mb-2">
               Battle Score
             </Text>
 
-            <ScrollView className="w-full max-w-md mb-4">
+            <ScrollView className="w-full mb-4">
               {parsedPlayers.map((player, index) => (
                 <View
                   key={player.userId}
-                  className={`flex-row justify-between items-center p-4 py-2 rounded-lg mb-2 bg-light-orange ${
+                  className={`flex-row justify-between items-center w-full p-4 py-2 rounded-lg mb-2 bg-light-orange ${
                     player.userId === currentUserId
                       ? "border-2 border-primary"
                       : "border-transparent border-2"

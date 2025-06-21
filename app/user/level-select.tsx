@@ -253,7 +253,7 @@ export default function LevelSelect() {
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+      <View className="flex-1 bg-white">
         <ImageBackground
           source={require("../../assets/gradient.jpg")}
           style={{ overflow: "hidden", marginTop: 20 }}
@@ -269,69 +269,70 @@ export default function LevelSelect() {
             </View>
           </View>
         </ImageBackground>
+        <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+          <View className="relative py-12">
+            <View className="absolute w-2 left-1/2 top-12 -translate-x-0.5 bg-black h-full"></View>
 
-        <View className="relative py-12">
-          <View className="absolute w-2 left-1/2 top-12 -translate-x-0.5 bg-black h-full"></View>
+            {/* Continue Button */}
+            <View className="px-6 mb-8">
+              <TouchableOpacity
+                onPress={handleContinue}
+                className="bg-primary rounded-2xl px-8 py-2"
+              >
+                <Text className="text-white text-lg font-bold text-center">
+                  Continue Level {currentLevel}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-          {/* Continue Button */}
-          <View className="px-6 mb-8">
-            <TouchableOpacity
-              onPress={handleContinue}
-              className="bg-primary rounded-2xl px-8 py-2"
-            >
-              <Text className="text-white text-lg font-bold text-center">
-                Continue Level {currentLevel}
-              </Text>
-            </TouchableOpacity>
-          </View>
+            {/* Select Level Section */}
+            <View className="items-center mb-8">
+              <View className="border-4 border-black rounded-full w-40 h-40 justify-center items-center bg-white">
+                <Text className="text-white bg-black rounded-xl px-4 py-2 text-lg font-bold text-center">
+                  Select Level
+                </Text>
+              </View>
+            </View>
 
-          {/* Select Level Section */}
-          <View className="items-center mb-8">
-            <View className="border-4 border-black rounded-full w-40 h-40 justify-center items-center bg-white">
-              <Text className="text-white bg-black rounded-xl px-4 py-2 text-lg font-bold text-center">
-                Select Level
-              </Text>
+            {/* Level Buttons */}
+            <View className="flex flex-col gap-4">
+              {availableLevels.map((level) => {
+                const isCompleted = completedLevels.includes(level);
+                const isCurrent = level === currentLevel;
+                const isUnlocked = level <= currentLevel;
+
+                return (
+                  <View key={level} className="items-center mb-4">
+                    <TouchableOpacity
+                      className={`w-16 h-16 rounded-full justify-center items-center border-2 border-white shadow-lg ${
+                        isCompleted
+                          ? "bg-green-500"
+                          : isCurrent
+                          ? "bg-primary"
+                          : isUnlocked
+                          ? "bg-primary"
+                          : "bg-gray-300"
+                      }`}
+                      onPress={() => isUnlocked && handleLevelSelect(level)}
+                      disabled={!isUnlocked}
+                    >
+                      <Text
+                        className={`text-2xl font-bold ${
+                          isUnlocked || isCompleted || isCurrent
+                            ? "text-white"
+                            : "text-gray-500"
+                        }`}
+                      >
+                        {level}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
             </View>
           </View>
-
-          {/* Level Buttons */}
-          <View className="flex flex-col gap-4">
-            {availableLevels.map((level) => {
-              const isCompleted = completedLevels.includes(level);
-              const isCurrent = level === currentLevel;
-              const isUnlocked = level <= currentLevel;
-
-              return (
-                <View key={level} className="items-center mb-4">
-                  <TouchableOpacity
-                    className={`w-16 h-16 rounded-full justify-center items-center border-2 border-white shadow-lg ${
-                      isCompleted
-                        ? "bg-green-500"
-                        : isCurrent
-                        ? "bg-primary"
-                        : isUnlocked
-                        ? "bg-primary"
-                        : "bg-gray-300"
-                    }`}
-                    onPress={() => isUnlocked && handleLevelSelect(level)}
-                    disabled={!isUnlocked}
-                  >
-                    <Text
-                      className={`text-2xl font-bold ${
-                        isUnlocked || isCompleted || isCurrent
-                          ? "text-white"
-                          : "text-gray-500"
-                      }`}
-                    >
-                      {level}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              );
-            })}
-          </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }

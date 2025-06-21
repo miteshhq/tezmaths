@@ -64,25 +64,6 @@ export default function MultiplayerModeSelection() {
     };
   }, [roomId]);
 
-  const handleRandomMatch = async () => {
-    setSearchingRandom(true);
-    try {
-      //   console.log("Starting random match search...");
-      const { roomId } = await battleManager.findRandomMatch();
-      //   console.log("Found/created room:", roomId);
-
-      // Add longer delay to ensure room is properly set up
-      setTimeout(() => {
-        // console.log("Navigating to room:", roomId);
-        router.push(`/user/battle-room?roomId=${roomId}&isHost=true`);
-      }, 500);
-    } catch (error) {
-      //   console.error("Random match error:", error);
-      Alert.alert("Matchmaking Failed", error.message);
-      setSearchingRandom(false);
-    }
-  };
-
   const handleJoinQuizCode = async () => {
     if (quizCode.length < 4) {
       Alert.alert("Invalid Code", "Please enter a valid quiz code");
@@ -110,6 +91,9 @@ export default function MultiplayerModeSelection() {
 
       setRoomCode(newRoomCode);
       setRoomId(newRoomId);
+
+      // Set the creator as ready by default for regular rooms
+      await battleManager.toggleReady(newRoomId);
 
       battleManager.listenToRoom(newRoomId, (roomData) => {
         if (roomData) {
@@ -160,8 +144,27 @@ export default function MultiplayerModeSelection() {
     setPlayersInRoom({});
   };
 
+  // Update the handleRandomMatch function in multiplayer-mode-selection.tsx
+  const handleRandomMatch = async () => {
+    setSearchingRandom(true);
+    try {
+      console.log("Starting random match search...");
+      const { roomId } = await battleManager.findRandomMatch();
+      console.log("Found/created room:", roomId);
+
+      // Navigate immediately, let battle-room handle the waiting/starting logic
+      router.push(`/user/battle-room?roomId=${roomId}&isHost=true`);
+    } catch (error) {
+      console.error("Random match error:", error);
+      Alert.alert("Matchmaking Failed", error.message);
+      setSearchingRandom(false);
+    }
+  };
+
+  // Update the cancelRandomSearch function
   const cancelRandomSearch = () => {
     setSearchingRandom(false);
+    battleManager.cancelMatchmaking().catch(console.error);
   };
 
   const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);

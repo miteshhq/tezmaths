@@ -492,12 +492,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <ScrollView
-      className="flex-1 bg-white"
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
+    <View className="flex-1 bg-white">
       {/* HEADER HERE */}
       <ImageBackground
         source={require("../../assets/gradient.jpg")}
@@ -533,137 +528,145 @@ export default function HomeScreen() {
           </View>
         </View>
       </ImageBackground>
-
-      {/* Welcome Section */}
-      <View className="px-4 py-4">
-        <View className="flex-row justify-center items-center">
-          <Text className="text-custom-purple text-3xl mt-4 font-black">
-            Let's Practice Today!
-          </Text>
-        </View>
-      </View>
-
-      <View className="px-4 py-6 flex flex-col gap-4">
-        <View className="border border-black rounded-2xl overflow-hidden">
-          <View className=" w-full h-8 bg-primary"></View>
-          <View className=" w-full p-4 flex flex-col items-center gap-4">
-            <Image
-              source={require("../../assets/icons/quiz.png")}
-              style={{ width: 48, height: 48 }}
-              tintColor="#FF6B35"
-            />
-
-            <View className="flex flex-col items-center gap-1">
-              <Text className="text-2xl text-custom-purple font-black">
-                Quiz Time
-              </Text>
-              <Text className="text-sm text-center text-custom-purple">
-                Test your maths skills with our interactive quizzes!
-              </Text>
-            </View>
-            <TouchableOpacity onPress={() => router.push("/user/level-select")}>
-              <ImageBackground
-                source={require("../../assets/gradient.jpg")} // Replace with your actual image path
-                style={{ borderRadius: 8, overflow: "hidden" }}
-                imageStyle={{ borderRadius: 12 }}
-              >
-                <View className="py-3">
-                  <Text className="text-white font-bold text-xl w-72 text-center">
-                    Start Quiz
-                  </Text>
-                </View>
-              </ImageBackground>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Battle with Friends Card */}
-        <View className="border border-black rounded-2xl overflow-hidden">
-          <View className=" w-full h-8 bg-primary"></View>
-          <View className=" w-full p-4 flex flex-col items-center gap-4">
-            <Image
-              source={require("../../assets/icons/swords.png")}
-              style={{ width: 48, height: 48 }}
-              tintColor="#FF6B35"
-            />
-
-            <View className="flex flex-col items-center gap-1">
-              <Text className="text-2xl text-custom-purple font-black">
-                Battle With Friends
-              </Text>
-              <Text className="text-sm text-center text-custom-purple">
-                Challenge friends to real-time maths battles!
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => router.push("/user/multiplayer-mode-selection")}
-            >
-              <ImageBackground
-                source={require("../../assets/gradient.jpg")} // Replace with your actual image path
-                style={{ borderRadius: 8, overflow: "hidden" }}
-                imageStyle={{ borderRadius: 12 }}
-              >
-                <View className="py-3">
-                  <Text className="text-white font-bold text-xl w-72 text-center">
-                    Start Battle
-                  </Text>
-                </View>
-              </ImageBackground>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-
-      {/* Stats Section */}
-      <View className="px-4 pb-4 flex-row justify-around">
-        <TouchableOpacity
-          className="items-center"
-          onPress={() => setShowStreakPopup(true)}
-        >
-          <View className="bg-custom-gray rounded-full w-16 h-16 flex justify-center items-center mb-2">
-            <Text className="text-2xl">🔥</Text>
-          </View>
-          <Text className="text-sm">Streak</Text>
-          <Text className="text-primary text-lg font-bold">{userStreak}</Text>
-        </TouchableOpacity>
-
-        <View className="items-center">
-          <View className="bg-custom-gray rounded-full w-16 h-16 flex justify-center items-center mb-2">
-            <Text className="text-2xl">💎</Text>
-          </View>
-          <Text className="text-sm">Points</Text>
-          <Text className="text-primary text-lg font-bold">{userPoints}</Text>
-        </View>
-
-        <View className="items-center">
-          <View className="bg-custom-gray rounded-full w-16 h-16 flex justify-center items-center mb-2">
-            <Text className="text-2xl">👥</Text>
-          </View>
-          <Text className="text-sm">Referrals</Text>
-          <Text className="text-primary text-lg font-bold">{referrals}</Text>
-        </View>
-      </View>
-
-      {/* Streak Popup */}
-      <Modal visible={showStreakPopup} transparent animationType="fade">
-        <View className="flex-1 justify-center items-center bg-black/60">
-          <View className="bg-white rounded-2xl p-6 mx-8 items-center">
-            <Text className="text-3xl font-bold text-center mb-2">
-              Streak Rules 🔥
+      <ScrollView
+        className="flex-1 bg-white"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Welcome Section */}
+        <View className="px-4 py-4">
+          <View className="flex-row justify-center items-center">
+            <Text className="text-custom-purple text-3xl mt-4 font-black">
+              Let's Practice Today!
             </Text>
-            <Text className="text-black text-xl font-semibold text-center">
-              If you don't play the quiz for two consecutive days, your streak
-              will reset to 0.
-            </Text>
-            <TouchableOpacity
-              className="bg-black rounded-full px-6 py-3 mt-4"
-              onPress={() => setShowStreakPopup(false)}
-            >
-              <Text className="text-white font-bold">Awesome!</Text>
-            </TouchableOpacity>
           </View>
         </View>
-      </Modal>
-    </ScrollView>
+
+        <View className="px-4 py-6 flex flex-col gap-4">
+          <View className="border border-black rounded-2xl overflow-hidden">
+            <View className=" w-full h-8 bg-primary"></View>
+            <View className=" w-full p-4 flex flex-col items-center gap-4">
+              <Image
+                source={require("../../assets/icons/quiz.png")}
+                style={{ width: 48, height: 48 }}
+                tintColor="#FF6B35"
+              />
+
+              <View className="flex flex-col items-center gap-1">
+                <Text className="text-2xl text-custom-purple font-black">
+                  Quiz Time
+                </Text>
+                <Text className="text-sm text-center text-custom-purple">
+                  Test your maths skills with our interactive quizzes!
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => router.push("/user/level-select")}
+              >
+                <ImageBackground
+                  source={require("../../assets/gradient.jpg")} // Replace with your actual image path
+                  style={{ borderRadius: 8, overflow: "hidden" }}
+                  imageStyle={{ borderRadius: 12 }}
+                >
+                  <View className="py-3">
+                    <Text className="text-white font-bold text-xl w-72 text-center">
+                      Start Quiz
+                    </Text>
+                  </View>
+                </ImageBackground>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Battle with Friends Card */}
+          <View className="border border-black rounded-2xl overflow-hidden">
+            <View className=" w-full h-8 bg-primary"></View>
+            <View className=" w-full p-4 flex flex-col items-center gap-4">
+              <Image
+                source={require("../../assets/icons/swords.png")}
+                style={{ width: 48, height: 48 }}
+                tintColor="#FF6B35"
+              />
+
+              <View className="flex flex-col items-center gap-1">
+                <Text className="text-2xl text-custom-purple font-black">
+                  Battle With Friends
+                </Text>
+                <Text className="text-sm text-center text-custom-purple">
+                  Challenge friends to real-time maths battles!
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => router.push("/user/multiplayer-mode-selection")}
+              >
+                <ImageBackground
+                  source={require("../../assets/gradient.jpg")} // Replace with your actual image path
+                  style={{ borderRadius: 8, overflow: "hidden" }}
+                  imageStyle={{ borderRadius: 12 }}
+                >
+                  <View className="py-3">
+                    <Text className="text-white font-bold text-xl w-72 text-center">
+                      Start Battle
+                    </Text>
+                  </View>
+                </ImageBackground>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {/* Stats Section */}
+        <View className="px-4 pb-4 flex-row justify-around">
+          <TouchableOpacity
+            className="items-center"
+            onPress={() => setShowStreakPopup(true)}
+          >
+            <View className="bg-custom-gray rounded-full w-16 h-16 flex justify-center items-center mb-2">
+              <Text className="text-2xl">🔥</Text>
+            </View>
+            <Text className="text-sm">Streak</Text>
+            <Text className="text-primary text-lg font-bold">{userStreak}</Text>
+          </TouchableOpacity>
+
+          <View className="items-center">
+            <View className="bg-custom-gray rounded-full w-16 h-16 flex justify-center items-center mb-2">
+              <Text className="text-2xl">💎</Text>
+            </View>
+            <Text className="text-sm">Points</Text>
+            <Text className="text-primary text-lg font-bold">{userPoints}</Text>
+          </View>
+
+          <View className="items-center">
+            <View className="bg-custom-gray rounded-full w-16 h-16 flex justify-center items-center mb-2">
+              <Text className="text-2xl">👥</Text>
+            </View>
+            <Text className="text-sm">Referrals</Text>
+            <Text className="text-primary text-lg font-bold">{referrals}</Text>
+          </View>
+        </View>
+
+        {/* Streak Popup */}
+        <Modal visible={showStreakPopup} transparent animationType="fade">
+          <View className="flex-1 justify-center items-center bg-black/60">
+            <View className="bg-white rounded-2xl p-6 mx-8 items-center">
+              <Text className="text-3xl font-bold text-center mb-2">
+                Streak Rules 🔥
+              </Text>
+              <Text className="text-black text-xl font-semibold text-center">
+                If you don't play the quiz for two consecutive days, your streak
+                will reset to 0.
+              </Text>
+              <TouchableOpacity
+                className="bg-black rounded-full px-6 py-3 mt-4"
+                onPress={() => setShowStreakPopup(false)}
+              >
+                <Text className="text-white font-bold">Awesome!</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      </ScrollView>
+    </View>
   );
 }

@@ -341,12 +341,7 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView
-      className="flex-1 bg-white"
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-      }
-    >
+    <View className="flex-1 bg-white">
       <ImageBackground
         source={require("../../assets/gradient.jpg")}
         style={{ overflow: "hidden", marginTop: 20 }}
@@ -362,160 +357,168 @@ export default function ProfileScreen() {
           </View>
         </View>
       </ImageBackground>
-      {/* Header Section */}
-      <View className="bg-white px-4 pt-12 pb-6 flex flex-col gap-8">
-        {/* Profile Card */}
-        <View className="bg-white border border-primary rounded-2xl p-6 shadow-sm">
-          <View className="flex-row justify-between items-start">
-            <View className="flex flex-row items-center justify-between w-full">
-              <View className="flex-row items-center">
-                {/* Avatar Image */}
-                <View className="w-16 h-16 bg-gray-200 rounded-full mr-4 justify-center items-center overflow-hidden">
-                  <Image
-                    source={getAvatarSource()}
-                    className="w-full h-full"
-                    resizeMode="cover"
-                  />
-                </View>
-                <View>
-                  <View className="flex flex-row items-center gap-2">
-                    <Text className="text-2xl font-black text-custom-purple w-fit">
-                      {userData.fullName}
-                    </Text>
-                    <TouchableOpacity onPress={handleEditProfile}>
-                      <Image
-                        source={require("../../assets/icons/edit-profile.png")}
-                        style={{ width: 18, height: 18 }}
-                        tintColor="#000"
-                      />
-                    </TouchableOpacity>
+      <ScrollView
+        className="flex-1 bg-white"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+      >
+        {/* Header Section */}
+        <View className="bg-white px-4 pt-12 pb-6 flex flex-col gap-8">
+          {/* Profile Card */}
+          <View className="bg-white border border-primary rounded-2xl p-6 shadow-sm">
+            <View className="flex-row justify-between items-start">
+              <View className="flex flex-row items-center justify-between w-full">
+                <View className="flex-row items-center">
+                  {/* Avatar Image */}
+                  <View className="w-16 h-16 bg-gray-200 rounded-full mr-4 justify-center items-center overflow-hidden">
+                    <Image
+                      source={getAvatarSource()}
+                      className="w-full h-full"
+                      resizeMode="cover"
+                    />
                   </View>
+                  <View>
+                    <View className="flex flex-row items-center gap-2">
+                      <Text className="text-2xl font-black text-custom-purple w-fit">
+                        {userData.fullName}
+                      </Text>
+                      <TouchableOpacity onPress={handleEditProfile}>
+                        <Image
+                          source={require("../../assets/icons/edit-profile.png")}
+                          style={{ width: 18, height: 18 }}
+                          tintColor="#000"
+                        />
+                      </TouchableOpacity>
+                    </View>
 
-                  <Text className="text-gray-600 text-lg">
-                    @{userData.username}
+                    <Text className="text-gray-600 text-lg">
+                      @{userData.username}
+                    </Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  onPress={handleLogout}
+                  className="bg-primary px-4 py-2 rounded-lg"
+                >
+                  <Text className="text-white font-semibold text-sm">
+                    LOG OUT
                   </Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                onPress={handleLogout}
-                className="bg-primary px-4 py-2 rounded-lg"
-              >
-                <Text className="text-white font-semibold text-sm">
-                  LOG OUT
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        {/* Stats Section */}
-        <View className="border border-primary rounded-xl">
-          <Text className="text-custom-purple text-xl w-full text-center font-black py-2 border-b border-primary">
-            Your Stats
-          </Text>
-          <View className="flex-row justify-between p-4">
-            <View className="items-center">
-              <Text className="text-2xl font-black text-custom-purple">
-                {userData.totalPoints % 1 !== 0
-                  ? Math.round(userData.totalPoints * 10) / 10
-                  : userData.totalPoints || 0}
-              </Text>
-              <Text className="text-custom-purple text-lg">Score</Text>
-            </View>
-            <View className="items-center">
-              <Text className="text-2xl font-black text-custom-purple">
-                {Number.parseInt(userData.currentLevel) - 1}
-              </Text>
-              <Text className="text-custom-purple text-lg">Levels</Text>
-            </View>
-            <View className="items-center">
-              <Text className="text-2xl font-black text-custom-purple">
-                #{userRank > 0 ? userRank : "—"}
-              </Text>
-              <Text className="text-custom-purple text-lg">Ranking</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Copy Success Message */}
-        {copied && (
-          <View className=" bg-green-100 border border-green-400 rounded-lg p-3">
-            <Text className="text-green-800 text-center font-medium">
-              Referral code copied to clipboard!
-            </Text>
-          </View>
-        )}
-
-        {/* Refer & Earn Section */}
-        <ImageBackground
-          source={require("../../assets/gradient.jpg")}
-          style={{ borderRadius: 20, overflow: "hidden" }}
-        >
-          <View className="rounded-2xl p-6">
-            <View className="flex-col gap-2 mb-4">
-              <View className="flex flex-row w-full justify-between">
-                <Text className="text-white text-3xl font-black">
-                  Refer & Earn
-                </Text>
-                <View className="w-8 h-8 bg-primary rounded-full justify-center items-center">
-                  <Text className="text-white font-bold">+</Text>
-                </View>
-              </View>
-              <Text className="text-gray-300 text-sm flex-wrap">
-                Share TezMaths with your friends & Earn 10 XP on each download!
-              </Text>
-            </View>
-
-            {/* Referral Code */}
-            <View className="bg-white/5 rounded-xl p-4 mb-4">
-              <View className="flex-row justify-between items-center">
-                <Text className="text-white font-semibold">
-                  {userData.username.toUpperCase()}
-                </Text>
-                <TouchableOpacity onPress={handleCopyShareMessage}>
-                  <View className="bg-primary px-3 py-1 rounded">
-                    <Text className="text-white text-md font-semibold">
-                      Copy
-                    </Text>
-                  </View>
                 </TouchableOpacity>
               </View>
             </View>
+          </View>
 
-            {/* Stats */}
-            <View className="flex-row justify-between mb-4">
+          {/* Stats Section */}
+          <View className="border border-primary rounded-xl">
+            <Text className="text-custom-purple text-xl w-full text-center font-black py-2 border-b border-primary">
+              Your Stats
+            </Text>
+            <View className="flex-row justify-between p-4">
               <View className="items-center">
-                <Text className="text-white text-xl font-bold">
-                  {userData.referrals}
+                <Text className="text-2xl font-black text-custom-purple">
+                  {userData.totalPoints % 1 !== 0
+                    ? Math.round(userData.totalPoints * 10) / 10
+                    : userData.totalPoints || 0}
                 </Text>
-                <Text className="text-gray-400 text-sm">Sent</Text>
+                <Text className="text-custom-purple text-lg">Score</Text>
               </View>
               <View className="items-center">
-                <Text className="text-white text-xl font-bold">
-                  {userData.referrals}
+                <Text className="text-2xl font-black text-custom-purple">
+                  {Number.parseInt(userData.currentLevel) - 1}
                 </Text>
-                <Text className="text-gray-400 text-sm">Joined</Text>
+                <Text className="text-custom-purple text-lg">Levels</Text>
               </View>
               <View className="items-center">
-                <Text className="text-white text-xl font-bold">
-                  {userData.referrals * 10}XP
+                <Text className="text-2xl font-black text-custom-purple">
+                  #{userRank > 0 ? userRank : "—"}
                 </Text>
-                <Text className="text-gray-400 text-sm">Earned</Text>
+                <Text className="text-custom-purple text-lg">Ranking</Text>
               </View>
             </View>
-
-            {/* Invite Button */}
-            <TouchableOpacity
-              onPress={handleShareMessage}
-              className="bg-primary py-3 rounded-xl"
-            >
-              <Text className="text-white text-center font-bold">
-                INVITE A FRIEND
-              </Text>
-            </TouchableOpacity>
           </View>
-        </ImageBackground>
-      </View>
-    </ScrollView>
+
+          {/* Copy Success Message */}
+          {copied && (
+            <View className=" bg-green-100 border border-green-400 rounded-lg p-3">
+              <Text className="text-green-800 text-center font-medium">
+                Referral code copied to clipboard!
+              </Text>
+            </View>
+          )}
+
+          {/* Refer & Earn Section */}
+          <ImageBackground
+            source={require("../../assets/gradient.jpg")}
+            style={{ borderRadius: 20, overflow: "hidden" }}
+          >
+            <View className="rounded-2xl p-6">
+              <View className="flex-col gap-2 mb-4">
+                <View className="flex flex-row w-full justify-between">
+                  <Text className="text-white text-3xl font-black">
+                    Refer & Earn
+                  </Text>
+                  <View className="w-8 h-8 bg-primary rounded-full justify-center items-center">
+                    <Text className="text-white font-bold">+</Text>
+                  </View>
+                </View>
+                <Text className="text-gray-300 text-sm flex-wrap">
+                  Share TezMaths with your friends & Earn 10 XP on each
+                  download!
+                </Text>
+              </View>
+
+              {/* Referral Code */}
+              <View className="bg-white/5 rounded-xl p-4 mb-4">
+                <View className="flex-row justify-between items-center">
+                  <Text className="text-white font-semibold">
+                    {userData.username.toUpperCase()}
+                  </Text>
+                  <TouchableOpacity onPress={handleCopyShareMessage}>
+                    <View className="bg-primary px-3 py-1 rounded">
+                      <Text className="text-white text-md font-semibold">
+                        Copy
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Stats */}
+              <View className="flex-row justify-between mb-4">
+                <View className="items-center">
+                  <Text className="text-white text-xl font-bold">
+                    {userData.referrals}
+                  </Text>
+                  <Text className="text-gray-400 text-sm">Sent</Text>
+                </View>
+                <View className="items-center">
+                  <Text className="text-white text-xl font-bold">
+                    {userData.referrals}
+                  </Text>
+                  <Text className="text-gray-400 text-sm">Joined</Text>
+                </View>
+                <View className="items-center">
+                  <Text className="text-white text-xl font-bold">
+                    {userData.referrals * 10}XP
+                  </Text>
+                  <Text className="text-gray-400 text-sm">Earned</Text>
+                </View>
+              </View>
+
+              {/* Invite Button */}
+              <TouchableOpacity
+                onPress={handleShareMessage}
+                className="bg-primary py-3 rounded-xl"
+              >
+                <Text className="text-white text-center font-bold">
+                  INVITE A FRIEND
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </ImageBackground>
+        </View>
+      </ScrollView>
+    </View>
   );
 }

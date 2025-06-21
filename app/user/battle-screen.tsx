@@ -1,7 +1,7 @@
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
-import { onValue, ref, serverTimestamp } from "firebase/database";
-import React, { useEffect, useRef, useState } from "react";
+import { onValue, ref } from "firebase/database";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -11,28 +11,33 @@ import {
   TouchableOpacity,
   View,
   Image,
+  ImageBackground,
 } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { auth, database } from "../../firebase/firebaseConfig";
 import { battleManager } from "../../utils/battleManager";
 import SoundManager from "../../components/soundManager";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const DEBUG_MODE = false;
 const AUTO_SUBMIT_DELAY = 400;
 
 const avatarImages = (avatar) => {
-  switch (avatar) {
-    case "0":
+  const avatarNumber =
+    typeof avatar === "string" ? parseInt(avatar) : avatar || 0;
+
+  switch (avatarNumber) {
+    case 0:
       return require("../../assets/avatars/avatar1.jpg");
-    case "1":
+    case 1:
       return require("../../assets/avatars/avatar2.jpg");
-    case "2":
+    case 2:
       return require("../../assets/avatars/avatar3.jpg");
-    case "3":
+    case 3:
       return require("../../assets/avatars/avatar4.jpg");
-    case "4":
+    case 4:
       return require("../../assets/avatars/avatar5.jpg");
-    case "5":
+    case 5:
       return require("../../assets/avatars/avatar6.jpg");
     default:
       return require("../../assets/avatars/avatar1.jpg");
@@ -41,7 +46,7 @@ const avatarImages = (avatar) => {
 
 const debugLog = (message, data = null) => {
   if (DEBUG_MODE) {
-    // console.log(`[BattleScreen] ${message}`, data);
+    console.log(`[BattleScreen] ${message}`, data);
   }
 };
 
@@ -124,6 +129,8 @@ export default function BattleScreen() {
   const submitTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const timeExpiryHandled = useRef(false);
+  const [userData, setUserData] = useState({ avatar: 0 });
+  const [networkError, setNetworkError] = useState(false);
 
   const [showBetterLuckMessage, setShowBetterLuckMessage] = useState(false);
   const [betterLuckCountdown, setBetterLuckCountdown] = useState(0);
@@ -134,40 +141,52 @@ export default function BattleScreen() {
 
   useEffect(() => {
     return () => {
-      // stop both effects just in case
       SoundManager.stopSound("rightAnswerSoundEffect").catch(() => {});
       SoundManager.stopSound("wrongAnswerSoundEffect").catch(() => {});
     };
   }, []);
 
   useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const cachedData = await AsyncStorage.getItem("userData");
+        if (cachedData) {
+          const data = JSON.parse(cachedData);
+          setUserData(data);
+        }
+      } catch (error) {
+        console.error("Error loading user data:", error);
+      }
+    };
+    loadUserData();
+  }, []);
+
+  useEffect(() => {
     if (
-      timeLeft === 0 && // Only trigger when time is exactly 0
+      timeLeft === 0 &&
       !roomData?.questionTransition &&
       !roomData?.currentWinner &&
       !showBetterLuckMessage
     ) {
       setShowBetterLuckMessage(true);
-      setBetterLuckCountdown(2);
-
+      setBetterLuckCountdown(1);
       const interval = setInterval(() => {
         setBetterLuckCountdown((prev) => {
           if (prev <= 1) {
             setShowBetterLuckMessage(false);
             clearInterval(interval);
             if (roomData?.hostId === userId) {
-              battleManager.startQuestionTransition(roomId as string, 2000);
+              battleManager.startQuestionTransition(roomId as string, 1000);
             }
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
-
       return () => clearInterval(interval);
     }
   }, [
-    timeLeft, // This should only trigger when timeLeft changes to 0
+    timeLeft,
     roomData?.questionTransition,
     roomData?.currentWinner,
     roomData?.hostId,
@@ -176,20 +195,17 @@ export default function BattleScreen() {
     showBetterLuckMessage,
   ]);
 
-  // Add this new useEffect for handling stuck states
   useEffect(() => {
     if (
       timeLeft === 0 &&
       !roomData?.questionTransition &&
       !roomData?.currentWinner
     ) {
-      // Fallback handler if the host isn't moving to next question
       const fallbackTimeout = setTimeout(() => {
         if (roomData?.hostId === userId) {
-          //   console.log("Fallback: Moving to next question");
           battleManager.startQuestionTransition(roomId as string, 1000);
         }
-      }, 5000); // 5 second fallback
+      }, 5000);
 
       return () => clearTimeout(fallbackTimeout);
     }
@@ -204,7 +220,6 @@ export default function BattleScreen() {
 
   useEffect(() => {
     if (roomData?.currentQuestion !== undefined) {
-      // Reset states for new question
       setUserAnswer("");
       setFeedback("");
       setIsAnswered(false);
@@ -213,7 +228,6 @@ export default function BattleScreen() {
       setBetterLuckCountdown(0);
       timeExpiryHandled.current = false;
 
-      // Clear any pending timeouts
       if (submitTimeoutRef.current) {
         clearTimeout(submitTimeoutRef.current);
         submitTimeoutRef.current = null;
@@ -221,7 +235,6 @@ export default function BattleScreen() {
     }
   }, [roomData?.currentQuestion]);
 
-  // Handle transition to next question (only one instance)
   useEffect(() => {
     let timeoutId: NodeJS.Timeout | undefined;
 
@@ -230,18 +243,18 @@ export default function BattleScreen() {
       roomData?.nextQuestionStartTime &&
       roomData?.hostId === userId
     ) {
-      const now = serverTimestamp();
+      const now = Date.now();
       const transitionTimeLeft = roomData.nextQuestionStartTime - now;
 
       if (transitionTimeLeft > 0) {
         timeoutId = setTimeout(() => {
           battleManager.moveToNextQuestion(roomId as string).catch((error) => {
-            // console.error("Failed to move to next question:", error);
+            console.error("Failed to move to next question:", error);
           });
         }, transitionTimeLeft);
       } else {
         battleManager.moveToNextQuestion(roomId as string).catch((error) => {
-          //   console.error("Failed to move to next question:", error);
+          console.error("Failed to move to next question:", error);
         });
       }
     }
@@ -257,30 +270,6 @@ export default function BattleScreen() {
     roomId,
   ]);
 
-  // Add this useEffect to ensure host always handles progression
-  //   useEffect(() => {
-  //     if (
-  //       roomData?.hostId === userId &&
-  //       timeLeft === 0 &&
-  //       !roomData?.questionTransition &&
-  //       !roomData?.currentWinner
-  //     ) {
-  //       const progressTimeout = setTimeout(() => {
-  //         battleManager.handleTimeExpiry(roomId as string);
-  //       }, 1000);
-
-  //       return () => clearTimeout(progressTimeout);
-  //     }
-  //   }, [
-  //     timeLeft,
-  //     roomData?.hostId,
-  //     roomData?.questionTransition,
-  //     roomData?.currentWinner,
-  //     userId,
-  //     roomId,
-  //   ]);
-
-  // Clear messages when transition starts
   useEffect(() => {
     if (roomData?.questionTransition) {
       setShowBetterLuckMessage(false);
@@ -289,7 +278,6 @@ export default function BattleScreen() {
     }
   }, [roomData?.questionTransition]);
 
-  // Add cleanup for question transitions
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -298,7 +286,6 @@ export default function BattleScreen() {
     };
   }, []);
 
-  // Handle countdown for next question
   useEffect(() => {
     if (!roomData?.nextQuestionStartTime) {
       setShowNextQuestionCountdown(false);
@@ -308,7 +295,7 @@ export default function BattleScreen() {
     setShowNextQuestionCountdown(true);
 
     const interval = setInterval(() => {
-      const now = serverTimestamp();
+      const now = Date.now();
       const timeLeft = Math.max(0, roomData.nextQuestionStartTime - now);
       const seconds = Math.ceil(timeLeft / 1000);
 
@@ -323,7 +310,6 @@ export default function BattleScreen() {
     return () => clearInterval(interval);
   }, [roomData?.nextQuestionStartTime]);
 
-  // Room data listener
   useEffect(() => {
     if (!roomId) return;
 
@@ -336,47 +322,48 @@ export default function BattleScreen() {
 
         if (!data) {
           debugLog("Room not found for roomId:", roomId);
-          Alert.alert("Room Error", "Room not found", [
-            { text: "OK", onPress: () => router.push("/user/home") },
-          ]);
+          setNetworkError(true);
+          // Remove the alert - just set error state
+          // The component will handle navigation naturally
           return;
         }
 
-        // Reset states when question changes
+        // Rest of the logic remains the same
         if (data.currentQuestion !== roomData?.currentQuestion) {
           debugLog("Question changed, resetting states");
           setUserAnswer("");
           setFeedback("");
           setIsAnswered(false);
           setIsProcessing(false);
-          timeExpiryHandled.current = false; // Reset time expiry handler
+          timeExpiryHandled.current = false;
         }
 
         setRoomData(data);
+        setNetworkError(false);
       },
       (error) => {
-        // console.error("BattleScreen - Database listener error:", error);
-        Alert.alert("Error", "Failed to load battle data. Please try again.", [
-          { text: "Retry", onPress: () => window.location.reload() },
-          { text: "Go Home", onPress: () => router.push("/user/home") },
-        ]);
+        console.error("BattleScreen - Database listener error:", error);
+        setNetworkError(true);
+        // Remove alerts - let user stay on results screen
       }
     );
-    return () => unsubscribe();
-  }, [roomId, router]);
 
-  // Keep track of who’s already been announced
+    return () => {
+      unsubscribe();
+      battleManager.updatePlayerConnection(roomId, false);
+    };
+  }, [roomId]);
+
   const otherWinnerAnnouncedRef = useRef(false);
+  const inputRef = useRef(null);
 
   useEffect(() => {
     if (!roomData?.players) return;
 
-    // find the first winner
     const winners = Object.entries(roomData.players)
       .filter(([uid, p]) => p.winner === true)
       .map(([uid]) => uid);
 
-    // if someone won, and it wasn’t you, and we haven’t played the buzzer yet:
     if (
       winners.length > 0 &&
       winners[0] !== userId &&
@@ -387,7 +374,7 @@ export default function BattleScreen() {
     }
   }, [roomData?.players]);
 
-  // In the timer management useEffect, change the interval from 100ms to 1000ms for more precision
+  // FIXED: Timer management with proper calculation
   useEffect(() => {
     if (
       roomData &&
@@ -403,7 +390,7 @@ export default function BattleScreen() {
       }
 
       const updateTimer = () => {
-        const now = serverTimestamp();
+        const now = Date.now(); // Use Date.now() instead of serverTimestamp()
         const elapsed = Math.floor((now - startTime) / 1000);
         const remaining = Math.max(0, timeLimit - elapsed);
         setTimeLeft(remaining);
@@ -415,8 +402,6 @@ export default function BattleScreen() {
       };
 
       updateTimer();
-
-      // Change from 100ms to 1000ms for more accurate timing
       timerRef.current = setInterval(updateTimer, 1000);
 
       return () => {
@@ -437,10 +422,17 @@ export default function BattleScreen() {
     roomData?.status,
   ]);
 
-  // Navigate to results when battle finishes
+  useEffect(() => {
+    if (!roomData?.questionTransition) {
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [roomData?.currentQuestion, roomData?.questionTransition]);
+
   useEffect(() => {
     if (roomData?.status === "finished") {
-      // Add a small delay for smooth transition
       const timeout = setTimeout(() => {
         const playerArray = Object.entries(roomData.players || {})
           .map(([id, data]) => ({
@@ -459,34 +451,22 @@ export default function BattleScreen() {
             currentUserId: userId,
           },
         });
-      }, 500); // 500ms delay instead of 3-4 seconds
+      }, 500);
 
       return () => clearTimeout(timeout);
     }
   }, [roomData?.status, roomData?.players, roomData?.totalQuestions, userId]);
 
-  const handleInputChange = (text: string) => {
-    if (
-      isAnswered ||
-      timeLeft <= 0 ||
-      roomData?.questionTransition ||
-      isProcessing
-    )
-      return;
+  // Update handleInputChange
+  const handleInputChange = async (text: string) => {
+    // Only validate when answer is correct
+    const normalizedAnswer = text.trim().toLowerCase();
+    const normalizedCorrect = currentQuestion?.correctAnswer.toLowerCase();
 
+    if (normalizedAnswer === normalizedCorrect) {
+      handleAnswerSubmit(text);
+    }
     setUserAnswer(text);
-
-    // Clear any existing timeout
-    if (submitTimeoutRef.current) {
-      clearTimeout(submitTimeoutRef.current);
-    }
-
-    // Set new timeout for auto-submit
-    if (text.trim() !== "") {
-      submitTimeoutRef.current = setTimeout(() => {
-        handleAnswerSubmit(text);
-      }, AUTO_SUBMIT_DELAY);
-    }
   };
 
   const handleAnswerSubmit = async (answer: string) => {
@@ -524,18 +504,23 @@ export default function BattleScreen() {
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      // ◀ New code starts
       if (isFirstCorrect) {
         await SoundManager.playSound("rightAnswerSoundEffect");
       } else {
         await SoundManager.playSound("wrongAnswerSoundEffect");
       }
-      // New code ends ▶
+
+      const basePoints = roomData.currentLevel || 1;
+      const pointsEarned = isFirstCorrect ? basePoints * 1 : basePoints * 0;
 
       if (isFirstCorrect) {
-        setFeedback("✅ Correct! You got it first! +100 points");
+        setFeedback(
+          `✅ Correct! ${
+            isFirstCorrect ? "You got it first! " : ""
+          }+${pointsEarned} points`
+        );
       } else {
-        setFeedback("✅ Correct! +50 points");
+        setFeedback("✅ Correct!");
       }
 
       setIsAnswered(true);
@@ -544,7 +529,7 @@ export default function BattleScreen() {
         isFirstCorrect
       );
     } catch (error) {
-      //   console.error("Answer submission error:", error);
+      console.error("Answer submission error:", error);
       setFeedback("Error submitting answer");
     } finally {
       setIsProcessing(false);
@@ -564,36 +549,31 @@ export default function BattleScreen() {
     const players = Object.entries(roomData.players).map(([id, player]) => ({
       id,
       ...player,
+      avatar: player.avatar || 0,
     }));
 
     const elements = [];
     players.forEach((player, index) => {
-      // Add player profile
       elements.push(
         <View key={`player-${player.id}`} className="items-center">
           <View className="rounded-full bg-gray-300 items-center justify-center border-2 border-primary">
-            {player ? (
-              <Image
-                source={avatarImages(player.avatar || 0)}
-                className="w-full h-full rounded-full"
-                style={{ width: 48, height: 48 }}
-                resizeMode="cover"
-              />
-            ) : (
-              <Text className="text-primary font-bold">
-                {(player.username || player.name || "P")
-                  .charAt(0)
-                  .toUpperCase()}
-              </Text>
-            )}
+            <Image
+              source={avatarImages(player.avatar)}
+              className="w-full h-full rounded-full"
+              style={{ width: 48, height: 48 }}
+              resizeMode="cover"
+            />
           </View>
           <Text className="text-xs mt-1 text-center max-w-16" numberOfLines={1}>
             {player.username || player.name}
+            {player.id === userId ? " (You)" : ""}
+          </Text>
+          <Text className="text-xs text-center text-primary font-bold">
+            {player.score || 0} pts
           </Text>
         </View>
       );
 
-      // Add sword between players (except after last player)
       if (index < players.length - 1) {
         elements.push(
           <View key={`sword-${index}`} className="items-center justify-center">
@@ -614,7 +594,25 @@ export default function BattleScreen() {
     );
   };
 
-  // Loading states
+  if (networkError) {
+    return (
+      <View className="flex-1 bg-primary justify-center items-center p-4">
+        <Text className="text-white text-xl mb-4 text-center">
+          Network Error
+        </Text>
+        <Text className="text-gray-300 text-center mb-6">
+          Please check your internet connection and try again.
+        </Text>
+        <TouchableOpacity
+          className="bg-white px-6 py-3 rounded-xl"
+          onPress={() => router.replace("/user/multiplayer-mode-selection")}
+        >
+          <Text className="text-primary font-bold">Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   if (!roomData) {
     return (
       <View className="flex-1 bg-primary justify-center items-center">
@@ -663,7 +661,6 @@ export default function BattleScreen() {
     );
   }
 
-  // In the component render:
   const questionsArray = roomData.questions
     ? Object.values(roomData.questions)
     : [];
@@ -679,90 +676,152 @@ export default function BattleScreen() {
   }
 
   return (
-    <View className="flex-1 bg-white p-4">
-      <View className="flex-row justify-between items-center mb-6">
-        <CircularProgress
-          size={70}
-          progress={(roomData?.currentQuestion + 1) / roomData?.totalQuestions}
-          strokeWidth={8}
-          color="#F97316"
-          text={`${roomData?.currentQuestion + 1}/${roomData?.totalQuestions}`}
-        />
-        <View className="flex-1 ml-4">
-          <View className="flex-row justify-between mb-1">
-            <Text className="text-primary">Time Remaining:</Text>
-            <Text className="text-primary font-bold">{timeLeft}s</Text>
-          </View>
-          <View className="bg-gray-300 h-4 rounded-full overflow-hidden">
-            <View
-              className="h-full rounded-full transition-all duration-1000"
-              style={{
-                backgroundColor: getTimerColor(),
-                width: `${(timeLeft / 15) * 100}%`,
-              }}
-            />
+    <View className="flex-1 bg-white">
+      <ImageBackground
+        source={require("../../assets/gradient.jpg")}
+        style={{ overflow: "hidden", marginTop: 20 }}
+      >
+        <View className="px-4 py-4">
+          <View className="flex-row justify-between items-center">
+            <Text className="text-white text-3xl font-black">
+              Level {roomData?.currentLevel || 1}
+            </Text>
+            <View className="flex-row items-center gap-4">
+              <View className="flex-row items-center bg-primary px-3 py-1 rounded-full">
+                <Text className="text-white text-sm font-black">
+                  {roomData?.players?.[userId]?.score || 0} pts
+                </Text>
+              </View>
+              <View className="flex-row items-center bg-blue-500 px-3 py-1 rounded-full">
+                <Text className="text-white text-sm font-black">
+                  Battle Mode
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
-      </View>
-      {renderProfileImages()}
-      <View className="bg-white rounded-2xl border border-black p-4">
-        <Text className="text-3xl font-black text-black text-center">
-          What is {currentQuestion?.question} ?
-        </Text>
-        <TextInput
-          className="bg-custom-gray p-4 rounded-xl text-xl text-center border border-gray-100 mt-4"
-          value={userAnswer}
-          onChangeText={handleInputChange}
-          placeholder="Type Your Answer"
-          keyboardType="numeric"
-          editable={
-            !isAnswered &&
-            timeLeft > 0 &&
-            !roomData.questionTransition &&
-            !isProcessing
-          }
-        />
-        {feedback && (
-          <Text
-            className={`text-center mt-2 ${
-              feedback.includes("✅") ? "text-green-500" : "text-red-500"
+      </ImageBackground>
+      {/* FIXED: Reduced padding */}
+      <View className="flex-1 p-2">
+        <View className="flex-row justify-between items-center mb-4">
+          <CircularProgress
+            size={70}
+            progress={
+              (roomData?.currentQuestion + 1) / roomData?.totalQuestions
+            }
+            strokeWidth={8}
+            color="#F97316"
+            text={`${roomData?.currentQuestion + 1}/${
+              roomData?.totalQuestions
             }`}
-          >
-            {feedback}
+          />
+          <View className="flex-1 ml-4">
+            <View className="flex-row justify-between mb-1">
+              <Text className="text-primary">Time Remaining:</Text>
+              <Text className="text-primary font-bold">{timeLeft}s</Text>
+            </View>
+            <View className="bg-gray-300 h-4 rounded-full overflow-hidden">
+              <View
+                className="h-full rounded-full transition-all duration-1000"
+                style={{
+                  backgroundColor: getTimerColor(),
+                  width: `${(timeLeft / 15) * 100}%`,
+                }}
+              />
+            </View>
+          </View>
+        </View>
+
+        {renderProfileImages()}
+
+        <View className="bg-white rounded-2xl border border-black p-4">
+          <Text className="text-3xl font-black text-black text-center">
+            What is {currentQuestion?.question} ?
           </Text>
-        )}
-        {isProcessing && (
-          <Text className="text-blue-500 text-center mt-2">Processing...</Text>
-        )}
-      </View>
-      {/* Show players who got it right */}
-      {Object.values(roomData?.players || {}).map((player, index) => {
-        if (player.winner) {
-          return (
+          <TextInput
+            className="bg-custom-gray p-4 rounded-xl text-xl text-center border border-gray-100 mt-4"
+            ref={inputRef}
+            value={userAnswer}
+            onChangeText={handleInputChange}
+            placeholder="Type Your Answer"
+            keyboardType="numeric"
+            editable={
+              !isAnswered &&
+              timeLeft > 0 &&
+              !roomData.questionTransition &&
+              !isProcessing
+            }
+          />
+          {feedback && (
             <Text
-              key={`winner-${index}`}
-              className="text-green-500 text-center mt-4"
+              className={`text-center mt-2 ${
+                feedback.includes("✅") ? "text-green-500" : "text-red-500"
+              }`}
             >
-              🏆 {player.username || player.name} got it right!
+              {feedback}
             </Text>
-          );
-        }
-        return null;
-      })}
-      {timeLeft === 0 && !roomData.questionTransition && (
-        <View className="mt-4">
-          {showBetterLuckMessage ? (
-            <Text className="text-red-500 text-sm text-center font-semibold">
-              Better luck next time! Next question in {betterLuckCountdown}s
-            </Text>
-          ) : (
-            <Text className="text-red-500 text-center">
-              ⏰ Time's up! The correct answer was{" "}
-              {currentQuestion?.correctAnswer}.
+          )}
+          {isProcessing && (
+            <Text className="text-blue-500 text-center mt-2">
+              Processing...
             </Text>
           )}
         </View>
-      )}
+
+        {Object.values(roomData?.players || {}).map((player, index) => {
+          if (player.winner) {
+            return (
+              <Text
+                key={`winner-${index}`}
+                className="text-green-500 text-center mt-4"
+              >
+                🏆 {player.username || player.name} got it right! (+
+                {currentQuestion?.points || 1} pts)
+              </Text>
+            );
+          }
+          return null;
+        })}
+
+        {roomData?.players?.[userId]?.consecutiveCorrect > 0 &&
+          !roomData?.currentWinner &&
+          roomData?.currentWinner !== userId && (
+            <Text className="text-blue-500 text-center mt-2 font-bold">
+              🔥 {roomData.players[userId].consecutiveCorrect} correct in a row!
+              {(() => {
+                const remaining = Math.max(
+                  0,
+                  questionsArray.length - (roomData.currentQuestion + 1)
+                );
+                const toWin = Math.min(50, remaining);
+                return toWin > 0 ? (
+                  <Text className="text-sm"> ({toWin} more to win!)</Text>
+                ) : null;
+              })()}
+            </Text>
+          )}
+
+        {timeLeft === 0 && !roomData.questionTransition && (
+          <View className="mt-4">
+            {showBetterLuckMessage ? (
+              <Text className="text-red-500 text-sm text-center font-semibold">
+                Better luck next time! Next question in {betterLuckCountdown}s
+              </Text>
+            ) : (
+              <Text className="text-red-500 text-center">
+                ⏰ Time's up! The correct answer was{" "}
+                {currentQuestion?.correctAnswer}.
+              </Text>
+            )}
+          </View>
+        )}
+
+        {showNextQuestionCountdown && countdownValue > 0 && (
+          <Text className="text-blue-500 text-center mt-4 font-bold">
+            Next question in {countdownValue}s...
+          </Text>
+        )}
+      </View>
     </View>
   );
 }

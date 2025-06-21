@@ -646,32 +646,17 @@ export default function QuizScreen() {
       const lastDate = userData.lastCompletionDate;
       const currentStreak = userData.streak || 0;
 
-      let newStreak: number;
-
+      let newStreak;
       if (!lastDate) {
-        // First time playing - set streak to 1
         newStreak = 1;
-      } else if (lastDate === today) {
-        // Playing same day - maintain current streak
-        newStreak = currentStreak > 0 ? currentStreak : 1;
       } else {
-        // Playing on different day
         const lastDateObj = new Date(lastDate);
         const todayDateObj = new Date(today);
-        const diffInDays = Math.floor(
-          (todayDateObj.getTime() - lastDateObj.getTime()) /
-            (1000 * 60 * 60 * 24)
-        );
-
-        if (diffInDays === 1) {
-          // Consecutive day - increment streak
-          newStreak = currentStreak + 1;
-        } else if (diffInDays <= 1) {
-          // Within acceptable range - maintain streak (shouldn't happen but safety check)
-          newStreak = currentStreak > 0 ? currentStreak : 1;
+        const diffInHours = (todayDateObj - lastDateObj) / (1000 * 60 * 60);
+        if (diffInHours > 30) {
+          newStreak = 0;
         } else {
-          // Gap of more than 1 day - reset to 1 (since they're playing today)
-          newStreak = 1;
+          newStreak = currentStreak + 1;
         }
       }
 
