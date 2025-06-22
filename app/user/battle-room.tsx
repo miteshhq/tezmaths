@@ -24,6 +24,8 @@ export default function BattleRoom() {
   const [battleStarting, setBattleStarting] = useState(false);
   const [opponentFound, setOpponentFound] = useState(false);
 
+  const [battleStartAttempted, setBattleStartAttempted] = useState(false);
+
   const userId = auth.currentUser?.uid;
   const navigationRef = useRef(false);
   const timeoutRef = useRef(null);
@@ -31,10 +33,28 @@ export default function BattleRoom() {
   const battleNavigationTimeoutRef = useRef(null);
 
   useEffect(() => {
+    const connectToRoom = async () => {
+      if (roomId) {
+        await battleManager.updatePlayerConnection(roomId, true);
+      }
+    };
+
+    connectToRoom();
+
+    return () => {
+      if (roomId) {
+        battleManager.updatePlayerConnection(roomId, false);
+      }
+    };
+  }, [roomId]);
+
+  useEffect(() => {
     setIsMounted(true);
+    setBattleStartAttempted(false);
     return () => {
       setIsMounted(false);
       navigationRef.current = false;
+      setBattleStartAttempted(false);
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
@@ -70,6 +90,25 @@ export default function BattleRoom() {
     },
     [isMounted, router, isNavigating]
   );
+
+  useEffect(() => {
+    if (!room?.matchmakingRoom || !roomId) return;
+
+    // Fallback battle start if auto-start fails
+    const fallbackTimer = setTimeout(() => {
+      if (
+        room.status === "waiting" &&
+        Object.keys(room.players || {}).length === 2 &&
+        room.hostId === userId &&
+        !battleStartAttempted
+      ) {
+        console.log("Fallback: Starting battle manually");
+        handleStartBattle();
+      }
+    }, 10000); // 10 second fallback
+
+    return () => clearTimeout(fallbackTimer);
+  }, [room, roomId, userId, battleStartAttempted]);
 
   // Handle matchmaking timeout
   useEffect(() => {
@@ -107,58 +146,115 @@ export default function BattleRoom() {
   useEffect(() => {
     if (
       room?.matchmakingRoom &&
-      !battleStarting &&
-      !matchmakingTimeout &&
       Object.keys(room.players || {}).length === 2 &&
-      room.hostId === userId &&
-      room.status === "waiting" &&
-      !room.autoStartTriggered &&
-      !room.battleStarting // Add this check
+      room.status === "waiting"
     ) {
-      console.log("Auto-starting matchmaking battle...");
-      setBattleStarting(true);
-
-      battleStartTimeoutRef.current = setTimeout(async () => {
-        try {
-          const currentRoom = await battleManager.validateRoomExists(roomId);
-          if (
-            currentRoom &&
-            Object.values(currentRoom.players || {}).filter((p) => p.ready)
-              .length === 2
-          ) {
+      const players = Object.values(room.players || {});
+      const readyAndConnectedCount = players.filter(
+        (p) => p.ready && p.connected
+      ).length;
+      if (readyAndConnectedCount === 2 && room.hostId === userId) {
+        console.log("Starting battle immediately with 2 ready players...");
+        const startBattle = async () => {
+          try {
             await battleManager.startBattle(roomId);
+            safeNavigate(`/user/battle-screen?roomId=${roomId}&question=0`);
+          } catch (error) {
+            console.error("Battle start failed:", error);
+            Alert.alert("Battle Start Failed", error.message, [
+              {
+                text: "Try Again",
+                onPress: () => setBattleStartAttempted(false),
+              },
+              {
+                text: "Go Back",
+                onPress: () => safeNavigate("/user/multiplayer-mode-selection"),
+              },
+            ]);
           }
-        } catch (error) {
-          console.error("Failed to auto-start battle:", error);
-          setBattleStarting(false);
-        }
-      }, 2000);
-    }
-
-    return () => {
-      if (battleStartTimeoutRef.current) {
-        clearTimeout(battleStartTimeoutRef.current);
-        battleStartTimeoutRef.current = null;
+        };
+        startBattle();
       }
-    };
+    }
   }, [
     room?.matchmakingRoom,
     room?.players,
-    room?.hostId,
     room?.status,
-    room?.autoStartTriggered,
-    room?.battleStarting,
+    room?.hostId,
     userId,
     roomId,
-    battleStarting,
-    matchmakingTimeout,
+    safeNavigate,
   ]);
+
+  // Enhanced fallback navigation timer
+  useEffect(() => {
+    if (battleStarting && room?.matchmakingRoom && battleStartAttempted) {
+      const fallbackTimer = setTimeout(() => {
+        console.log("=== FALLBACK TIMER TRIGGERED ===");
+        console.log("Room status:", room?.status);
+        console.log("Has questions:", !!room?.questions);
+        console.log("Questions length:", room?.questions?.length);
+
+        if (
+          room?.status === "playing" &&
+          room?.questions &&
+          room?.questions.length > 0
+        ) {
+          console.log("Room is ready, forcing navigation...");
+          safeNavigate(`/user/battle-screen?roomId=${roomId}&question=0`);
+        } else {
+          console.log("Battle failed to start properly, resetting...");
+          setBattleStarting(false);
+          setBattleStartAttempted(false);
+          Alert.alert(
+            "Battle Failed",
+            "Unable to start battle. Please try again.",
+            [
+              {
+                text: "Retry",
+                onPress: () => {
+                  setBattleStartAttempted(false);
+                },
+              },
+              {
+                text: "Go Back",
+                onPress: () => safeNavigate("/user/multiplayer-mode-selection"),
+              },
+            ]
+          );
+        }
+      }, 8000); // 8 seconds
+
+      return () => clearTimeout(fallbackTimer);
+    }
+  }, [
+    battleStarting,
+    room?.matchmakingRoom,
+    battleStartAttempted,
+    room?.status,
+    room?.questions,
+    roomId,
+  ]);
+
+  useEffect(() => {
+    const handleConnection = async () => {
+      if (roomId) {
+        await battleManager.updatePlayerConnection(roomId, true);
+      }
+    };
+
+    handleConnection();
+
+    return () => {
+      if (roomId) {
+        battleManager.updatePlayerConnection(roomId, false);
+      }
+    };
+  }, [roomId]);
 
   // Main room listener
   useEffect(() => {
     if (!roomId || !isMounted) return;
-
-    console.log("Setting up room listener for:", roomId);
 
     const validateAndListen = async () => {
       try {
@@ -175,6 +271,20 @@ export default function BattleRoom() {
 
         const unsubscribe = battleManager.listenToRoom(roomId, (roomData) => {
           if (!isMounted || navigationRef.current) return;
+
+          // Add this check to prevent state updates during navigation
+          if (router.isNavigating) return;
+
+          setRoom(roomData);
+          setLoading(false);
+
+          // Add connection check
+          if (
+            roomData?.players?.[userId] &&
+            !roomData.players[userId].connected
+          ) {
+            battleManager.updatePlayerConnection(roomId, true);
+          }
 
           console.log("Room data updated:", {
             status: roomData?.status,
@@ -196,7 +306,7 @@ export default function BattleRoom() {
           setRoom(roomData);
           setLoading(false);
 
-          // FIXED: Enhanced navigation to battle screen
+          // Enhanced navigation to battle screen
           if (
             roomData.status === "playing" &&
             roomData.questions &&
@@ -205,18 +315,27 @@ export default function BattleRoom() {
             !isNavigating
           ) {
             console.log("Battle is ready, navigating to battle screen");
+            console.log(
+              "Room status:",
+              roomData.status,
+              "Questions:",
+              roomData.questions.length
+            );
             setBattleStarting(true);
 
-            // Add a small delay to ensure all players are synchronized
+            // Navigate immediately for matchmaking, small delay for regular rooms
+            const delay = roomData.matchmakingRoom ? 100 : 500;
+
             battleNavigationTimeoutRef.current = setTimeout(() => {
               if (isMounted && !navigationRef.current) {
+                console.log("Executing navigation to battle screen");
                 safeNavigate(
                   `/user/battle-screen?roomId=${roomId}&question=${
                     roomData.currentQuestion || 0
                   }`
                 );
               }
-            }, 500);
+            }, delay);
           }
         });
 
@@ -225,8 +344,12 @@ export default function BattleRoom() {
           battleManager.updatePlayerConnection(roomId, false);
         };
       } catch (error) {
-        console.error("Room error:", error);
-        if (isMounted) {
+        if (error.message.includes("permission")) {
+          Alert.alert(
+            "Permission Error",
+            "You don't have permission to access this room"
+          );
+        } else {
           setError(error);
         }
       }
@@ -239,36 +362,15 @@ export default function BattleRoom() {
     if (isNavigating || battleStarting) return;
 
     try {
-      const connectedPlayersCount = Object.values(room.players).filter(
-        (p) => p.connected
-      ).length;
-      const readyPlayersCount = Object.values(room.players).filter(
-        (p) => p.ready
-      ).length;
-
-      if (connectedPlayersCount < 2) {
-        Alert.alert(
-          "Not Enough Players",
-          "At least 2 players must be connected to start the battle."
-        );
-        return;
-      }
-
-      if (readyPlayersCount < connectedPlayersCount) {
-        Alert.alert(
-          "Players Not Ready",
-          "All connected players must mark themselves as ready to start the battle."
-        );
-        return;
-      }
-
-      console.log("Starting battle with", connectedPlayersCount, "players...");
+      console.log("User triggered battle start");
       setBattleStarting(true);
+      setBattleStartAttempted(true);
       await battleManager.startBattle(roomId);
     } catch (error) {
       console.error("Start battle error:", error);
       setBattleStarting(false);
-      Alert.alert("Error", error.message);
+      setBattleStartAttempted(false);
+      Alert.alert("Error", error.message || "Failed to start battle");
     }
   };
 
@@ -327,7 +429,6 @@ export default function BattleRoom() {
     );
   }
 
-  // Matchmaking room logic
   if (room.matchmakingRoom) {
     const playerCount = Object.keys(room.players || {}).length;
 
@@ -350,14 +451,26 @@ export default function BattleRoom() {
       );
     }
 
+    // For matchmaking rooms, update the "Starting Battle..." section:
     if (battleStarting || room.status === "playing") {
       return (
         <View className="flex-1 justify-center items-center">
           <ActivityIndicator size="large" color="#10B981" />
           <Text className="text-2xl mt-4 text-green-600 font-bold">
-            Starting Battle...
+            {room.status === "playing"
+              ? "Loading Battle..."
+              : "Starting Battle..."}
           </Text>
-          <Text className="text-gray-500 mt-2">Get ready to compete!</Text>
+          <Text className="text-gray-500 mt-2">
+            {room.status === "playing"
+              ? "Preparing questions..."
+              : "Get ready to compete!"}
+          </Text>
+          {battleStartAttempted && (
+            <Text className="text-blue-500 mt-2 text-sm">
+              This may take a few seconds...
+            </Text>
+          )}
         </View>
       );
     }
@@ -373,7 +486,6 @@ export default function BattleRoom() {
           <Text className="text-sm text-gray-400 mt-4 text-center">
             This may take up to 30 seconds
           </Text>
-
           <TouchableOpacity
             className="mt-6 bg-gray-200 px-4 py-2 rounded-lg"
             onPress={() => router.replace("/user/multiplayer-mode-selection")}
@@ -384,7 +496,7 @@ export default function BattleRoom() {
       );
     }
 
-    // Opponent found - Show for a moment then auto-start
+    // Show opponent found only when confirmed
     return (
       <View className="flex-1 justify-center items-center">
         <ActivityIndicator size="large" color="#10B981" />

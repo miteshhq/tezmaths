@@ -1,6 +1,6 @@
 // app/user/profile.tsx
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { GoogleSignin } from "@react-native-google-signin/google-signin";
+// import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
@@ -291,16 +291,16 @@ export default function ProfileScreen() {
       // Always try Google logout operations (even if isSignedIn returns false)
       try {
         // Method 1: Try both revoke and signOut
-        await GoogleSignin.revokeAccess();
-        await GoogleSignin.signOut();
+        // await GoogleSignin.revokeAccess();
+        // await GoogleSignin.signOut();
       } catch (error1) {
         try {
           // Method 2: Try just signOut if revoke fails
-          await GoogleSignin.signOut();
+          //   await GoogleSignin.signOut();
         } catch (error2) {
           try {
             // Method 3: Try clearing tokens manually
-            await GoogleSignin.clearCachedAccessToken();
+            // await GoogleSignin.clearCachedAccessToken();
           } catch (error3) {
             // All Google logout methods failed, continue anyway
           }

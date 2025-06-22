@@ -206,129 +206,132 @@ export class BattleManager {
         }
     }
 
+    async clearAllRooms() {
+        try {
+            const roomsRef = ref(database, "rooms");
+            const snapshot = await get(roomsRef);
+
+            if (snapshot.exists()) {
+                const rooms = snapshot.val();
+                const deletePromises = Object.keys(rooms).map(roomId =>
+                    remove(ref(database, `rooms/${roomId}`))
+                );
+
+                await Promise.all(deletePromises);
+                console.log(`Deleted ${deletePromises.length} rooms`);
+                return deletePromises.length;
+            }
+            return 0;
+        } catch (error) {
+            console.error("Clear rooms error:", error);
+            throw error;
+        }
+    }
+
     async findRandomMatch() {
         try {
             const user = await this.waitForAuth();
             const userId = user.uid;
 
-            console.log("Starting random match search for user:", userId);
-
-            // First, try to find an existing matchmaking room
+            // First, try to find an existing matchmaking room with space
             const roomsSnapshot = await get(ref(database, "rooms"));
             const rooms = roomsSnapshot.val() || {};
 
-            const availableRooms = Object.entries(rooms).filter(([roomId, room]) => {
-                const playerCount = Object.keys(room.players || {}).length;
-                const isWaiting = room.status === "waiting";
-                const isMatchmaking = room.matchmakingRoom;
-                const userNotInRoom = !room.players[userId];
-                const notStarting = !room.battleStarting && !room.autoStartTriggered;
-
-                return (
-                    isMatchmaking &&
-                    isWaiting &&
-                    playerCount === 1 &&
-                    userNotInRoom &&
-                    notStarting
-                );
-            });
-
-            console.log("Available rooms found:", availableRooms.length);
+            // Find rooms that are: 
+            // 1. Matchmaking rooms
+            // 2. In waiting status
+            // 3. Have less than 2 players
+            const availableRooms = Object.entries(rooms).filter(([roomId, room]) =>
+                room.matchmakingRoom &&
+                room.status === "waiting" &&
+                Object.keys(room.players || {}).length < 2
+            );
 
             if (availableRooms.length > 0) {
-                // Join existing room
+                // Join the first available room
                 const [roomId, roomData] = availableRooms[0];
-                console.log("Joining existing room:", roomId);
-
-                // Mark room as starting to prevent others from joining
-                await update(ref(database, `rooms/${roomId}`), {
-                    waitingForOpponent: true,
-                    battleStarting: false
-                });
-
-                const { roomId: joinedRoomId } = await this.joinRoom(roomData.code);
-                return { roomId: joinedRoomId, roomCode: roomData.code };
-            } else {
-                // ... create new room and set waitingForOpponent ...
-                await update(ref(database, `rooms/${roomId}`), {
-                    waitingForOpponent: true,
-                    battleStarting: false
-                });
+                await this.joinRoom(roomData.code);
+                return {
+                    roomId,
+                    roomCode: roomData.code,
+                    isHost: false  // We're joining, not hosting
+                };
             }
 
-            // No available rooms, create new one
-            console.log("No available rooms, creating new matchmaking room");
+            // If no rooms available, create a new matchmaking room
             const roomName = `Quick Battle ${Date.now()}`;
             const { roomId, roomCode } = await this.createRoom(roomName, 2);
 
-            // Mark as matchmaking room and set player ready
+            // Mark as matchmaking room and set player as ready
             await update(ref(database, `rooms/${roomId}`), {
                 matchmakingRoom: true,
-                [`players/${userId}/ready`]: true,
-                waitingForOpponent: true,
-                battleStarting: false,
-                autoStartTriggered: false
+                [`players/${userId}/ready`]: true
             });
 
-            console.log("Created matchmaking room:", roomId);
-            return { roomId, roomCode };
-
+            return {
+                roomId,
+                roomCode,
+                isHost: true  // We're the host of this new room
+            };
         } catch (error) {
             console.error("Random match error:", error);
             throw new Error("Failed to find or create a match: " + error.message);
         }
     }
 
-    // FIXED: Enhanced room listener with proper auto-start logic
+
+    async cleanupMatchmakingRoom(roomId) {
+        try {
+            await remove(ref(database, `matchmaking/${roomId}`));
+        } catch (error) {
+            console.error("Cleanup error:", error);
+        }
+    }
+
+    async cleanupStaleMatchmaking(userId) {
+        const matchmakingRef = ref(database, "matchmaking");
+        const snapshot = await get(matchmakingRef);
+        const matchmaking = snapshot.val() || {};
+
+        await Promise.all(
+            Object.entries(matchmaking)
+                .filter(([_, data]) => data.players && data.players[userId])
+                .map(([roomId, _]) => this.cleanupMatchmakingRoom(roomId))
+        );
+    }
+
     listenToRoom(roomId, callback) {
         const roomRef = ref(database, `rooms/${roomId}`);
         const listener = onValue(roomRef, async (snapshot) => {
             const roomData = snapshot.val();
 
-            if (roomData) {
-                const connectedPlayers = Object.values(roomData.players || {}).filter(p => p.connected);
-                console.log(`Room ${roomId} update: status=${roomData.status}, connectedPlayers=${connectedPlayers.length}, hostId=${roomData.hostId}`);
+            console.log(`Room ${roomId} update:`, {
+                status: roomData?.status,
+                players: roomData?.players ? Object.keys(roomData.players).length : 0,
+                hostId: roomData?.hostId,
+                currentUserId: this.userId
+            });
 
-                // FIXED: Auto-start logic for matchmaking rooms
-                if (roomData.matchmakingRoom &&
+            if (roomData) {
+                // Auto-start only if current user is host
+                if (roomData?.matchmakingRoom &&
                     roomData.status === "waiting" &&
-                    connectedPlayers.length === 2 &&
+                    Object.keys(roomData.players || {}).length === roomData.maxPlayers &&
                     roomData.hostId === this.userId) {
 
-                    console.log("Matchmaking room full, checking if should auto-start...");
+                    console.log("Conditions met for auto-start");
 
-                    // Check if both players are ready (they should be auto-ready for matchmaking)
-                    const readyPlayers = connectedPlayers.filter(p => p.ready);
-                    if (readyPlayers.length === 2 && !roomData.autoStartTriggered) {
-                        console.log("Both players ready, auto-starting battle...");
-
-                        // Mark as auto-start triggered to prevent multiple attempts
-                        await update(roomRef, { autoStartTriggered: true });
-
-                        setTimeout(async () => {
-                            try {
-                                const currentSnapshot = await get(roomRef);
-                                const currentRoom = currentSnapshot.val();
-
-                                if (currentRoom &&
-                                    currentRoom.status === "waiting" &&
-                                    Object.values(currentRoom.players || {}).filter(p => p.connected && p.ready).length === 2) {
-                                    console.log(`Starting battle for room ${roomId} with 2 ready players`);
-                                    await this.startBattle(roomId);
-                                    console.log("Battle started successfully");
-                                } else {
-                                    console.log(`Battle start aborted for room ${roomId}: conditions not met`);
-                                }
-                            } catch (error) {
-                                console.error("Auto-start battle error:", error);
-                                // Reset flag on error
-                                await update(roomRef, { autoStartTriggered: false });
-                            }
-                        }, 1500); // 1.5 second delay
-                    }
+                    // Add a delay to ensure both clients are ready
+                    setTimeout(async () => {
+                        try {
+                            console.log("=== STARTING BATTLE ===");
+                            await this.startBattle(roomId);
+                            console.log("=== BATTLE START SUCCESS ===");
+                        } catch (error) {
+                            console.error("=== BATTLE START FAILED ===", error);
+                        }
+                    }, 2000);
                 }
-            } else {
-                console.log(`Room ${roomId} not found or deleted`);
             }
 
             callback(roomData);
@@ -376,13 +379,11 @@ export class BattleManager {
             }
 
             if (roomData.players && roomData.players[userId]) {
-                // Player already in room, just update connection
                 await update(ref(database, `rooms/${roomId}/players/${userId}`), {
                     connected: true,
-                    ready: roomData.matchmakingRoom ? true : false, // Auto ready for matchmaking, manual for regular rooms
+                    ready: true, // Add this line to mark player as ready
                     lastSeen: serverTimestamp()
                 });
-                console.log("Reconnected to room");
             } else {
                 // New player joining
                 const playerName = user.displayName ||
@@ -403,13 +404,16 @@ export class BattleManager {
                     avatar: avatar || 0
                 };
 
+                // Ensure player is marked as ready for matchmaking rooms
+                if (roomData.matchmakingRoom) {
+                    playerData.ready = true;
+                }
+
                 await update(ref(database, `rooms/${roomId}`), {
                     [`players/${userId}`]: playerData,
                     currentPlayerCount: currentPlayerCount + 1,
                     lastActivity: serverTimestamp()
                 });
-
-                console.log("Successfully joined room as player", currentPlayerCount + 1);
             }
 
             return { roomId, roomData: { ...roomData, code: roomCode } };
@@ -431,15 +435,20 @@ export class BattleManager {
             const user = await this.waitForAuth();
             const userId = user.uid;
 
-            const matchmakingRef = ref(database, `matchmaking/${userId}`);
-            await remove(matchmakingRef);
+            const matchmakingRef = ref(database, "matchmaking");
+            const snapshot = await get(matchmakingRef);
+            const matchmaking = snapshot.val() || {};
 
-            if (this.matchmakingListener) {
-                off(ref(database, "matchmaking"), this.matchmakingListener);
-                this.matchmakingListener = null;
+            const ourEntry = Object.entries(matchmaking).find(([roomId, data]) => {
+                return data.hostId === userId || (data.players && data.players[userId]);
+            });
+
+            if (ourEntry) {
+                const [roomId] = ourEntry;
+                await update(ref(database, `matchmaking/${roomId}`), null);
             }
         } catch (error) {
-            console.error("Cancel matchmaking error:", error);
+            console.error("[BattleManager] Cancel matchmaking error:", error);
         }
     }
 
@@ -485,29 +494,17 @@ export class BattleManager {
             const user = await this.waitForAuth();
             const userId = user.uid;
 
-            const playerRef = ref(database, `rooms/${roomId}/players/${userId}`);
-            await update(playerRef, {
+            console.log(`Updating connection: ${connected} for ${userId} in ${roomId}`);
+
+            await update(ref(database, `rooms/${roomId}/players/${userId}`), {
                 connected,
                 lastSeen: serverTimestamp()
             });
 
-            if (!connected) {
-                const roomRef = ref(database, `rooms/${roomId}`);
-                const snapshot = await get(roomRef);
-                const room = snapshot.val();
-
-                if (room && room.status === "playing") {
-                    const connectedPlayers = Object.values(room.players || {}).filter(p => p.connected);
-                    if (connectedPlayers.length < 2) {
-                        const lastPlayer = connectedPlayers[0];
-                        if (lastPlayer) {
-                            await this.declareWinner(roomId, lastPlayer.userId || lastPlayer.id);
-                        } else {
-                            await this.endBattle(roomId);
-                        }
-                    }
-                }
-            }
+            // Add room activity update
+            await update(ref(database, `rooms/${roomId}`), {
+                lastActivity: serverTimestamp()
+            });
         } catch (error) {
             console.error("Update player connection error:", error);
         }
@@ -533,12 +530,12 @@ export class BattleManager {
         }
     }
 
-    // Add fallback questions method
+
     getFallbackQuestions(count) {
-        console.log("Using fallback questions");
+        console.log("[BattleManager] Using fallback questions");
         return Array(count).fill().map((_, i) => ({
             question: `${i + 1} + ${i + 5}`,
-            correctAnswer: `${i + 1 + i + 5}`,
+            correctAnswer: `${(i + 1) + (i + 5)}`, // Fixed: proper addition instead of string concatenation
             timeLimit: 15,
             points: 10,
             explanation: `Add ${i + 1} and ${i + 5} together`
@@ -628,55 +625,26 @@ export class BattleManager {
         };
     }
 
-    // FIXED: Improved startBattle method
     async startBattle(roomId) {
         try {
+            console.log("[startBattle] Starting battle for room:", roomId);
             const user = await this.waitForAuth();
-            const userId = user.uid;
+            this.userId = user.uid; // Ensure userId is set
+            console.log("[startBattle] User:", this.userId);
 
             const roomRef = ref(database, `rooms/${roomId}`);
             const snapshot = await get(roomRef);
             const room = snapshot.val();
 
-            if (!room) {
-                throw new Error("Room not found");
-            }
-
-            if (room.hostId !== userId) {
-                throw new Error("Only host can start battle");
-            }
-
-            if (room.status === "playing") {
-                console.log("Battle already started");
-                return;
-            }
-
-            const connectedPlayers = Object.values(room.players || {}).filter(p => p.connected);
-
-            if (connectedPlayers.length < 2) {
+            if (!room) throw new Error("Room not found");
+            if (room.hostId !== this.userId) return; // Only host can start
+            if (Object.values(room.players || {}).filter(p => p.connected).length < 2) {
                 throw new Error("Need at least 2 players");
             }
 
-            if (!room.matchmakingRoom) {
-                const readyPlayers = connectedPlayers.filter(p => p.ready);
-                if (readyPlayers.length < connectedPlayers.length) {
-                    throw new Error("Not all connected players are ready");
-                }
-            }
-
-            let questionData;
-            try {
-                console.log("Fetching questions for battle...");
-                questionData = await this.generateQuestions(1, 10);
-                console.log(`Questions fetched: ${questionData.questions.length} questions`);
-            } catch (error) {
-                console.error("Question generation failed:", error);
-                questionData = {
-                    questions: this.getFallbackQuestions(50),
-                    levelInfo: [{ level: 1, questionCount: 50, pointsPerQuestion: 1 }],
-                    totalLevels: 1
-                };
-            }
+            console.log("[startBattle] Generating questions...");
+            const questionData = await this.generateQuestions(1, 10);
+            console.log(`[startBattle] Questions fetched: ${questionData.questions.length} questions`);
 
             if (!questionData.questions || questionData.questions.length === 0) {
                 throw new Error("Failed to generate questions");
@@ -688,7 +656,6 @@ export class BattleManager {
                 playerUpdates[`players/${playerId}/answers`] = {};
                 playerUpdates[`players/${playerId}/answer`] = "";
                 playerUpdates[`players/${playerId}/winner`] = false;
-                playerUpdates[`players/${playerId}/levelScore`] = 0;
                 playerUpdates[`players/${playerId}/consecutiveCorrect`] = 0;
             });
 
@@ -696,11 +663,9 @@ export class BattleManager {
             const updateData = {
                 status: "playing",
                 questions: questionData.questions,
-                levelInfo: questionData.levelInfo,
                 currentQuestion: 0,
                 currentLevel: 1,
                 totalQuestions: questionData.questions.length,
-                totalLevels: questionData.totalLevels,
                 questionTimeLimit: 15,
                 gameStartedAt: now,
                 questionStartedAt: now,
@@ -708,16 +673,16 @@ export class BattleManager {
                 questionTransition: false,
                 nextQuestionStartTime: null,
                 currentWinner: null,
-                gamePhase: "playing",
                 maxConsecutiveTarget: 50,
-                autoStartTriggered: false, // Reset flag
+                consecutiveWinThreshold: 50,
                 ...playerUpdates
             };
 
+            console.log("[startBattle] Updating room with battle data");
             await update(roomRef, updateData);
-            console.log(`Battle started for room ${roomId} with ${connectedPlayers.length} players`);
+            console.log("[startBattle] Battle started successfully");
         } catch (error) {
-            console.error("Start battle error:", error);
+            console.error("[startBattle] Error:", error);
             throw error;
         }
     }
@@ -744,6 +709,7 @@ export class BattleManager {
             if (!isCorrect) {
                 await update(ref(database, `rooms/${roomId}/players/${userId}`), {
                     answer: userAnswer,
+                    consecutiveCorrect: 0, // Reset on incorrect answer
                     lastActivity: serverTimestamp()
                 });
                 return false;
@@ -759,8 +725,11 @@ export class BattleManager {
             const pointsToAdd = txResult.committed && txResult.snapshot.val() === userId ? basePoints * 1 : basePoints * 0;
             const newScore = (currentPlayer.score || 0) + pointsToAdd;
 
+            const remainingQuestions = room.totalQuestions - (questionIndex + 1);
+            const gapToLastQuestion = remainingQuestions + 1; // Include current question
+
             if (txResult.committed && txResult.snapshot.val() === userId) {
-                // First correct answer - increment consecutive and reset others
+                // First correct answer
                 const newConsecutiveCorrect = (currentPlayer.consecutiveCorrect || 0) + 1;
 
                 // Reset consecutive count for all other players
@@ -781,10 +750,7 @@ export class BattleManager {
                 });
 
                 // Check for consecutive win condition
-                const remainingQuestions = room.questions.length - (questionIndex + 1);
-                const questionsToWin = Math.min(50, remainingQuestions + 1);
-
-                if (newConsecutiveCorrect >= questionsToWin) {
+                if (gapToLastQuestion > room.consecutiveWinThreshold && newConsecutiveCorrect >= room.maxConsecutiveTarget) {
                     await this.declareWinner(roomId, userId);
                     return true;
                 }
@@ -795,11 +761,7 @@ export class BattleManager {
 
                 return true;
             } else {
-                const playerUpdates = {};
-                Object.keys(room.players).forEach(playerId => {
-                    playerUpdates[`players/${playerId}/consecutiveCorrect`] = 0;
-                });
-                // Not first, but correct - reset consecutive
+                // Not first, but correct
                 await update(ref(database, `rooms/${roomId}/players/${userId}`), {
                     score: newScore,
                     answer: userAnswer,
@@ -851,7 +813,6 @@ export class BattleManager {
         }
     }
 
-    // Add method to update user scores
     async updateUserScore(userId, scoreToAdd) {
         try {
             if (scoreToAdd <= 0) return;
@@ -867,18 +828,18 @@ export class BattleManager {
             const lastDate = userData.lastCompletionDate;
             const currentStreak = userData.streak || 0;
 
-            let newStreak;
-            if (!lastDate || lastDate !== today) {
-                const lastDateObj = new Date(lastDate || today);
+            let newStreak = currentStreak;
+            if (lastDate) {
+                const lastDateObj = new Date(lastDate);
                 const todayDateObj = new Date(today);
                 const diffInHours = (todayDateObj - lastDateObj) / (1000 * 60 * 60);
-                if (diffInHours > 30) {
-                    newStreak = 0;
+                if (diffInHours > 30) { // Reset only after 30 hours
+                    newStreak = 1; // Start new streak
                 } else {
-                    newStreak = currentStreak + 1;
+                    newStreak = currentStreak + 1; // Continue streak
                 }
             } else {
-                newStreak = currentStreak > 0 ? currentStreak : 1;
+                newStreak = 1; // First play
             }
 
             await update(userRef, {
@@ -886,7 +847,6 @@ export class BattleManager {
                 streak: newStreak,
                 lastCompletionDate: today,
             });
-
         } catch (error) {
             console.error("Update user score error:", error);
         }
@@ -897,8 +857,11 @@ export class BattleManager {
         try {
             const roomRef = ref(database, `rooms/${roomId}`);
             const snapshot = await get(roomRef);
-            const roomData = snapshot.val();
+            if (!snapshot.exists()) {
+                throw new Error("Room has been deleted");
+            }
 
+            const roomData = snapshot.val();
             if (!roomData) return;
 
             const nextIndex = roomData.currentQuestion + 1;
@@ -940,7 +903,6 @@ export class BattleManager {
         }
     }
 
-    // Update endBattle method
     async endBattle(roomId) {
         try {
             const roomRef = ref(database, `rooms/${roomId}`);
@@ -949,8 +911,28 @@ export class BattleManager {
 
             if (!roomData) return;
 
-            // Find winner based on highest score
-            const playerArray = Object.entries(roomData.players || {})
+            const players = roomData.players || {};
+            if (Object.keys(players).length === 0) {
+                await update(roomRef, {
+                    status: "finished",
+                    gameEndReason: "no_players_left",
+                    finishedAt: serverTimestamp(),
+                    lastActivity: serverTimestamp()
+                });
+                setTimeout(async () => {
+                    try {
+                        const currentSnapshot = await get(roomRef);
+                        if (currentSnapshot.exists()) {
+                            await remove(roomRef);
+                        }
+                    } catch (error) {
+                        console.error("Final room cleanup error:", error);
+                    }
+                }, 90000);
+                return;
+            }
+
+            const playerArray = Object.entries(players)
                 .map(([id, data]) => ({
                     userId: id,
                     username: data.username || data.name || "Unknown Player",
@@ -963,7 +945,6 @@ export class BattleManager {
 
             const winner = playerArray[0];
 
-            // Update final results
             const playerUpdates = {};
             playerArray.forEach(player => {
                 playerUpdates[`players/${player.userId}/finalScore`] = player.score;
@@ -980,12 +961,10 @@ export class BattleManager {
                 lastActivity: serverTimestamp()
             });
 
-            // Update user scores in database
             for (const player of playerArray) {
                 await this.updateUserScore(player.userId, player.score);
             }
 
-            // Schedule cleanup
             setTimeout(async () => {
                 try {
                     const currentSnapshot = await get(roomRef);

@@ -24,8 +24,7 @@ const AUTO_SUBMIT_DELAY = 400;
 
 const avatarImages = (avatar) => {
   const avatarNumber =
-    typeof avatar === "string" ? parseInt(avatar) : avatar || 0;
-
+    typeof avatar === "number" ? avatar : parseInt(avatar) || 0;
   switch (avatarNumber) {
     case 0:
       return require("../../assets/avatars/avatar1.jpg");
@@ -439,11 +438,14 @@ export default function BattleScreen() {
             userId: id,
             username: data.username || data.name,
             score: data.score || 0,
-            avatar: data.avatar || 0,
+            // FIXED: Ensure avatar is always a number, handle null/undefined properly
+            avatar: data.avatar != null ? Number(data.avatar) : 0,
           }))
           .sort((a, b) => b.score - a.score);
 
-        router.push({
+        console.log("Navigating to results with player data:", playerArray);
+
+        router.replace({
           pathname: "/user/battle-results",
           params: {
             players: JSON.stringify(playerArray),
@@ -546,11 +548,16 @@ export default function BattleScreen() {
   const renderProfileImages = () => {
     if (!roomData?.players) return null;
 
-    const players = Object.entries(roomData.players).map(([id, player]) => ({
-      id,
-      ...player,
-      avatar: player.avatar || 0,
-    }));
+    const players = Object.entries(roomData.players || {}).map(
+      ([id, player]) => ({
+        id,
+        ...player,
+        avatar:
+          typeof player.avatar === "number"
+            ? player.avatar
+            : parseInt(player.avatar) || 0,
+      })
+    );
 
     const elements = [];
     players.forEach((player, index) => {
@@ -784,8 +791,9 @@ export default function BattleScreen() {
         })}
 
         {roomData?.players?.[userId]?.consecutiveCorrect > 0 &&
-          !roomData?.currentWinner &&
-          roomData?.currentWinner !== userId && (
+          roomData.totalQuestions - roomData.currentQuestion >
+            roomData.consecutiveWinThreshold &&
+          !roomData?.currentWinner && (
             <Text className="text-blue-500 text-center mt-2 font-bold">
               🔥 {roomData.players[userId].consecutiveCorrect} correct in a row!
               {(() => {
@@ -793,7 +801,10 @@ export default function BattleScreen() {
                   0,
                   questionsArray.length - (roomData.currentQuestion + 1)
                 );
-                const toWin = Math.min(50, remaining);
+                const toWin = Math.min(
+                  roomData.maxConsecutiveTarget,
+                  remaining
+                );
                 return toWin > 0 ? (
                   <Text className="text-sm"> ({toWin} more to win!)</Text>
                 ) : null;

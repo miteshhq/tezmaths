@@ -4,7 +4,7 @@
         "slug": "tezmaths",
         "version": "1.0.1",
         "orientation": "portrait",
-        "icon": "./assets/branding/logo.png",
+        "icon": "./assets/branding/main-logo.png",
         "scheme": "tezmaths",
         "userInterfaceStyle": "automatic",
         "newArchEnabled": true,
@@ -32,7 +32,7 @@
         "plugins": [
             "expo-router",
             "expo-dev-client",
-            "@react-native-google-signin/google-signin",
+            // "@react-native-google-signin/google-signin",
             [
                 "expo-splash-screen",
                 {

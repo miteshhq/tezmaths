@@ -30,18 +30,19 @@ const shareConfig = {
 };
 
 const avatarImages = (avatar) => {
-  switch (avatar) {
-    case "0":
+  const avatarNumber = Number(avatar) || 0;
+  switch (avatarNumber) {
+    case 0:
       return require("../../assets/avatars/avatar1.jpg");
-    case "1":
+    case 1:
       return require("../../assets/avatars/avatar2.jpg");
-    case "2":
+    case 2:
       return require("../../assets/avatars/avatar3.jpg");
-    case "3":
+    case 3:
       return require("../../assets/avatars/avatar4.jpg");
-    case "4":
+    case 4:
       return require("../../assets/avatars/avatar5.jpg");
-    case "5":
+    case 5:
       return require("../../assets/avatars/avatar6.jpg");
     default:
       return require("../../assets/avatars/avatar1.jpg");
@@ -61,27 +62,6 @@ export default function BattleResultsScreen() {
 
   const currentUserId = auth.currentUser?.uid;
 
-  let parsedPlayers = [];
-
-  try {
-    parsedPlayers = JSON.parse(players || "[]");
-  } catch (error) {
-    // console.error("BattleResultsScreen - Parse error:", error);
-  }
-
-  parsedPlayers = parsedPlayers.map((p) => ({
-    ...p,
-    avatar: p.avatar || "0",
-  }));
-
-  // Sort players by score (highest first)
-  parsedPlayers = parsedPlayers.sort((a, b) => b.score - a.score);
-
-  const userRank =
-    parsedPlayers.findIndex((p) => p.userId === currentUserId) + 1;
-  const userScore =
-    parsedPlayers.find((p) => p.userId === currentUserId)?.score || 0;
-
   useEffect(() => {
     const loadUserData = async () => {
       try {
@@ -96,6 +76,26 @@ export default function BattleResultsScreen() {
     };
     loadUserData();
   }, []);
+
+  let parsedPlayers = [];
+  try {
+    parsedPlayers = JSON.parse(players || "[]");
+  } catch (error) {
+    console.error("BattleResultsScreen - Parse error:", error);
+  }
+
+  parsedPlayers = parsedPlayers.map((p) => ({
+    ...p,
+    avatar: typeof p.avatar === "number" ? p.avatar : parseInt(p.avatar) || 0,
+  }));
+
+  // Sort players by score (highest first)
+  parsedPlayers = parsedPlayers.sort((a, b) => b.score - a.score);
+
+  const userRank =
+    parsedPlayers.findIndex((p) => p.userId === currentUserId) + 1;
+  const userScore =
+    parsedPlayers.find((p) => p.userId === currentUserId)?.score || 0;
 
   // Play victory sound on focus if userRank is 1
   useFocusEffect(
@@ -128,7 +128,8 @@ export default function BattleResultsScreen() {
 
     const elements = [];
     parsedPlayers.forEach((player, index) => {
-      const avatarToUse = player.avatar || "0"; // Use room data avatar for all players
+      // Use avatar directly - it's guaranteed to be a number now
+      const avatarToUse = player.avatar;
 
       elements.push(
         <View key={`player-${player.userId}`} className="items-center">
