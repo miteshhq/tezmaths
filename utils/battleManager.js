@@ -233,36 +233,28 @@ export class BattleManager {
             const user = await this.waitForAuth();
             const userId = user.uid;
 
-            // First, try to find an existing matchmaking room with space
             const roomsSnapshot = await get(ref(database, "rooms"));
             const rooms = roomsSnapshot.val() || {};
 
-            // Find rooms that are: 
-            // 1. Matchmaking rooms
-            // 2. In waiting status
-            // 3. Have less than 2 players
             const availableRooms = Object.entries(rooms).filter(([roomId, room]) =>
                 room.matchmakingRoom &&
                 room.status === "waiting" &&
-                Object.keys(room.players || {}).length < 2
+                Object.keys(room.players || {}).length === 0 // Ensure no players
             );
 
             if (availableRooms.length > 0) {
-                // Join the first available room
                 const [roomId, roomData] = availableRooms[0];
                 await this.joinRoom(roomData.code);
                 return {
                     roomId,
                     roomCode: roomData.code,
-                    isHost: false  // We're joining, not hosting
+                    isHost: false
                 };
             }
 
-            // If no rooms available, create a new matchmaking room
             const roomName = `Quick Battle ${Date.now()}`;
             const { roomId, roomCode } = await this.createRoom(roomName, 2);
 
-            // Mark as matchmaking room and set player as ready
             await update(ref(database, `rooms/${roomId}`), {
                 matchmakingRoom: true,
                 [`players/${userId}/ready`]: true
@@ -271,7 +263,7 @@ export class BattleManager {
             return {
                 roomId,
                 roomCode,
-                isHost: true  // We're the host of this new room
+                isHost: true
             };
         } catch (error) {
             console.error("Random match error:", error);
@@ -813,6 +805,7 @@ export class BattleManager {
         }
     }
 
+    // In battleManager.js, update updateUserScore
     async updateUserScore(userId, scoreToAdd) {
         try {
             if (scoreToAdd <= 0) return;
@@ -824,22 +817,28 @@ export class BattleManager {
             const currentTotalPoints = userData.totalPoints || 0;
             const newTotalPoints = currentTotalPoints + scoreToAdd;
 
-            const today = new Date().toISOString().split("T")[0];
-            const lastDate = userData.lastCompletionDate;
-            const currentStreak = userData.streak || 0;
+            const now = new Date();
+            const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
+            const istDate = new Date(now.getTime() + istOffset);
+            const today = istDate.toISOString().split("T")[0]; // YYYY-MM-DD
 
-            let newStreak = currentStreak;
-            if (lastDate) {
+            const lastDate = userData.lastCompletionDate;
+            let newStreak = userData.streak || 0;
+
+            if (!lastDate) {
+                newStreak = 1;
+            } else {
                 const lastDateObj = new Date(lastDate);
                 const todayDateObj = new Date(today);
-                const diffInHours = (todayDateObj - lastDateObj) / (1000 * 60 * 60);
-                if (diffInHours > 30) { // Reset only after 30 hours
-                    newStreak = 1; // Start new streak
+                const diffInDays = Math.floor((todayDateObj - lastDateObj) / (1000 * 60 * 60 * 24));
+
+                if (diffInDays === 0) {
+                    newStreak = userData.streak; // Same day, no change
+                } else if (diffInDays === 1) {
+                    newStreak = (userData.streak || 0) + 1; // Next day, increment
                 } else {
-                    newStreak = currentStreak + 1; // Continue streak
+                    newStreak = 1; // Missed day, reset to 1
                 }
-            } else {
-                newStreak = 1; // First play
             }
 
             await update(userRef, {
@@ -847,6 +846,7 @@ export class BattleManager {
                 streak: newStreak,
                 lastCompletionDate: today,
             });
+
         } catch (error) {
             console.error("Update user score error:", error);
         }
@@ -928,7 +928,7 @@ export class BattleManager {
                     } catch (error) {
                         console.error("Final room cleanup error:", error);
                     }
-                }, 90000);
+                }, 30000);
                 return;
             }
 
@@ -964,17 +964,19 @@ export class BattleManager {
             for (const player of playerArray) {
                 await this.updateUserScore(player.userId, player.score);
             }
+            
+            await remove(roomRef);
 
-            setTimeout(async () => {
-                try {
-                    const currentSnapshot = await get(roomRef);
-                    if (currentSnapshot.exists()) {
-                        await remove(roomRef);
-                    }
-                } catch (error) {
-                    console.error("Final room cleanup error:", error);
-                }
-            }, 90000);
+            // setTimeout(async () => {
+            //     try {
+            //         const currentSnapshot = await get(roomRef);
+            //         if (currentSnapshot.exists()) {
+            //             await remove(roomRef);
+            //         }
+            //     } catch (error) {
+            //         console.error("Final room cleanup error:", error);
+            //     }
+            // }, 15000); 
 
         } catch (error) {
             console.error("End battle error:", error);

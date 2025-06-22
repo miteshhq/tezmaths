@@ -431,33 +431,35 @@ export default function BattleScreen() {
   }, [roomData?.currentQuestion, roomData?.questionTransition]);
 
   useEffect(() => {
+    return () => {
+      // Clean up room listeners
+      battleManager.removeRoomListener(roomId);
+
+      // Update connection status
+      if (roomId) {
+        battleManager.updatePlayerConnection(roomId, false);
+      }
+    };
+  }, [roomId]);
+
+  useEffect(() => {
     if (roomData?.status === "finished") {
-      const timeout = setTimeout(() => {
-        const playerArray = Object.entries(roomData.players || {})
-          .map(([id, data]) => ({
-            userId: id,
-            username: data.username || data.name,
-            score: data.score || 0,
-            // FIXED: Ensure avatar is always a number, handle null/undefined properly
-            avatar: data.avatar != null ? Number(data.avatar) : 0,
-          }))
-          .sort((a, b) => b.score - a.score);
-
-        console.log("Navigating to results with player data:", playerArray);
-
-        router.replace({
-          pathname: "/user/battle-results",
-          params: {
-            players: JSON.stringify(playerArray),
-            totalQuestions: roomData.totalQuestions?.toString() || "0",
-            currentUserId: userId,
-          },
-        });
-      }, 500);
-
-      return () => clearTimeout(timeout);
+      const playerArray = callEndBattle(roomId);
+      router.replace({
+        pathname: "/user/battle-results",
+        params: {
+          players: JSON.stringify(playerArray),
+          totalQuestions: roomData.totalQuestions?.toString() || "0",
+          currentUserId: userId,
+        },
+      });
     }
   }, [roomData?.status, roomData?.players, roomData?.totalQuestions, userId]);
+
+  const callEndBattle = async (roomId) => {
+    const playerArray = await battleManager.endBattle(roomId);
+    return playerArray;
+  };
 
   // Update handleInputChange
   const handleInputChange = async (text: string) => {

@@ -50,17 +50,22 @@ const avatarImages = (avatar) => {
 };
 
 export default function BattleResultsScreen() {
-  const { players, totalQuestions } = useLocalSearchParams();
+  const { players, totalQuestions, currentUserId } = useLocalSearchParams();
   const cardRef = useRef();
   const viewShotRef = useRef();
+
+  const [resultsData, setResultsData] = useState({
+    players: [],
+    totalQuestions: 0,
+    userRank: 0,
+    userScore: 0,
+  });
 
   // Share popup states
   const [isPopupVisible, setPopupVisible] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
 
   const [userData, setUserData] = useState({ avatar: 0 });
-
-  const currentUserId = auth.currentUser?.uid;
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -96,6 +101,18 @@ export default function BattleResultsScreen() {
     parsedPlayers.findIndex((p) => p.userId === currentUserId) + 1;
   const userScore =
     parsedPlayers.find((p) => p.userId === currentUserId)?.score || 0;
+
+  useEffect(() => {
+    return () => {
+      // Clean up room listeners
+      battleManager.removeRoomListener(roomId);
+
+      // Update connection status
+      if (roomId) {
+        battleManager.updatePlayerConnection(roomId, false);
+      }
+    };
+  }, [roomId]);
 
   // Play victory sound on focus if userRank is 1
   useFocusEffect(

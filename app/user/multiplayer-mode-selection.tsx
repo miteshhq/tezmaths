@@ -47,7 +47,16 @@ export default function MultiplayerModeSelection() {
 
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-  const MAX_PLAYERS = 4;
+    const MAX_PLAYERS = 4;
+    
+    useEffect(() => {
+      return () => {
+        if (roomId) {
+          battleManager.leaveRoom(roomId);
+        }
+        battleManager.cancelMatchmaking();
+      };
+    }, [roomId]);
 
   useEffect(() => {
     const keyboardShowListener = Keyboard.addListener(

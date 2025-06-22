@@ -803,11 +803,10 @@ export default function QuizScreen() {
       if (!userId) return;
 
       try {
-        // console.log(
-        //   `Updating score and continuing. Level score: ${levelScore}`
-        // );
+        console.log(
+          `Updating score and continuing. Level score: ${levelScore}`
+        );
 
-        // First, update the score in database
         const userRef = ref(database, `users/${userId}`);
         const snapshot = await get(userRef);
         const userData = snapshot.val() || {};
@@ -815,40 +814,32 @@ export default function QuizScreen() {
         const currentTotalPoints = userData.totalPoints || 0;
         const newTotalPoints = currentTotalPoints + levelScore;
 
-        const today = new Date().toISOString().split("T")[0];
-        const lastDate = userData.lastCompletionDate;
-        const currentStreak = userData.streak || 0;
+        const now = new Date();
+        const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
+        const istDate = new Date(now.getTime() + istOffset);
+        const today = istDate.toISOString().split("T")[0]; // YYYY-MM-DD
 
-        let newStreak: number;
+        let newStreak = userData.streak || 0;
+        const lastDate = userData.lastCompletionDate;
 
         if (!lastDate) {
-          // First time playing
-          newStreak = 1;
-        } else if (lastDate === today) {
-          // Playing same day - maintain current streak
-          newStreak = currentStreak > 0 ? currentStreak : 1;
+          newStreak = 1; // First play
         } else {
-          // Playing on different day
           const lastDateObj = new Date(lastDate);
           const todayDateObj = new Date(today);
           const diffInDays = Math.floor(
-            (todayDateObj.getTime() - lastDateObj.getTime()) /
-              (1000 * 60 * 60 * 24)
+            (todayDateObj - lastDateObj) / (1000 * 60 * 60 * 24)
           );
 
-          if (diffInDays === 1) {
-            // Consecutive day - increment streak
-            newStreak = currentStreak + 1;
-          } else if (diffInDays <= 1) {
-            // Within acceptable range - maintain streak
-            newStreak = currentStreak > 0 ? currentStreak : 1;
+          if (diffInDays === 0) {
+            newStreak = userData.streak; // Same day, no change
+          } else if (diffInDays === 1) {
+            newStreak = (userData.streak || 0) + 1; // Next day, increment
           } else {
-            // Gap of more than 1 day - reset to 1
-            newStreak = 1;
+            newStreak = 1; // Missed day, reset to 1
           }
         }
 
-        // Check if next level exists
         const nextLevel = currentLevel + 1;
         const quizzesRef = ref(database, "quizzes");
         const quizSnapshot = await get(quizzesRef);
@@ -870,29 +861,26 @@ export default function QuizScreen() {
           [`completedLevels/${currentLevel}`]: true,
         };
 
-        // ONLY unlock next level if ALL questions were answered correctly AND current level is user's current level or higher
         if (
           levelCorrectAnswers === questions.length &&
           currentLevel >= (userData.currentLevel || 1) &&
           nextLevelExists
         ) {
           updates.currentLevel = nextLevel;
-          //   console.log(
-          //     `Unlocking next level ${nextLevel} - all questions correct`
-          //   );
+          console.log(
+            `Unlocking next level ${nextLevel} - all questions correct`
+          );
         } else {
-          //   console.log(
-          //     `Not unlocking next level - correctAnswers: ${levelCorrectAnswers}/${questions.length}`
-          //   );
+          console.log(
+            `Not unlocking next level - correctAnswers: ${levelCorrectAnswers}/${questions.length}`
+          );
         }
 
-        // Wait for database update to complete
         await update(userRef, updates);
-        // console.log(
-        //   `Database updated: Total points ${currentTotalPoints} -> ${newTotalPoints}`
-        // );
+        console.log(
+          `Database updated: Total points ${currentTotalPoints} -> ${newTotalPoints}`
+        );
 
-        // Update local storage
         await AsyncStorage.setItem("totalPoints", newTotalPoints.toString());
         await AsyncStorage.setItem("streak", newStreak.toString());
         if (updates.currentLevel) {
@@ -902,23 +890,18 @@ export default function QuizScreen() {
           );
         }
 
-        // Update accumulated score for this game session
         const newAccumulatedScore = accumulatedScore + levelScore;
         setAccumulatedScore(newAccumulatedScore);
-        // console.log(
-        //   `Accumulated score updated: ${accumulatedScore} -> ${newAccumulatedScore}`
-        // );
+        console.log(
+          `Accumulated score updated: ${accumulatedScore} -> ${newAccumulatedScore}`
+        );
 
         if (nextLevelExists) {
-          //   console.log(
-          //     `Moving to level ${nextLevel} with accumulated score: ${newAccumulatedScore}`
-          //   );
-
-          // Reset current level score for next level
+          console.log(
+            `Moving to level ${nextLevel} with accumulated score: ${newAccumulatedScore}`
+          );
           setQuizScore(0);
           setCorrectAnswers(0);
-
-          // Continue to next level immediately
           router.replace({
             pathname: "/user/quiz-screen",
             params: {
@@ -929,13 +912,11 @@ export default function QuizScreen() {
             },
           });
         } else {
-          // No more levels - game complete
-          //   console.log("Game complete - no more levels");
+          console.log("Game complete - no more levels");
           handleGameEnd(newAccumulatedScore, levelCorrectAnswers, true);
         }
       } catch (error) {
-        // console.error("Error updating score and continuing:", error);
-        // Fallback - still update accumulated score and end game
+        console.error("Error updating score and continuing:", error);
         const newAccumulatedScore = accumulatedScore + levelScore;
         handleGameEnd(newAccumulatedScore, levelCorrectAnswers, false);
       }
@@ -946,12 +927,6 @@ export default function QuizScreen() {
   const handleTimeUp = useCallback(async () => {
     if (!isQuizActive || isProcessing || !isScreenFocused || showExplanation)
       return;
-
-    // console.log(
-    //   `Time up! Current quiz score: ${quizScore}, Total accumulated: ${
-    //     accumulatedScore + quizScore
-    //   }`
-    // );
 
     setIsProcessing(true);
     stopTimer();
