@@ -127,10 +127,18 @@ export default function BattleRoom() {
     }
 
     if (playerCount === 1) {
-      timeoutRef.current = setTimeout(() => {
+      timeoutRef.current = setTimeout(async () => {
         if (isMounted && Object.keys(room.players || {}).length < 2) {
           console.log("Matchmaking timeout triggered");
-          setMatchmakingTimeout(true);
+
+          // Clean up the room entirely
+          try {
+            await battleManager.deleteRoom(roomId); // Add this method to battleManager
+            setMatchmakingTimeout(true);
+          } catch (error) {
+            console.error("Failed to delete room:", error);
+            setMatchmakingTimeout(true);
+          }
         }
       }, 30000);
     }
@@ -141,7 +149,29 @@ export default function BattleRoom() {
         timeoutRef.current = null;
       }
     };
-  }, [room?.matchmakingRoom, room?.players, isMounted]);
+  }, [room?.matchmakingRoom, room?.players, isMounted, roomId]);
+
+  useEffect(() => {
+    return () => {
+      // Clean up all timeouts and states
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (battleStartTimeoutRef.current)
+        clearTimeout(battleStartTimeoutRef.current);
+      if (battleNavigationTimeoutRef.current)
+        clearTimeout(battleNavigationTimeoutRef.current);
+
+      // Reset all battle-related states
+      setBattleStarting(false);
+      setBattleStartAttempted(false);
+      setMatchmakingTimeout(false);
+      setOpponentFound(false);
+
+      // Update connection status
+      if (roomId) {
+        battleManager.updatePlayerConnection(roomId, false);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (
@@ -443,7 +473,14 @@ export default function BattleRoom() {
           </Text>
           <TouchableOpacity
             className="bg-red-500 px-6 py-3 rounded-lg"
-            onPress={() => router.replace("/user/multiplayer-mode-selection")}
+            onPress={() => {
+              // Reset all states before navigating
+              setMatchmakingTimeout(false);
+              setBattleStarting(false);
+              setBattleStartAttempted(false);
+              setOpponentFound(false);
+              router.replace("/user/multiplayer-mode-selection");
+            }}
           >
             <Text className="text-white font-bold">Try Again</Text>
           </TouchableOpacity>

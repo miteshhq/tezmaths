@@ -433,10 +433,8 @@ export default function BattleScreen() {
   useEffect(() => {
     return () => {
       // Clean up room listeners
-      battleManager.removeRoomListener(roomId);
-
-      // Update connection status
       if (roomId) {
+        battleManager.removeRoomListener(roomId);
         battleManager.updatePlayerConnection(roomId, false);
       }
     };
@@ -444,21 +442,63 @@ export default function BattleScreen() {
 
   useEffect(() => {
     if (roomData?.status === "finished") {
-      const playerArray = callEndBattle(roomId);
-      router.replace({
-        pathname: "/user/battle-results",
-        params: {
-          players: JSON.stringify(playerArray),
-          totalQuestions: roomData.totalQuestions?.toString() || "0",
-          currentUserId: userId,
-        },
-      });
+      const navigateToResults = async () => {
+        try {
+          const playerArray = await callEndBattle(roomId);
+          if (playerArray && Array.isArray(playerArray)) {
+            router.replace({
+              pathname: "/user/battle-results",
+              params: {
+                roomId: roomId, // Add this line - pass the roomId
+                players: JSON.stringify(playerArray),
+                totalQuestions: roomData.totalQuestions?.toString() || "0",
+                currentUserId: userId,
+              },
+            });
+          } else {
+            console.error("Invalid playerArray:", playerArray);
+            // Add fallback navigation with roomId
+            router.replace({
+              pathname: "/user/battle-results",
+              params: {
+                roomId: roomId,
+                players: JSON.stringify([]),
+                totalQuestions: "0",
+                currentUserId: userId,
+              },
+            });
+          }
+        } catch (error) {
+          console.error("Error in navigateToResults:", error);
+          Alert.alert("Error", "An error occurred while ending the battle.");
+          // Add fallback navigation on error
+          router.replace({
+            pathname: "/user/multiplayer-mode-selection",
+          });
+        }
+      };
+      navigateToResults();
     }
-  }, [roomData?.status, roomData?.players, roomData?.totalQuestions, userId]);
+  }, [
+    roomData?.status,
+    roomData?.players,
+    roomData?.totalQuestions,
+    userId,
+    roomId,
+  ]); // Add roomId to dependencies
 
   const callEndBattle = async (roomId) => {
-    const playerArray = await battleManager.endBattle(roomId);
-    return playerArray;
+    try {
+      if (!roomId) {
+        console.error("callEndBattle: roomId is undefined");
+        return [];
+      }
+      const playerArray = await battleManager.endBattle(roomId);
+      return playerArray || [];
+    } catch (error) {
+      console.error("Error ending battle:", error);
+      return [];
+    }
   };
 
   // Update handleInputChange
@@ -635,7 +675,6 @@ export default function BattleScreen() {
     return (
       <View className="flex-1 bg-primary justify-center items-center">
         <ActivityIndicator size="large" color="white" />
-        <Text className="text-white mt-4">Waiting for battle to start...</Text>
         <Text className="text-white mt-2 text-sm">
           Status: {roomData.status}
         </Text>

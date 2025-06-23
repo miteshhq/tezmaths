@@ -1,6 +1,6 @@
 import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,6 +13,7 @@ import {
   View,
   TouchableWithoutFeedback,
   Keyboard,
+  BackHandler,
 } from "react-native";
 import { battleManager } from "../../utils/battleManager";
 
@@ -47,16 +48,74 @@ export default function MultiplayerModeSelection() {
 
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-    const MAX_PLAYERS = 4;
+  const MAX_PLAYERS = 4;
+
+  const cleanupRef = useRef(false);
+    const roomListenerRef = useRef(null);
     
-    useEffect(() => {
-      return () => {
-        if (roomId) {
-          battleManager.leaveRoom(roomId);
-        }
-        battleManager.cancelMatchmaking();
-      };
-    }, [roomId]);
+    const memoizedPlayersCount = useMemo(() => {
+      return Object.keys(playersInRoom).length;
+    }, [playersInRoom]);
+
+  const performCleanup = useCallback(() => {
+    if (cleanupRef.current) return;
+    cleanupRef.current = true;
+
+    if (roomListenerRef.current) {
+      roomListenerRef.current();
+      roomListenerRef.current = null;
+    }
+
+    if (roomId) {
+      battleManager.leaveRoom(roomId).catch(console.error);
+    }
+    battleManager.cancelMatchmaking().catch(console.error);
+  }, [roomId]);
+    
+  useEffect(() => {
+    return () => {
+      performCleanup();
+    };
+  }, [performCleanup]);
+
+  // Handle hardware back button
+  useEffect(() => {
+    const backAction = () => {
+      router.push("/user/home");
+      return true; // Prevent default back behavior
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [router]);
+
+  useEffect(() => {
+    return () => {
+      // Reset all states when component unmounts
+      setShowQuizCodeInput(false);
+      setQuizCode("");
+      setJoiningRoom(false);
+      setShowCreateRoom(false);
+      setRoomCode("");
+      setRoomName("");
+      setRoomId("");
+      setCreatingRoom(false);
+      setPlayersInRoom({});
+      setSearchingRandom(false);
+
+      // Cancel any ongoing operations
+      if (roomId) {
+        battleManager.leaveRoom(roomId);
+      }
+      battleManager.cancelMatchmaking();
+    };
+  }, []);
+
+  
 
   useEffect(() => {
     const keyboardShowListener = Keyboard.addListener(
@@ -85,6 +144,24 @@ export default function MultiplayerModeSelection() {
       }
     };
   }, [roomId]);
+
+  // For Quiz Code section
+  const handleShowQuizCodeInput = () => {
+    setShowQuizCodeInput(true);
+    setShowCreateRoom(false); // Close create room section
+    setRoomCode("");
+    setRoomName("");
+    setRoomId("");
+    setPlayersInRoom({});
+  };
+
+  // For Create Room section
+  const handleShowCreateRoom = () => {
+    setShowCreateRoom(true);
+    setShowQuizCodeInput(false); // Close quiz code section
+    setQuizCode("");
+    setJoiningRoom(false);
+  };
 
   const handleJoinQuizCode = async () => {
     if (quizCode.length < 4) {
@@ -117,17 +194,19 @@ export default function MultiplayerModeSelection() {
       // Set the creator as ready by default for regular rooms
       await battleManager.toggleReady(newRoomId);
 
-      battleManager.listenToRoom(newRoomId, (roomData) => {
-        if (roomData) {
-          setPlayersInRoom(roomData.players || {});
-
-          if (
-            Object.keys(roomData.players || {}).length >= roomData.maxPlayers
-          ) {
-            startBattleRoom();
+      roomListenerRef.current = battleManager.listenToRoom(
+        newRoomId,
+        (roomData) => {
+          if (roomData && roomData.status !== "finished") {
+            setPlayersInRoom(roomData.players || {});
+            if (
+              Object.keys(roomData.players || {}).length >= roomData.maxPlayers
+            ) {
+              startBattleRoom();
+            }
           }
         }
-      });
+      );
     } catch (error) {
       Alert.alert("Error", error.message);
     } finally {
@@ -297,7 +376,7 @@ export default function MultiplayerModeSelection() {
                 </View>
 
                 {!showQuizCodeInput ? (
-                  <TouchableOpacity onPress={() => setShowQuizCodeInput(true)}>
+                  <TouchableOpacity onPress={handleShowQuizCodeInput}>
                     <ImageBackground
                       source={require("../../assets/gradient.jpg")}
                       style={{ borderRadius: 8, overflow: "hidden" }}
@@ -381,7 +460,7 @@ export default function MultiplayerModeSelection() {
                 </View>
 
                 {!showCreateRoom ? (
-                  <TouchableOpacity onPress={() => setShowCreateRoom(true)}>
+                  <TouchableOpacity onPress={handleShowCreateRoom}>
                     <ImageBackground
                       source={require("../../assets/gradient.jpg")}
                       style={{ borderRadius: 8, overflow: "hidden" }}
