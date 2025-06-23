@@ -5,6 +5,7 @@ import { onValue, ref } from "firebase/database";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  BackHandler,
   Image,
   ImageBackground,
   ScrollView,
@@ -30,6 +31,21 @@ export default function Achievements() {
   const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [progressData, setProgressData] = useState<any>({});
+
+  // Handle hardware back button
+  useEffect(() => {
+    const backAction = () => {
+      router.push("/user/home");
+      return true; // Prevent default back behavior
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [router]);
 
   // Fetch user data from Firebase
   useEffect(() => {
@@ -79,7 +95,7 @@ export default function Achievements() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-white">
+    <View className="flex-1 bg-white">
       {/* HEADER HERE */}
       <ImageBackground
         source={require("../../assets/gradient.jpg")}
@@ -96,107 +112,108 @@ export default function Achievements() {
           </View>
         </View>
       </ImageBackground>
-
-      {/* User Stats Summary */}
-      <View className="bg-light-orange mx-4 my-4 p-6 rounded-2xl">
-        <Text className="text-2xl font-black text-custom-purple text-center mb-4">
-          Your Progress
-        </Text>
-        <View className="flex-row justify-between">
-          <View className="items-center">
-            <Text className="text-sm text-gray-500">Level</Text>
-            <Text className="text-xl font-bold text-primary">
-              {userData?.currentLevel || 1}
-            </Text>
-          </View>
-          <View className="items-center">
-            <Text className="text-sm text-gray-500">Score</Text>
-            <Text className="text-xl font-bold text-primary">
-              {userData.totalPoints % 1 !== 0
-                ? Math.round(userData.totalPoints * 10) / 10
-                : userData.totalPoints || 0}
-            </Text>
-          </View>
-          <View className="items-center">
-            <Text className="text-sm text-gray-500">Streak</Text>
-            <Text className="text-xl font-bold text-primary">
-              {userData?.streak || 0}🔥
-            </Text>
+      <ScrollView className="flex-1 bg-white">
+        {/* User Stats Summary */}
+        <View className="bg-light-orange mx-4 my-4 p-6 rounded-2xl">
+          <Text className="text-2xl font-black text-custom-purple text-center mb-4">
+            Your Progress
+          </Text>
+          <View className="flex-row justify-between">
+            <View className="items-center">
+              <Text className="text-sm text-gray-500">Level</Text>
+              <Text className="text-xl font-bold text-primary">
+                {userData?.currentLevel || 1}
+              </Text>
+            </View>
+            <View className="items-center">
+              <Text className="text-sm text-gray-500">Score</Text>
+              <Text className="text-xl font-bold text-primary">
+                {userData.totalPoints % 1 !== 0
+                  ? Math.round(userData.totalPoints * 10) / 10
+                  : userData.totalPoints || 0}
+              </Text>
+            </View>
+            <View className="items-center">
+              <Text className="text-sm text-gray-500">Streak</Text>
+              <Text className="text-xl font-bold text-primary">
+                {userData?.streak || 0}🔥
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
 
-      {/* Achievements List */}
-      <View className="p-4">
-        {ACHIEVEMENTS.map((achievement) => {
-          // Determine if achievement is completed
-          let isCompleted = false;
-          let progress = 0;
+        {/* Achievements List */}
+        <View className="p-4">
+          {ACHIEVEMENTS.map((achievement) => {
+            // Determine if achievement is completed
+            let isCompleted = false;
+            let progress = 0;
 
-          if (achievement.type === "level") {
-            isCompleted = (userData?.currentLevel || 0) >= achievement.value;
-            progress = progressData[achievement.id] || 0;
-          } else if (achievement.type === "score") {
-            isCompleted = (userData?.totalPoints || 0) >= achievement.value;
-            progress = progressData[achievement.id] || 0;
-          }
+            if (achievement.type === "level") {
+              isCompleted = (userData?.currentLevel || 0) >= achievement.value;
+              progress = progressData[achievement.id] || 0;
+            } else if (achievement.type === "score") {
+              isCompleted = (userData?.totalPoints || 0) >= achievement.value;
+              progress = progressData[achievement.id] || 0;
+            }
 
-          return (
-            <View
-              key={achievement.id}
-              className={`flex-row items-center gap-4 p-6 mb-4 rounded-2xl ${
-                isCompleted
-                  ? "bg-white border border-primary"
-                  : "bg-light-orange"
-              }`}
-            >
-              <View className="ml-4 flex-1">
-                <Text
-                  className={`text-lg font-bold ${
-                    isCompleted ? "text-black" : "text-gray-500"
-                  }`}
-                >
-                  {achievement.title}
-                </Text>
+            return (
+              <View
+                key={achievement.id}
+                className={`flex-row items-center gap-4 p-6 mb-4 rounded-2xl ${
+                  isCompleted
+                    ? "bg-white border border-primary"
+                    : "bg-light-orange"
+                }`}
+              >
+                <View className="ml-4 flex-1">
+                  <Text
+                    className={`text-lg font-bold ${
+                      isCompleted ? "text-black" : "text-gray-500"
+                    }`}
+                  >
+                    {achievement.title}
+                  </Text>
 
-                <Text
-                  className={`text-sm ${
-                    isCompleted ? "text-primary" : "text-gray-500"
-                  }`}
-                >
-                  {achievement.type === "level"
-                    ? `Reach Level ${achievement.value}`
-                    : `Earn ${achievement.value} Points`}
-                </Text>
+                  <Text
+                    className={`text-sm ${
+                      isCompleted ? "text-primary" : "text-gray-500"
+                    }`}
+                  >
+                    {achievement.type === "level"
+                      ? `Reach Level ${achievement.value}`
+                      : `Earn ${achievement.value} Points`}
+                  </Text>
 
-                {!isCompleted && (
-                  <View className="mt-2">
-                    <View className="h-2 bg-gray-300 rounded-full overflow-hidden">
-                      <View
-                        className="h-full bg-primary rounded-full"
-                        style={{ width: `${progress}%` }}
-                      />
+                  {!isCompleted && (
+                    <View className="mt-2">
+                      <View className="h-2 bg-gray-300 rounded-full overflow-hidden">
+                        <View
+                          className="h-full bg-primary rounded-full"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </View>
+                      <Text className="text-xs text-gray-500 mt-1">
+                        {progress.toFixed(0)}% complete
+                      </Text>
                     </View>
-                    <Text className="text-xs text-gray-500 mt-1">
-                      {progress.toFixed(0)}% complete
-                    </Text>
+                  )}
+                </View>
+
+                {isCompleted ? (
+                  <View className="bg-primary w-12 h-12 rounded-full flex items-center justify-center">
+                    <FontAwesome name="trophy" size={24} color="white" />
+                  </View>
+                ) : (
+                  <View className="bg-gray-300 w-12 h-12 rounded-full flex items-center justify-center">
+                    <FontAwesome name="lock" size={24} color="white" />
                   </View>
                 )}
               </View>
-
-              {isCompleted ? (
-                <View className="bg-primary w-12 h-12 rounded-full flex items-center justify-center">
-                  <FontAwesome name="trophy" size={24} color="white" />
-                </View>
-              ) : (
-                <View className="bg-gray-300 w-12 h-12 rounded-full flex items-center justify-center">
-                  <FontAwesome name="lock" size={24} color="white" />
-                </View>
-              )}
-            </View>
-          );
-        })}
-      </View>
-    </ScrollView>
+            );
+          })}
+        </View>
+      </ScrollView>
+    </View>
   );
 }
