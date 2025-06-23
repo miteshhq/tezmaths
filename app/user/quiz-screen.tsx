@@ -107,7 +107,6 @@ export default function QuizScreen() {
   const params = useLocalSearchParams();
   const { level, isSelectedLevel } = params;
   const currentLevel = Number(level) || 1;
-  // console.log("Current Level is:", currentLevel);
 
   // State management
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -648,15 +647,34 @@ export default function QuizScreen() {
 
       let newStreak;
       if (!lastDate) {
+        // First time playing
         newStreak = 1;
       } else {
+        // Calculate difference in days
         const lastDateObj = new Date(lastDate);
         const todayDateObj = new Date(today);
-        const diffInHours = (todayDateObj - lastDateObj) / (1000 * 60 * 60);
-        if (diffInHours > 30) {
-          newStreak = 0;
-        } else {
+
+        // Set hours to noon to avoid timezone issues
+        lastDateObj.setHours(12, 0, 0, 0);
+        todayDateObj.setHours(12, 0, 0, 0);
+
+        const diffInDays = Math.round(
+          (todayDateObj.getTime() - lastDateObj.getTime()) /
+            (1000 * 60 * 60 * 24)
+        );
+
+        if (diffInDays === 0) {
+          // Same day, no change in streak
+          newStreak = currentStreak;
+        } else if (diffInDays === 1) {
+          // Consecutive day, increment streak
           newStreak = currentStreak + 1;
+        } else if (diffInDays === 2) {
+          // Missed 1 day, pause streak
+          newStreak = currentStreak;
+        } else {
+          // Missed 2+ days, reset streak to 1 (playing today)
+          newStreak = 1;
         }
       }
 

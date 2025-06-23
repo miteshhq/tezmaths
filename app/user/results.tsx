@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import {
   Alert,
   Image,
@@ -18,13 +18,17 @@ import * as Sharing from "expo-sharing"; // Add this import
 import * as FileSystem from "expo-file-system"; // Add this import
 import SoundManager from "../../components/soundManager";
 import logo from "../../assets/branding/tezmaths-full-logo.png";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const shareConfig = {
-  additionalText: "Check out my math quiz results! 🧠✨",
+  additionalText:
+    "🧮 Discover TezMaths - the ultimate free math-boosting app! Features multiple quizzes, proven tricks, comprehensive guides, and so much more to supercharge your mathematical skills! 🚀",
   playStoreLink:
     "https://play.google.com/store/apps/details?id=com.tezmathsteam.tezmaths",
-  downloadText: "Download TezMaths now and challenge yourself!",
-  hashtags: "#TezMaths #MathQuiz #BrainTraining #Education",
+  downloadText:
+    "📲 Download TezMaths now and unlock your mathematical potential!",
+  hashtags:
+    "#TezMaths #MathQuiz #BrainTraining #Education #MathSkills #LearningApp #FreeApp",
 };
 
 export default function ResultsScreen() {
@@ -32,6 +36,7 @@ export default function ResultsScreen() {
   const params = useLocalSearchParams();
   const cardRef = useRef();
   const viewShotRef = useRef();
+  const [userData, setUserData] = useState({ username: "player" });
 
   const [isPopupVisible, setPopupVisible] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
@@ -47,6 +52,21 @@ export default function ResultsScreen() {
   const isPassed = params.isPassed;
 
   const percentage = Math.round((correctAnswers / totalQuestions) * 100);
+
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const cachedData = await AsyncStorage.getItem("userData");
+        if (cachedData) {
+          const data = JSON.parse(cachedData);
+          setUserData(data);
+        }
+      } catch (error) {
+        console.error("Error loading user data:", error);
+      }
+    };
+    loadUserData();
+  }, []);
 
   // Play victory or failure sound when screen is focused
   useFocusEffect(
@@ -111,15 +131,21 @@ export default function ResultsScreen() {
   };
 
   const getShareMessage = () => {
-    const downloadLinks = `📱 Android: ${shareConfig.playStoreLink}`;
-    return (
-      `${shareConfig.additionalText}\n\n` +
-      `🏆 I scored total ${quizScore} points on TezMaths Quiz!\n` +
-      `"${getMotivationalQuote()}"\n\n` +
-      `${shareConfig.downloadText}\n\n` +
-      `${downloadLinks}\n\n` +
-      `${shareConfig.hashtags}`
-    );
+    const shareMessage = `${shareConfig.additionalText}
+      
+      🏆 I scored total ${quizScore} points on TezMaths Quiz!
+      "${getMotivationalQuote()}"
+      
+      🎯 Use my referral code: ${userData.username.toUpperCase()}
+      👆 Get bonus points when you sign up!
+      
+      ${shareConfig.playStoreLink}
+      
+      ${shareConfig.downloadText}
+      
+      ${shareConfig.hashtags}`;
+
+    return shareMessage;
   };
 
   const shareImageOnly = async () => {
@@ -269,7 +295,14 @@ export default function ResultsScreen() {
         <View className="flex-row justify-between mt-6 w-full max-w-md">
           <TouchableOpacity
             className="py-3 px-6 flex-1 mr-1 border border-black rounded-full"
-            onPress={() => router.push("/user/home")}
+            onPress={() =>
+              router.push({
+                pathname: "/user/home",
+                params: {
+                  quizCompleted: "true",
+                },
+              })
+            }
           >
             <View className="flex flex-row items-center justify-center gap-2">
               <Text className="font-black text-2xl text-center">Home</Text>

@@ -846,27 +846,41 @@ export class BattleManager {
             const currentTotalPoints = userData.totalPoints || 0;
             const newTotalPoints = currentTotalPoints + scoreToAdd;
 
-            const now = new Date();
-            const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
-            const istDate = new Date(now.getTime() + istOffset);
-            const today = istDate.toISOString().split("T")[0]; // YYYY-MM-DD
-
+            // FIXED: Proper streak logic
+            const today = new Date().toISOString().split("T")[0];
             const lastDate = userData.lastCompletionDate;
-            let newStreak = userData.streak || 0;
+            const currentStreak = userData.streak || 0;
 
+            let newStreak;
             if (!lastDate) {
+                // First time playing
                 newStreak = 1;
             } else {
+                // Calculate difference in days
                 const lastDateObj = new Date(lastDate);
                 const todayDateObj = new Date(today);
-                const diffInDays = Math.floor((todayDateObj - lastDateObj) / (1000 * 60 * 60 * 24));
+
+                // Set hours to noon to avoid timezone issues
+                lastDateObj.setHours(12, 0, 0, 0);
+                todayDateObj.setHours(12, 0, 0, 0);
+
+                const diffInDays = Math.round(
+                    (todayDateObj.getTime() - lastDateObj.getTime()) /
+                    (1000 * 60 * 60 * 24)
+                );
 
                 if (diffInDays === 0) {
-                    newStreak = userData.streak; // Same day, no change
+                    // Same day, no change in streak
+                    newStreak = currentStreak;
                 } else if (diffInDays === 1) {
-                    newStreak = (userData.streak || 0) + 1; // Next day, increment
+                    // Consecutive day, increment streak
+                    newStreak = currentStreak + 1;
+                } else if (diffInDays === 2) {
+                    // Missed 1 day, pause streak
+                    newStreak = currentStreak;
                 } else {
-                    newStreak = 1; // Missed day, reset to 1
+                    // Missed 2+ days, reset streak to 1 (playing today)
+                    newStreak = 1;
                 }
             }
 

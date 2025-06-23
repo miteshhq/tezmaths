@@ -22,11 +22,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { battleManager } from "../../utils/battleManager";
 
 const shareConfig = {
-  additionalText: "Check out my battle results on TezMaths! ⚔️✨",
+  additionalText:
+    "🧮 Discover TezMaths - the ultimate free math-boosting app! Features multiple quizzes, proven tricks, comprehensive guides, and so much more to supercharge your mathematical skills! 🚀",
   playStoreLink:
     "https://play.google.com/store/apps/details?id=com.tezmathsteam.tezmaths",
-  downloadText: "Join the battle on TezMaths now!",
-  hashtags: "#TezMaths #MathBattle #BrainTraining",
+  downloadText:
+    "📲 Download TezMaths now and unlock your mathematical potential!",
+  hashtags:
+    "#TezMaths #MathQuiz #BrainTraining #Education #MathSkills #LearningApp #FreeApp",
 };
 
 const avatarImages = (avatar) => {
@@ -61,7 +64,7 @@ export default function BattleResultsScreen() {
   // State management
   const [isPopupVisible, setPopupVisible] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
-  const [userData, setUserData] = useState({ avatar: 0 });
+  const [userData, setUserData] = useState({ avatar: 0, username: "player" });
   const [battleData, setBattleData] = useState({
     players: [],
     totalQuestions: 0,
@@ -357,15 +360,23 @@ export default function BattleResultsScreen() {
   };
 
   const getShareMessage = () => {
-    const downloadLinks = `📱 Android: ${shareConfig.playStoreLink}`;
-    return (
-      `${shareConfig.additionalText}\n\n` +
-      `🏆 I ranked #${battleData.userRank} with ${battleData.userScore} points in a math battle!\n` +
-      `"${getMotivationalQuote()}"\n\n` +
-      `${shareConfig.downloadText}\n\n` +
-      `${downloadLinks}\n\n` +
-      `${shareConfig.hashtags}`
-    );
+    const shareMessage = `${shareConfig.additionalText}
+  
+  🏆 I ranked #${battleData.userRank} with ${
+      battleData.userScore
+    } points in a math battle!
+  "${getMotivationalQuote()}"
+  
+  🎯 Use my referral code: ${userData.username.toUpperCase()}
+  👆 Get bonus points when you sign up!
+  
+  ${shareConfig.playStoreLink}
+  
+  ${shareConfig.downloadText}
+  
+  ${shareConfig.hashtags}`;
+
+    return shareMessage;
   };
 
   const captureImage = async () => {

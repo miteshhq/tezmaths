@@ -9,8 +9,10 @@ import {
   ImageBackground,
   Text,
   View,
+  RefreshControl,
 } from "react-native";
-import { database } from "../../firebase/firebaseConfig";
+import { database, auth } from "../../firebase/firebaseConfig";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Mock data for when Firebase returns empty results
 const mockLeaderboardData = [
@@ -27,62 +29,104 @@ const mockLeaderboardData = [
 ];
 
 export default function LeaderboardScreen() {
+  const currentUserId = auth.currentUser?.uid;
   const [quizMasters, setQuizMasters] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchLeaderboard = async () => {
+    try {
+      setLoading(true);
+      const usersRef = query(
+        ref(database, "users"),
+        orderByChild("points"),
+        limitToLast(1000) // Increased to ensure we get all users
+      );
+      const snapshot = await get(usersRef);
+
+      if (snapshot.exists()) {
+        const users = Object.entries(snapshot.val())
+          .map(([id, user]) => ({
+            id,
+            username: user.username || "Unknown",
+            totalPoints: user.totalPoints ?? 0,
+            fullName: user.fullName || "Unknown",
+            email: user.email || "",
+          }))
+          .filter(
+            (user) =>
+              user.email !== "tezmaths@admin.com" &&
+              user.username.toLowerCase() !== "admin"
+          )
+          .sort((a, b) => b.totalPoints - a.totalPoints)
+          .map((user, index) => ({ ...user, rank: index + 1 }));
+
+        if (users.length === 0) {
+          setQuizMasters(mockLeaderboardData);
+        } else {
+          // Get top 10 users
+          const top10 = users.slice(0, 10);
+
+          // Find current user
+          const currentUser = users.find((user) => user.id === currentUserId);
+
+          // Create final leaderboard
+          let finalLeaderboard = [...top10];
+
+          // ALWAYS add current user if they exist and are not already in top 10
+          if (currentUser) {
+            const isInTop10 = top10.some((user) => user.id === currentUserId);
+            if (!isInTop10) {
+              // Add current user at the end with separator
+              finalLeaderboard.push(currentUser);
+            }
+          }
+
+          setQuizMasters(finalLeaderboard);
+        }
+      } else {
+        setQuizMasters(mockLeaderboardData);
+      }
+    } catch (error) {
+      console.error("Failed to fetch leaderboard:", error);
+      setQuizMasters(mockLeaderboardData);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await fetchLeaderboard();
+    } catch (error) {
+      console.error("Refresh error:", error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchLeaderboard = async () => {
-      try {
-        setLoading(true);
-        // Fetch data from Firebase directly
-        const usersRef = query(
-          ref(database, "users"),
-          orderByChild("points"),
-          limitToLast(100)
-        );
-        const snapshot = await get(usersRef);
-
-        if (snapshot.exists()) {
-          const users = Object.entries(snapshot.val())
-            .map(([id, user]) => ({
-              id,
-              username: user.username || "Unknown",
-              totalPoints: user.totalPoints ?? 0,
-              fullName: user.fullName || "Unknown",
-              email: user.email || "",
-            }))
-            .filter(
-              (user) =>
-                user.email !== "tezmaths@admin.com" &&
-                user.username.toLowerCase() !== "admin"
-            )
-            .sort((a, b) => b.totalPoints - a.totalPoints)
-            .map((user, index) => ({ ...user, rank: index + 1 }));
-
-          // If no users found or empty array, use mock data
-          if (users.length === 0) {
-            // console.log("No users found, using mock data");
-            setQuizMasters(mockLeaderboardData);
-          } else {
-            setQuizMasters(users);
-            // console.log("Fetched leaderboard data from Firebase:", users);
-          }
-        } else {
-          // console.log("No users found in the database, using mock data");
-          setQuizMasters(mockLeaderboardData);
-        }
-      } catch (error) {
-        // console.error("Failed to fetch leaderboard, using mock data:", error);
-        setQuizMasters(mockLeaderboardData);
-      } finally {
-        setLoading(false);
-      }
+    const initializeLeaderboard = async () => {
+      await fetchLeaderboard();
     };
 
-    fetchLeaderboard();
+    initializeLeaderboard();
   }, []);
 
-  const renderQuizMaster = ({ item }) => {
+  useEffect(() => {
+    if (currentUserId) {
+      fetchLeaderboard();
+    }
+  }, [currentUserId]);
+
+  // Also update the renderQuizMaster to better handle the separator:
+  const renderQuizMaster = ({ item, index }) => {
+    const isCurrentUser = item.id === currentUserId;
+    const isAfterTop10 = item.rank > 10;
+    const showSeparator =
+      isAfterTop10 && quizMasters.findIndex((user) => user.rank > 10) === index;
+
     // Get medal icon for top 3
     const getMedalIcon = (rank) => {
       switch (rank) {
@@ -98,41 +142,77 @@ export default function LeaderboardScreen() {
     };
 
     return (
-      <View className="flex-row items-center p-4 mb-0 mx-0">
-        <View className="w-8 h-8 rounded-full bg-primary justify-center items-center mr-4">
-          <Text className="text-white text font-black">{item.rank}</Text>
-        </View>
-
-        <View className="flex-1">
-          <View className="flex-row items-center mb-1">
-            <FontAwesome
-              name="user-circle"
-              size={16}
-              color="#6B7280"
-              className="mr-2"
-            />
-            <Text className="text-black text-base font-semibold">
-              {item.fullName}
+      <>
+        {/* Add separator before current user if they're not in top 10 */}
+        {showSeparator && (
+          <View className="mx-4 my-3 flex-row items-center">
+            <View className="flex-1 h-px bg-gray-300" />
+            <Text className="mx-3 text-gray-500 text-sm font-medium">
+              Your Rank
             </Text>
+            <View className="flex-1 h-px bg-gray-300" />
           </View>
-          <View className="flex-row items-center">
-            <FontAwesome
-              name="star"
-              size={14}
-              color="#F59E0B"
-              className="mr-1"
-            />
-            <Text className="text-gray-600 text-sm">
-              {item.totalPoints % 1 !== 0
-                ? Math.round(item.totalPoints * 10) / 10
-                : item.totalPoints || 0}{" "}
-              points
-            </Text>
+        )}
+
+        <View
+          className={`flex-row items-center p-4 mb-0 mx-0 ${
+            isCurrentUser ? "bg-primary/10 border-l-4 border-primary" : ""
+          }`}
+        >
+          <View
+            className={`w-8 h-8 rounded-full justify-center items-center mr-4 ${
+              isCurrentUser
+                ? "bg-primary border-2 border-primary"
+                : "bg-primary"
+            }`}
+          >
+            <Text className="text-white text font-black">{item.rank}</Text>
+          </View>
+
+          <View className="flex-1">
+            <View className="flex-row items-center mb-1">
+              <FontAwesome
+                name={isCurrentUser ? "user" : "user-circle"}
+                size={16}
+                color={isCurrentUser ? "#FF6B35" : "#6B7280"}
+                className="mr-2"
+              />
+              <Text
+                className={`text-base font-semibold ${
+                  isCurrentUser ? "text-primary" : "text-black"
+                }`}
+              >
+                {isCurrentUser ? `${item.fullName} (You)` : item.fullName}
+              </Text>
+            </View>
+            <View className="flex-row items-center">
+              <FontAwesome
+                name="star"
+                size={14}
+                color={isCurrentUser ? "#FF6B35" : "#F59E0B"}
+                className="mr-1"
+              />
+              <Text
+                className={`text-sm ${
+                  isCurrentUser ? "text-primary font-semibold" : "text-gray-600"
+                }`}
+              >
+                {item.totalPoints % 1 !== 0
+                  ? Math.round(item.totalPoints * 10) / 10
+                  : item.totalPoints || 0}{" "}
+                points
+              </Text>
+            </View>
+          </View>
+
+          <View className="ml-2">
+            {getMedalIcon(item.rank)}
+            {isCurrentUser && !getMedalIcon(item.rank) && (
+              <FontAwesome name="star" size={16} color="#FF6B35" />
+            )}
           </View>
         </View>
-
-        <View className="ml-2">{getMedalIcon(item.rank)}</View>
-      </View>
+      </>
     );
   };
 
@@ -223,17 +303,23 @@ export default function LeaderboardScreen() {
           </Text>
         </View>
       ) : (
-        <>
+        <View className="flex-1">
           {renderHeader()}
           <View className="p-4 flex-1">
-            <FlatList
-              data={quizMasters}
-              renderItem={renderQuizMaster}
-              keyExtractor={(item) => item.id}
-              className="flex-1 py-4 border border-black rounded-2xl"
-              ListHeaderComponent={() => (
-                <>
-                  {/* {renderTopThree()} */}
+            <View className="flex-1 py-4 border border-black rounded-2xl">
+              <FlatList
+                data={quizMasters}
+                renderItem={renderQuizMaster}
+                keyExtractor={(item) => item.id}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    tintColor="#FF6B35"
+                    colors={["#FF6B35"]}
+                  />
+                }
+                ListHeaderComponent={() => (
                   <View className="flex flex-row items-center gap-1 justify-center pb-4 border-b border-black mb-4">
                     <Image
                       source={require("../../assets/icons/ribbon-badge.png")}
@@ -244,13 +330,13 @@ export default function LeaderboardScreen() {
                       Top Quiz Masters
                     </Text>
                   </View>
-                </>
-              )}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 20 }}
-            />
+                )}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 20 }}
+              />
+            </View>
           </View>
-        </>
+        </View>
       )}
     </View>
   );

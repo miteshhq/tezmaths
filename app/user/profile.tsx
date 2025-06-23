@@ -30,12 +30,13 @@ import { auth, database } from "../../firebase/firebaseConfig";
 
 const shareConfig = {
   additionalText:
-    "Discover TezMaths - the ultimate free math-boosting app! Features multiple quizzes, proven tricks, comprehensive guides, and so much more to supercharge your mathematical skills!",
+    "🧮 Discover TezMaths - the ultimate free math-boosting app! Features multiple quizzes, proven tricks, comprehensive guides, and so much more to supercharge your mathematical skills! 🚀",
   playStoreLink:
     "https://play.google.com/store/apps/details?id=com.tezmathsteam.tezmaths",
-  downloadText: "Download TezMaths now and unlock your mathematical potential!",
+  downloadText:
+    "📲 Download TezMaths now and unlock your mathematical potential!",
   hashtags:
-    "#TezMaths #MathQuiz #BrainTraining #Education #MathSkills #LearningApp",
+    "#TezMaths #MathQuiz #BrainTraining #Education #MathSkills #LearningApp #FreeApp",
 };
 
 // Predefined avatar options
@@ -49,6 +50,7 @@ const avatarOptions = [
 ];
 
 export default function ProfileScreen() {
+  const currentUserId = auth.currentUser?.uid;
   const router = useRouter();
   const [userData, setUserData] = useState<any>({
     fullName: "Unavailable",
@@ -75,19 +77,17 @@ export default function ProfileScreen() {
   };
 
   useEffect(() => {
-    const now = Date.now();
-    if (now - lastRefreshTime > 5000) {
+    if (currentUserId && userData.totalPoints !== undefined) {
       fetchUserRank();
-      setLastRefreshTime(now);
     }
-  }, [userData, lastRefreshTime]);
+  }, [currentUserId, userData.totalPoints]);
 
   const fetchUserRank = async () => {
     try {
       const usersRef = query(
         ref(database, "users"),
         orderByChild("totalPoints"),
-        limitToLast(100)
+        limitToLast(1000) // Increased to match leaderboard
       );
       const snapshot = await get(usersRef);
 
@@ -97,13 +97,18 @@ export default function ProfileScreen() {
             id,
             username: user.username || "Unknown",
             totalPoints: user.totalPoints ?? 0,
+            email: user.email || "",
           }))
+          .filter(
+            (user) =>
+              user.email !== "tezmaths@admin.com" &&
+              user.username.toLowerCase() !== "admin"
+          )
           .sort((a, b) => b.totalPoints - a.totalPoints)
           .map((user, index) => ({ ...user, rank: index + 1 }));
 
-        const currentUser = users.find(
-          (user) => user.username === userData.username
-        );
+        // Use currentUserId instead of username to find current user
+        const currentUser = users.find((user) => user.id === currentUserId);
         if (currentUser) {
           setUserRank(currentUser.rank);
         } else {
@@ -111,16 +116,14 @@ export default function ProfileScreen() {
         }
       }
     } catch (error) {
-      // console.error("[PROFILE] Failed to fetch user rank:", error);
+      console.error("[PROFILE] Failed to fetch user rank:", error);
       setUserRank(0);
     }
   };
 
   useEffect(() => {
     loadUserData();
-    fetchUserRank();
 
-    // Set up real-time listener for user data changes
     const userId = auth.currentUser?.uid;
     if (userId) {
       const userRef = ref(database, `users/${userId}`);
@@ -141,16 +144,16 @@ export default function ProfileScreen() {
           };
 
           setUserData(formattedData);
-          //   console.log(userData);
           AsyncStorage.setItem("userData", JSON.stringify(formattedData));
 
-          setTimeout(() => fetchUserRank(), 1000);
+          // Call fetchUserRank immediately after updating userData
+          fetchUserRank();
         }
       });
 
       return () => unsubscribe();
     }
-  }, []);
+  }, [currentUserId]);
 
   const loadUserData = async () => {
     try {
@@ -219,47 +222,46 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleCopyReferralCode = async () => {
-    try {
-      const referralCode = userData.username;
-      await Clipboard.setStringAsync(referralCode);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      // console.error("[PROFILE] Failed to copy referral code:", error);
-    }
-  };
-
   const handleCopyShareMessage = async () => {
     try {
-      const shareMessage = `${
-        shareConfig.additionalText
-      }\n\nUse my referral code: ${userData.username.toUpperCase()}\n\n${
-        shareConfig.playStoreLink
-      }\n\n${shareConfig.downloadText}\n\n${shareConfig.hashtags}`;
+      const shareMessage = `${shareConfig.additionalText}
+  
+  🎯 Use my referral code: ${userData.username.toUpperCase()}
+  👆 Get bonus points when you sign up!
+  
+  ${shareConfig.playStoreLink}
+  
+  ${shareConfig.downloadText}
+  
+  ${shareConfig.hashtags}`;
 
       await Clipboard.setStringAsync(shareMessage);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      // console.error("[PROFILE] Failed to copy share message:", error);
+      console.error("[PROFILE] Failed to copy share message:", error);
     }
   };
 
   const handleShareMessage = async () => {
     try {
-      const shareMessage = `${
-        shareConfig.additionalText
-      }\n\nUse my referral code: ${userData.username.toUpperCase()}\n\n${
-        shareConfig.playStoreLink
-      }\n\n${shareConfig.downloadText}\n\n${shareConfig.hashtags}`;
+      const shareMessage = `${shareConfig.additionalText}
+  
+  🎯 Use my referral code: ${userData.username.toUpperCase()}
+  👆 Get bonus points when you sign up!
+  
+  ${shareConfig.playStoreLink}
+  
+  ${shareConfig.downloadText}
+  
+  ${shareConfig.hashtags}`;
 
       await Share.share({
         message: shareMessage,
-        title: "Join me on TezMaths!",
+        title: "🧮 Join me on TezMaths!",
       });
     } catch (error) {
-      // console.error("[PROFILE] Failed to share message:", error);
+      console.error("[PROFILE] Failed to share message:", error);
     }
   };
 
@@ -425,7 +427,7 @@ export default function ProfileScreen() {
               </View>
               <View className="items-center">
                 <Text className="text-2xl font-black text-custom-purple">
-                  {Number.parseInt(userData.currentLevel) - 1}
+                  {Math.max(1, Number.parseInt(userData.currentLevel) - 1)}
                 </Text>
                 <Text className="text-custom-purple text-lg">Levels</Text>
               </View>

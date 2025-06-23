@@ -320,7 +320,6 @@ export default function HomeScreen() {
 
   const params = useLocalSearchParams();
 
-  // Check and update streak
   const checkAndUpdateStreak = useCallback(async () => {
     const userId = auth.currentUser?.uid;
     if (!userId) return;
@@ -336,6 +335,7 @@ export default function HomeScreen() {
         const today = new Date().toDateString();
 
         if (params.quizCompleted === "true") {
+          // Only update streak if they haven't completed a quiz today
           if (lastCompletionDate !== today) {
             const newStreak = currentStreak + 1;
             await set(userRef, {
@@ -345,6 +345,8 @@ export default function HomeScreen() {
             });
 
             setUserStreak(newStreak);
+
+            // Show popup only when streak actually increases
             setStreakPopupMessage(`Day ${newStreak} completed! 🔥`);
             setShowStreakPopup(true);
 
@@ -352,8 +354,9 @@ export default function HomeScreen() {
               setShowStreakPopup(false);
             }, 3000);
           }
+          // If they already completed today, no popup or update happens
         } else {
-          // Check if streak should be reset
+          // Check if streak should be reset (only when not coming from quiz)
           if (lastCompletionDate) {
             const lastDate = new Date(lastCompletionDate);
             const todayDate = new Date();
@@ -372,7 +375,7 @@ export default function HomeScreen() {
     } catch (error) {
       // console.error("Error checking streak:", error);
     }
-  }, []);
+  }, [params.quizCompleted]);
 
   // Initial load and focus effect
   useFocusEffect(
@@ -438,48 +441,15 @@ export default function HomeScreen() {
     startAnimation();
   }, [animatedValue]);
 
-  const handleQuizChoice = async (level, isManualSelection) => {
-    await SoundManager.unloadAll();
-
-    router.push({
-      pathname: "/user/quiz-screen",
-      params: {
-        level: level,
-        isSelectedLevel: isManualSelection ? "true" : "false",
-      },
-    });
-  };
-
-  // Quiz code handler
-  const handleEnterQuizCode = async () => {
-    try {
-      if (!quizCode.trim()) {
-        Alert.alert("Invalid Code", "Please enter a valid quiz code.");
-        return;
-      }
-
-      const quizRef = ref(database, `quizzes/${quizCode.trim()}`);
-      const snapshot = await get(quizRef);
-
-      if (snapshot.exists()) {
-        router.push({
-          pathname: "/user/quiz-screen",
-          params: { id: quizCode.trim() },
-        });
-      } else {
-        Alert.alert(
-          "Invalid Quiz Code",
-          "The quiz code you entered does not exist."
-        );
-      }
-    } catch (error) {
-      // console.error("Error validating quiz code:", error);
-      Alert.alert(
-        "Error",
-        "Something went wrong while validating the quiz code. Please try again."
-      );
+  useEffect(() => {
+    // Check if user completed a quiz and show streak popup automatically
+    if (params.quizCompleted === "true") {
+      // Small delay to ensure UI is ready
+      setTimeout(() => {
+        checkAndUpdateStreak();
+      }, 500);
     }
-  };
+  }, [params.quizCompleted, checkAndUpdateStreak]);
 
   // Show loading screen if initial load
   if (loading) {
@@ -646,23 +616,47 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Streak Popup */}
         <Modal visible={showStreakPopup} transparent animationType="fade">
           <View className="flex-1 justify-center items-center bg-black/60">
             <View className="bg-white rounded-2xl p-6 mx-8 items-center">
-              <Text className="text-3xl font-bold text-center mb-2">
-                Streak Rules 🔥
-              </Text>
-              <Text className="text-black text-xl font-semibold text-center">
-                If you don't play the quiz for two consecutive days, your streak
-                will reset to 0.
-              </Text>
-              <TouchableOpacity
-                className="bg-black rounded-full px-6 py-3 mt-4"
-                onPress={() => setShowStreakPopup(false)}
-              >
-                <Text className="text-white font-bold">Awesome!</Text>
-              </TouchableOpacity>
+              {streakPopupMessage ? (
+                // Streak completion popup
+                <>
+                  <Text className="text-4xl mb-4">🔥</Text>
+                  <Text className="text-2xl font-bold text-center mb-2 text-primary">
+                    {streakPopupMessage}
+                  </Text>
+                  <Text className="text-gray-600 text-center mb-4">
+                    Keep it up! Come back tomorrow to maintain your streak.
+                  </Text>
+                  <TouchableOpacity
+                    className="bg-primary rounded-full px-6 py-3"
+                    onPress={() => {
+                      setShowStreakPopup(false);
+                      setStreakPopupMessage(""); // Clear message
+                    }}
+                  >
+                    <Text className="text-white font-bold">Awesome!</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                // Streak rules popup (when manually opened)
+                <>
+                  <Text className="text-3xl font-bold text-center mb-2">
+                    Streak Rules 🔥
+                  </Text>
+                  <Text className="text-black text-xl font-semibold text-center">
+                    If you don't play the quiz for two consecutive days, your
+                    streak will reset to 0.
+                  </Text>
+                  <TouchableOpacity
+                    className="bg-black rounded-full px-6 py-3 mt-4"
+                    onPress={() => setShowStreakPopup(false)}
+                  >
+                    <Text className="text-white font-bold">Got it!</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </View>
         </Modal>

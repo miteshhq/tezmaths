@@ -1,7 +1,7 @@
 // app/user/learn.tsx
 import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
 import { get, ref } from "firebase/database";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -123,17 +123,21 @@ export default function LearnScreen() {
     fetchVideos();
   }, []);
 
-  const handleSearch = (query) => {
-    setSearchQuery(query);
-    if (query === "") {
-      setFilteredVideos(videos);
-    } else {
-      const filtered = videos.filter((video) =>
-        video.name.toLowerCase().includes(query.toLowerCase())
-      );
-      setFilteredVideos(filtered);
-    }
-  };
+  // Memoize the handleSearch function to prevent recreating it on every render
+  const handleSearch = useCallback(
+    (query) => {
+      setSearchQuery(query);
+      if (query === "") {
+        setFilteredVideos(videos);
+      } else {
+        const filtered = videos.filter((video) =>
+          video.name.toLowerCase().includes(query.toLowerCase())
+        );
+        setFilteredVideos(filtered);
+      }
+    },
+    [videos]
+  );
 
   const openYoutubeVideo = (videoId) => {
     const url = `https://www.youtube.com/watch?v=${videoId}`;
@@ -195,6 +199,7 @@ export default function LearnScreen() {
     }
   };
 
+  // Move the header outside of the component to prevent re-renders
   const renderHeader = () => (
     <View className="mb-6">
       <View className="mx-4 mt-4">
@@ -293,18 +298,40 @@ export default function LearnScreen() {
               </View>
             </View>
           </ImageBackground>
-          <FlatList
-            data={filteredVideos}
-            keyExtractor={(item) => item.id}
-            renderItem={renderVideoItem}
-            ListHeaderComponent={renderHeader}
-            ListEmptyComponent={renderEmptyState}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{
-              paddingBottom: 20,
-              ...(filteredVideos.length === 0 && { flexGrow: 1 }),
-            }}
-          />
+          <>
+            {/* Search Input - moved outside FlatList */}
+            <View className="mb-6">
+              <View className="mx-4 mt-4">
+                <View className="relative">
+                  <TextInput
+                    className="bg-white text-black py-3 pl-12 pr-4 rounded-xl text-base border border-gray-200"
+                    placeholder="Search videos by name"
+                    placeholderTextColor="#9CA3AF"
+                    value={searchQuery}
+                    onChangeText={handleSearch}
+                  />
+                  <FontAwesome
+                    name="search"
+                    size={18}
+                    color="#9CA3AF"
+                    style={{ position: "absolute", left: 16, top: 14 }}
+                  />
+                </View>
+              </View>
+            </View>
+
+            <FlatList
+              data={filteredVideos}
+              keyExtractor={(item) => item.id}
+              renderItem={renderVideoItem}
+              ListEmptyComponent={renderEmptyState}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{
+                paddingBottom: 20,
+                ...(filteredVideos.length === 0 && { flexGrow: 1 }),
+              }}
+            />
+          </>
         </View>
       )}
     </View>
