@@ -456,20 +456,20 @@ export class BattleManager {
             const user = await this.waitForAuth();
             const userId = user.uid;
 
+            // Remove from all matchmaking entries
             const matchmakingRef = ref(database, "matchmaking");
             const snapshot = await get(matchmakingRef);
             const matchmaking = snapshot.val() || {};
 
-            const ourEntry = Object.entries(matchmaking).find(([roomId, data]) => {
-                return data.hostId === userId || (data.players && data.players[userId]);
-            });
+            const cleanupPromises = Object.entries(matchmaking)
+                .filter(([roomId, data]) =>
+                    data.hostId === userId || (data.players && data.players[userId])
+                )
+                .map(([roomId]) => remove(ref(database, `matchmaking/${roomId}`)));
 
-            if (ourEntry) {
-                const [roomId] = ourEntry;
-                await update(ref(database, `matchmaking/${roomId}`), null);
-            }
+            await Promise.allSettled(cleanupPromises);
         } catch (error) {
-            console.error("[BattleManager] Cancel matchmaking error:", error);
+            // Don't log error, just silently fail
         }
     }
 
@@ -1008,89 +1008,42 @@ export class BattleManager {
             const snapshot = await get(roomRef);
             const roomData = snapshot.val();
 
-            // Always return array even if room doesn't exist
-            if (!roomData) return [];
-
-            const players = roomData.players || {};
-            const playerKeys = Object.keys(players);
-
-            // Handle empty players case
-            if (playerKeys.length === 0) {
-                await update(roomRef, {
-                    status: "finished",
-                    gameEndReason: "no_players_left",
-                    finishedAt: serverTimestamp(),
-                    lastActivity: serverTimestamp()
-                });
-
-                // Schedule cleanup but return empty array immediately
-                setTimeout(async () => {
-                    try {
-                        const currentSnapshot = await get(roomRef);
-                        if (currentSnapshot.exists()) await remove(roomRef);
-                    } catch (error) {
-                        console.error("Final room cleanup error:", error);
-                    }
-                }, 30000);
-
+            // Always return array, never undefined
+            if (!roomData || !roomData.players) {
+                // Clean up empty room
+                if (roomData) {
+                    await update(roomRef, {
+                        status: "finished",
+                        finishedAt: serverTimestamp(),
+                    });
+                }
                 return [];
             }
 
-            // Build player array
-            const playerArray = playerKeys.map(id => {
-                const data = players[id];
-                return {
-                    userId: id,
-                    username: data.username || data.name || "Unknown Player",
-                    score: data.score || 0,
-                    avatar: data.avatar || 0,
-                    isHost: data.isHost || false,
-                    consecutiveCorrect: data.consecutiveCorrect || 0
-                };
-            }).sort((a, b) => b.score - a.score);
+            const players = roomData.players;
+            const playerArray = Object.keys(players).map(id => ({
+                userId: id,
+                username: players[id].username || players[id].name || "Unknown Player",
+                score: players[id].score || 0,
+                avatar: players[id].avatar || 0,
+            })).sort((a, b) => b.score - a.score);
 
-            const winner = playerArray[0];
-
-            // Prepare player updates
-            const playerUpdates = {};
-            playerArray.forEach(player => {
-                playerUpdates[`players/${player.userId}/finalScore`] = player.score;
-                playerUpdates[`players/${player.userId}/isWinner`] = player.userId === winner.userId;
-            });
-
-            // Update room state
+            // Update room status
             await update(roomRef, {
-                ...playerUpdates,
                 status: "finished",
-                gameWinner: winner.userId,
-                gameEndReason: "all_questions_completed",
                 results: playerArray,
                 finishedAt: serverTimestamp(),
-                lastActivity: serverTimestamp()
-            });
-
-            // Update scores in background
-            playerArray.forEach(player => {
-                this.updateUserScore(player.userId, player.score).catch(console.error);
             });
 
             // Schedule cleanup
-            setTimeout(async () => {
-                try {
-                    const currentSnapshot = await get(roomRef);
-                    if (currentSnapshot.exists()) await remove(roomRef);
-                } catch (error) {
-                    console.error("Final room cleanup error:", error);
-                }
-            }, 15000);
+            setTimeout(() => {
+                this.cleanupRoom(roomId, "battle_completed").catch(() => { });
+            }, 30000);
 
-            // Return player array for results screen
             return playerArray;
-
         } catch (error) {
             console.error("End battle error:", error);
-            // Always return array on error
-            return [];
+            return []; // Always return array
         }
     }
 
@@ -1193,17 +1146,21 @@ export class BattleManager {
 
     async cleanupRoom(roomId, reason = "manual") {
         try {
+            console.log(`Cleaning up room ${roomId} - Reason: ${reason}`);
+
             const roomRef = ref(database, `rooms/${roomId}`);
-            const snapshot = await get(roomRef);
+            await remove(roomRef);
 
-            if (snapshot.exists()) {
-                console.log(`Cleaning up room ${roomId} - Reason: ${reason}`);
-                await remove(roomRef);
-            }
-
+            // Remove from listeners
             this.removeRoomListener(roomId);
+
+            // Clean up matchmaking if applicable
+            const matchmakingRef = ref(database, `matchmaking/${roomId}`);
+            await remove(matchmakingRef).catch(() => { }); // Ignore errors
+
         } catch (error) {
             console.error("Room cleanup error:", error);
+            // Don't throw error to prevent blocking other operations
         }
     }
 

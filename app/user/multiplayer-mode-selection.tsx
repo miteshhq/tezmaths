@@ -1,6 +1,12 @@
 import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -51,11 +57,11 @@ export default function MultiplayerModeSelection() {
   const MAX_PLAYERS = 4;
 
   const cleanupRef = useRef(false);
-    const roomListenerRef = useRef(null);
-    
-    const memoizedPlayersCount = useMemo(() => {
-      return Object.keys(playersInRoom).length;
-    }, [playersInRoom]);
+  const roomListenerRef = useRef(null);
+
+  const memoizedPlayersCount = useMemo(() => {
+    return Object.keys(playersInRoom).length;
+  }, [playersInRoom]);
 
   const performCleanup = useCallback(() => {
     if (cleanupRef.current) return;
@@ -71,12 +77,23 @@ export default function MultiplayerModeSelection() {
     }
     battleManager.cancelMatchmaking().catch(console.error);
   }, [roomId]);
-    
+
+  // ADD this useEffect at the top:
   useEffect(() => {
-    return () => {
-      performCleanup();
-    };
-  }, [performCleanup]);
+    // Reset all states when component mounts
+    setShowQuizCodeInput(false);
+    setQuizCode("");
+    setJoiningRoom(false);
+    setShowCreateRoom(false);
+    setRoomCode("");
+    setRoomName("");
+    setRoomId("");
+    setPlayersInRoom({});
+    setSearchingRandom(false);
+
+    // Cancel any ongoing operations
+    battleManager.cancelMatchmaking().catch(() => {});
+  }, []);
 
   // Handle hardware back button
   useEffect(() => {
@@ -115,7 +132,11 @@ export default function MultiplayerModeSelection() {
     };
   }, []);
 
-  
+  useEffect(() => {
+    return () => {
+      performCleanup();
+    };
+  }, [performCleanup]);
 
   useEffect(() => {
     const keyboardShowListener = Keyboard.addListener(
@@ -234,16 +255,34 @@ export default function MultiplayerModeSelection() {
     }
   };
 
-  const cancelRoomCreation = async () => {
-    if (roomId) {
-      await battleManager.leaveRoom(roomId);
+  const cancelRoomCreation = useCallback(async () => {
+    try {
+      if (roomId) {
+        await battleManager.leaveRoom(roomId);
+      }
+
+      // Remove listener
+      if (roomListenerRef.current) {
+        roomListenerRef.current();
+        roomListenerRef.current = null;
+      }
+
+      // Reset all states
+      setShowCreateRoom(false);
+      setRoomName("");
+      setRoomCode("");
+      setRoomId("");
+      setPlayersInRoom({});
+    } catch (error) {
+      console.error("Cancel room error:", error);
+      // Reset states anyway
+      setShowCreateRoom(false);
+      setRoomName("");
+      setRoomCode("");
+      setRoomId("");
+      setPlayersInRoom({});
     }
-    setShowCreateRoom(false);
-    setRoomName("");
-    setRoomCode("");
-    setRoomId("");
-    setPlayersInRoom({});
-  };
+  }, [roomId]);
 
   const handleRandomMatch = async () => {
     setSearchingRandom(true);
@@ -259,11 +298,16 @@ export default function MultiplayerModeSelection() {
     }
   };
 
-  // Update the cancelRandomSearch function
-  const cancelRandomSearch = () => {
+  const cancelRandomSearch = useCallback(() => {
     setSearchingRandom(false);
-    battleManager.cancelMatchmaking().catch(console.error);
-  };
+    battleManager.cancelMatchmaking().catch(() => {});
+
+    // Reset any room states
+    if (roomId) {
+      battleManager.leaveRoom(roomId).catch(() => {});
+      setRoomId("");
+    }
+  }, [roomId]);
 
   const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
 

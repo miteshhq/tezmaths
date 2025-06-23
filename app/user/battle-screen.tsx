@@ -44,7 +44,8 @@ const avatarImages = (avatar) => {
 };
 
 const debugLog = (message, data = null) => {
-  if (DEBUG_MODE) {
+  // Remove all debug logs in production
+  if (__DEV__ && DEBUG_MODE) {
     console.log(`[BattleScreen] ${message}`, data);
   }
 };
@@ -317,39 +318,28 @@ export default function BattleScreen() {
       roomRef,
       (snapshot) => {
         const data = snapshot.val();
-        debugLog("Room data received:", data);
 
         if (!data) {
-          debugLog("Room not found for roomId:", roomId);
           setNetworkError(true);
-          // Remove the alert - just set error state
-          // The component will handle navigation naturally
+          // Don't show alert, just set error state
           return;
-        }
-
-        // Rest of the logic remains the same
-        if (data.currentQuestion !== roomData?.currentQuestion) {
-          debugLog("Question changed, resetting states");
-          setUserAnswer("");
-          setFeedback("");
-          setIsAnswered(false);
-          setIsProcessing(false);
-          timeExpiryHandled.current = false;
         }
 
         setRoomData(data);
         setNetworkError(false);
       },
       (error) => {
-        console.error("BattleScreen - Database listener error:", error);
+        console.error("Database listener error:", error);
         setNetworkError(true);
-        // Remove alerts - let user stay on results screen
+        // Remove alerts here
       }
     );
 
     return () => {
       unsubscribe();
-      battleManager.updatePlayerConnection(roomId, false);
+      if (roomId) {
+        battleManager.updatePlayerConnection(roomId, false);
+      }
     };
   }, [roomId]);
 
@@ -444,48 +434,27 @@ export default function BattleScreen() {
     if (roomData?.status === "finished") {
       const navigateToResults = async () => {
         try {
-          const playerArray = await callEndBattle(roomId);
-          if (playerArray && Array.isArray(playerArray)) {
-            router.replace({
-              pathname: "/user/battle-results",
-              params: {
-                roomId: roomId, // Add this line - pass the roomId
-                players: JSON.stringify(playerArray),
-                totalQuestions: roomData.totalQuestions?.toString() || "0",
-                currentUserId: userId,
-              },
-            });
-          } else {
-            console.error("Invalid playerArray:", playerArray);
-            // Add fallback navigation with roomId
-            router.replace({
-              pathname: "/user/battle-results",
-              params: {
-                roomId: roomId,
-                players: JSON.stringify([]),
-                totalQuestions: "0",
-                currentUserId: userId,
-              },
-            });
-          }
+          const playerArray = await battleManager.endBattle(roomId);
+
+          // Always navigate, even with empty array
+          router.replace({
+            pathname: "/user/battle-results",
+            params: {
+              roomId: roomId,
+              players: JSON.stringify(playerArray || []),
+              totalQuestions: roomData.totalQuestions?.toString() || "0",
+              currentUserId: userId,
+            },
+          });
         } catch (error) {
           console.error("Error in navigateToResults:", error);
-          Alert.alert("Error", "An error occurred while ending the battle.");
-          // Add fallback navigation on error
-          router.replace({
-            pathname: "/user/multiplayer-mode-selection",
-          });
+          // Fallback navigation
+          router.replace("/user/multiplayer-mode-selection");
         }
       };
       navigateToResults();
     }
-  }, [
-    roomData?.status,
-    roomData?.players,
-    roomData?.totalQuestions,
-    userId,
-    roomId,
-  ]); // Add roomId to dependencies
+  }, [roomData?.status, userId, roomId]);
 
   const callEndBattle = async (roomId) => {
     try {

@@ -31,6 +31,29 @@ export default function BattleRoom() {
   const timeoutRef = useRef(null);
   const battleStartTimeoutRef = useRef(null);
   const battleNavigationTimeoutRef = useRef(null);
+  const cleanupRef = useRef(false);
+
+  const performCleanup = useCallback(() => {
+    if (cleanupRef.current) return;
+    cleanupRef.current = true;
+
+    // Clear all timeouts
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+
+    // Remove listeners
+    if (roomListenerRef.current) {
+      roomListenerRef.current();
+      roomListenerRef.current = null;
+    }
+
+    // Reset states
+    setBattleStarting(false);
+    setBattleStartAttempted(false);
+    setMatchmakingTimeout(false);
+  }, [roomId]);
 
   useEffect(() => {
     const connectToRoom = async () => {
@@ -68,27 +91,14 @@ export default function BattleRoom() {
   }, []);
 
   const safeNavigate = useCallback(
-    (path, params = {}) => {
-      if (!isMounted || navigationRef.current || isNavigating) return;
-
+    (path) => {
+      if (navigationRef.current) return;
       navigationRef.current = true;
-      setIsNavigating(true);
 
-      console.log("Navigating to:", path);
-
-      setTimeout(() => {
-        if (isMounted && navigationRef.current) {
-          try {
-            router.push(path);
-          } catch (error) {
-            console.error("Navigation error:", error);
-            navigationRef.current = false;
-            setIsNavigating(false);
-          }
-        }
-      }, 100);
+      // Immediate navigation
+      router.push(path);
     },
-    [isMounted, router, isNavigating]
+    [router]
   );
 
   useEffect(() => {
@@ -474,11 +484,7 @@ export default function BattleRoom() {
           <TouchableOpacity
             className="bg-red-500 px-6 py-3 rounded-lg"
             onPress={() => {
-              // Reset all states before navigating
-              setMatchmakingTimeout(false);
-              setBattleStarting(false);
-              setBattleStartAttempted(false);
-              setOpponentFound(false);
+              performCleanup(); // ADD THIS LINE
               router.replace("/user/multiplayer-mode-selection");
             }}
           >
