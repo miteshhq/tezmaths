@@ -3,7 +3,6 @@ import React, { useState, useRef, useCallback, useEffect } from "react";
 import {
   Alert,
   Image,
-  Platform,
   Share,
   Text,
   TouchableOpacity,

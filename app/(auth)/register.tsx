@@ -253,19 +253,19 @@ export default function RegisterScreen() {
       };
 
       // If this is a Google user, preserve some Google-specific fields
-      //   if (isGoogleUser === "true") {
-      //     const userRef = ref(database, `users/${userId}`);
-      //     const existingSnapshot = await get(userRef);
+      if (isGoogleUser === "true") {
+        const userRef = ref(database, `users/${userId}`);
+        const existingSnapshot = await get(userRef);
 
-      //     if (existingSnapshot.exists()) {
-      //       const existingData = existingSnapshot.val();
-      //       // Preserve Google-specific fields
-      //       userData.photoURL = existingData.photoURL || "";
-      //       userData.providerId = existingData.providerId || "google.com";
-      //       userData.createdAt =
-      //         existingData.createdAt || new Date().toISOString();
-      //     }
-      //   }
+        if (existingSnapshot.exists()) {
+          const existingData = existingSnapshot.val();
+          // Preserve Google-specific fields
+          userData.photoURL = existingData.photoURL || "";
+          userData.providerId = existingData.providerId || "google.com";
+          userData.createdAt =
+            existingData.createdAt || new Date().toISOString();
+        }
+      }
 
       // Create/update user entry
       const userRef = ref(database, `users/${userId}`);
