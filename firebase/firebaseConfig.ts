@@ -1,11 +1,11 @@
 // firebase/firebaseConfig.ts
 import { initializeApp } from "firebase/app";
-// import { initializeAuth, getReactNativePersistence } from "firebase/auth";
-import { initializeAuth } from "firebase/auth";
+import { initializeAuth, getReactNativePersistence, browserLocalPersistence } from "firebase/auth";
 import { getDatabase } from "firebase/database";
 import { getStorage } from "firebase/storage";
+import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-  
+
 const firebaseConfig = {
     apiKey: "AIzaSyBGfk9QuJ7MIwtO3N0dUVUl8J9fHHxtx0Q",
     authDomain: "tezmathsinnovations.firebaseapp.com",
@@ -19,10 +19,20 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-const auth = initializeAuth(app);
-// const auth = initializeAuth(app, {
-//     persistence: getReactNativePersistence(AsyncStorage),
-// });
+// Platform-specific auth initialization
+let auth;
+
+if (Platform.OS === 'web') {
+    // For web browsers (including Windows)
+    auth = initializeAuth(app, {
+        persistence: browserLocalPersistence,
+    });
+} else {
+    // For React Native (Android, iOS)
+    auth = initializeAuth(app, {
+        persistence: getReactNativePersistence(AsyncStorage),
+    });
+}
 
 const database = getDatabase(app);
 const storage = getStorage(app);
