@@ -54,7 +54,10 @@ const avatarImages = (avatar) => {
 
 export default function BattleResultsScreen() {
   const params = useLocalSearchParams();
-  const { roomId, players, totalQuestions, currentUserId } = params;
+  const { roomId, players, totalQuestions, currentUserId, totalBattleTime } =
+    params;
+
+  const totalGameTimeMs = Number.parseInt(totalBattleTime) || 0;
 
   const viewShotRef = useRef();
   const cleanupExecuted = useRef(false);
@@ -344,6 +347,21 @@ export default function BattleResultsScreen() {
     );
   };
 
+  const formatTime = (milliseconds: number) => {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    if (hours >= 1) {
+      return `${hours}h ${minutes}m ${seconds}s`;
+    } else if (minutes >= 1) {
+      return `${minutes}m ${seconds}s`;
+    } else {
+      return `${seconds}s`;
+    }
+  };
+
   const getMotivationalQuote = () => {
     const quotes = [
       "Victory is earned through sharp minds!",
@@ -512,6 +530,10 @@ export default function BattleResultsScreen() {
                 </View>
               ))}
             </ScrollView>
+
+            <Text className="text-primary text-base font-medium text-center mb-2">
+              Time Spent: {formatTime(totalGameTimeMs)}
+            </Text>
 
             <Text className="text-2xl mt-2 mb-2 font-black text-center text-white py-2 px-4 mx-auto bg-primary rounded-xl">
               Download Now

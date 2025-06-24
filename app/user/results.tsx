@@ -297,9 +297,6 @@ export default function ResultsScreen() {
             onPress={() =>
               router.push({
                 pathname: "/user/home",
-                params: {
-                  quizCompleted: "true",
-                },
               })
             }
           >

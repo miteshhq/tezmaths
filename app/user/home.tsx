@@ -20,6 +20,7 @@ import {
 } from "react-native";
 import SoundManager from "../../components/soundManager";
 import { auth, database } from "../../firebase/firebaseConfig";
+import { checkStreakDecay } from "../../utils/streakManager";
 
 export default function HomeScreen() {
   const LEVEL_STORAGE_KEY = "highestLevelReached";
@@ -325,64 +326,57 @@ export default function HomeScreen() {
     if (!userId) return;
 
     try {
-      const userRef = ref(database, `users/${userId}`);
-      const snapshot = await get(userRef);
+      if (params.quizCompleted === "true") {
+        // User just completed a quiz - streak was already updated in quiz screen
+        // Just check current streak and show popup if needed
+        const userRef = ref(database, `users/${userId}`);
+        const snapshot = await get(userRef);
 
-      if (snapshot.exists()) {
-        const userData = snapshot.val();
-        const lastCompletionDate = userData.lastCompletionDate;
-        const currentStreak = userData.streak || 0;
-        const today = new Date().toDateString();
-
-        if (params.quizCompleted === "true") {
-          // Only update streak if they haven't completed a quiz today
-          if (lastCompletionDate !== today) {
-            const newStreak = currentStreak + 1;
-            await set(userRef, {
-              ...userData,
-              streak: newStreak,
-              lastCompletionDate: today,
-            });
-
-            setUserStreak(newStreak);
-
-            // Show popup only when streak actually increases
-            setStreakPopupMessage(`Day ${newStreak} completed! 🔥`);
-            setShowStreakPopup(true);
-
-            setTimeout(() => {
-              setShowStreakPopup(false);
-            }, 3000);
-          }
-          // If they already completed today, no popup or update happens
+        if (snapshot.exists()) {
+          const userData = snapshot.val();
+          const currentStreak = userData.streak || 0;
+          setUserStreak(currentStreak);
+          setStreakPopupMessage(`Day ${currentStreak} completed! 🔥`);
+          setShowStreakPopup(true);
+          await AsyncStorage.removeItem("showStreakPopup"); // Clear the flag
+          setTimeout(() => {
+            setShowStreakPopup(false);
+          }, 10000);
+        }
+      } else {
+        // App opened normally - check for streak decay
+        const decayResult = await checkStreakDecay();
+        if (decayResult.decayed) {
+          setUserStreak(0);
         } else {
-          // Check if streak should be reset (only when not coming from quiz)
-          if (lastCompletionDate) {
-            const lastDate = new Date(lastCompletionDate);
-            const todayDate = new Date();
-            const diffTime = Math.abs(todayDate - lastDate);
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-            if (diffDays >= 2 && currentStreak > 0) {
-              await set(userRef, { ...userData, streak: 0 });
-              setUserStreak(0);
-            } else {
-              setUserStreak(currentStreak);
-            }
+          // Get current streak from Firebase
+          const userRef = ref(database, `users/${userId}`);
+          const snapshot = await get(userRef);
+          if (snapshot.exists()) {
+            const userData = snapshot.val();
+            setUserStreak(userData.streak || 0);
           }
         }
       }
     } catch (error) {
-      // console.error("Error checking streak:", error);
+      console.error("Error checking streak:", error);
     }
   }, [params.quizCompleted]);
 
-  // Initial load and focus effect
+  const checkStreakDecayOnFocus = useCallback(async () => {
+    await checkStreakDecay();
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       loadAllData();
+
+      // Always check for streak decay when home loads
+      checkStreakDecayOnFocus();
+
+      // Handle quiz completion popup
       checkAndUpdateStreak();
-    }, [loadAllData, checkAndUpdateStreak])
+    }, [loadAllData, checkStreakDecayOnFocus, checkAndUpdateStreak])
   );
 
   // App state change handler

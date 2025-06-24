@@ -15,6 +15,7 @@ import {
     runTransaction
 } from "firebase/database";
 import { auth, database } from "../firebase/firebaseConfig";
+import { updateUserStreak } from './streakManager';
 
 export class BattleManager {
     constructor() {
@@ -846,49 +847,20 @@ export class BattleManager {
             const currentTotalPoints = userData.totalPoints || 0;
             const newTotalPoints = currentTotalPoints + scoreToAdd;
 
-            // FIXED: Proper streak logic
-            const today = new Date().toISOString().split("T")[0];
-            const lastDate = userData.lastCompletionDate;
-            const currentStreak = userData.streak || 0;
-
             let newStreak;
-            if (!lastDate) {
-                // First time playing
-                newStreak = 1;
-            } else {
-                // Calculate difference in days
-                const lastDateObj = new Date(lastDate);
-                const todayDateObj = new Date(today);
 
-                // Set hours to noon to avoid timezone issues
-                lastDateObj.setHours(12, 0, 0, 0);
-                todayDateObj.setHours(12, 0, 0, 0);
-
-                const diffInDays = Math.round(
-                    (todayDateObj.getTime() - lastDateObj.getTime()) /
-                    (1000 * 60 * 60 * 24)
-                );
-
-                if (diffInDays === 0) {
-                    // Same day, no change in streak
-                    newStreak = currentStreak;
-                } else if (diffInDays === 1) {
-                    // Consecutive day, increment streak
-                    newStreak = currentStreak + 1;
-                } else if (diffInDays === 2) {
-                    // Missed 1 day, pause streak
-                    newStreak = currentStreak;
-                } else {
-                    // Missed 2+ days, reset streak to 1 (playing today)
-                    newStreak = 1;
-                }
+            const streakResult = await updateUserStreak();
+            if (streakResult.increased) {
+                newStreak = streakResult.streak
             }
 
             await update(userRef, {
-                totalPoints: newTotalPoints,
-                streak: newStreak,
-                lastCompletionDate: today,
+                totalPoints: newTotalPoints
             });
+
+            if (!streakResult.alreadyPlayedToday) {
+                await AsyncStorage.setItem("showStreakPopup", "true");
+            }
 
         } catch (error) {
             console.error("Update user score error:", error);

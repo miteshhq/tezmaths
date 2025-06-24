@@ -20,7 +20,6 @@ import SoundManager from "../../components/soundManager";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const DEBUG_MODE = false;
-const AUTO_SUBMIT_DELAY = 400;
 
 const avatarImages = (avatar) => {
   const avatarNumber =
@@ -40,13 +39,6 @@ const avatarImages = (avatar) => {
       return require("../../assets/avatars/avatar6.jpg");
     default:
       return require("../../assets/avatars/avatar1.jpg");
-  }
-};
-
-const debugLog = (message, data = null) => {
-  // Remove all debug logs in production
-  if (__DEV__ && DEBUG_MODE) {
-    console.log(`[BattleScreen] ${message}`, data);
   }
 };
 
@@ -139,6 +131,10 @@ export default function BattleScreen() {
     useState(false);
   const [countdownValue, setCountdownValue] = useState(0);
 
+  const [battleStartTime, setBattleStartTime] = useState<number>(0);
+  const battleStartTimeRef = useRef<number>(0);
+  const isFirstQuestionRef = useRef(true);
+
   useEffect(() => {
     return () => {
       SoundManager.stopSound("rightAnswerSoundEffect").catch(() => {});
@@ -220,6 +216,12 @@ export default function BattleScreen() {
 
   useEffect(() => {
     if (roomData?.currentQuestion !== undefined) {
+      if (isFirstQuestionRef.current && roomData.currentQuestion === 0) {
+        const startTime = Date.now();
+        setBattleStartTime(startTime);
+        battleStartTimeRef.current = startTime;
+        isFirstQuestionRef.current = false;
+      }
       setUserAnswer("");
       setFeedback("");
       setIsAnswered(false);
@@ -436,6 +438,24 @@ export default function BattleScreen() {
         try {
           const playerArray = await battleManager.endBattle(roomId);
 
+          // Calculate total battle time
+          const battleEndTime = Date.now();
+          let totalBattleTimeMs = 0;
+          if (battleStartTimeRef.current > 0) {
+            const rawTimeMs = battleEndTime - battleStartTimeRef.current;
+            const maxReasonableTime = 2 * 60 * 60 * 1000; // 2 hours
+            const minReasonableTime = 1000; // 1 second
+            if (
+              rawTimeMs >= minReasonableTime &&
+              rawTimeMs <= maxReasonableTime
+            ) {
+              totalBattleTimeMs = rawTimeMs;
+            } else {
+              console.warn(`Invalid battle time: ${rawTimeMs}ms`);
+              totalBattleTimeMs = 0;
+            }
+          }
+
           // Always navigate, even with empty array
           router.replace({
             pathname: "/user/battle-results",
@@ -444,10 +464,11 @@ export default function BattleScreen() {
               players: JSON.stringify(playerArray || []),
               totalQuestions: roomData.totalQuestions?.toString() || "0",
               currentUserId: userId,
+              totalBattleTime: totalBattleTimeMs.toString(),
             },
           });
         } catch (error) {
-          console.error("Error in navigateToResults:", error);
+          //   console.error("Error in navigateToResults:", error);
           // Fallback navigation
           router.replace("/user/multiplayer-mode-selection");
         }
@@ -455,20 +476,6 @@ export default function BattleScreen() {
       navigateToResults();
     }
   }, [roomData?.status, userId, roomId]);
-
-  const callEndBattle = async (roomId) => {
-    try {
-      if (!roomId) {
-        console.error("callEndBattle: roomId is undefined");
-        return [];
-      }
-      const playerArray = await battleManager.endBattle(roomId);
-      return playerArray || [];
-    } catch (error) {
-      console.error("Error ending battle:", error);
-      return [];
-    }
-  };
 
   // Update handleInputChange
   const handleInputChange = async (text: string) => {
@@ -508,7 +515,6 @@ export default function BattleScreen() {
     setIsProcessing(true);
 
     try {
-      debugLog("Submitting correct answer...");
       const isFirstCorrect = await battleManager.submitAnswer(
         roomId as string,
         roomData.currentQuestion,
@@ -537,10 +543,6 @@ export default function BattleScreen() {
       }
 
       setIsAnswered(true);
-      debugLog(
-        "Answer submitted successfully, isFirstCorrect:",
-        isFirstCorrect
-      );
     } catch (error) {
       console.error("Answer submission error:", error);
       setFeedback("Error submitting answer");
