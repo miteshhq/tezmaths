@@ -326,7 +326,8 @@ export default function HomeScreen() {
     if (!userId) return;
 
     try {
-      if (params.quizCompleted === "true") {
+      const showStreakPopupFlag = await AsyncStorage.getItem("showStreakPopup");
+      if (showStreakPopupFlag) {
         // User just completed a quiz - streak was already updated in quiz screen
         // Just check current streak and show popup if needed
         const userRef = ref(database, `users/${userId}`);
@@ -338,7 +339,7 @@ export default function HomeScreen() {
           setUserStreak(currentStreak);
           setStreakPopupMessage(`Day ${currentStreak} completed! 🔥`);
           setShowStreakPopup(true);
-          await AsyncStorage.removeItem("showStreakPopup"); // Clear the flag
+          await AsyncStorage.removeItem("showStreakPopup");
           setTimeout(() => {
             setShowStreakPopup(false);
           }, 10000);
@@ -617,14 +618,14 @@ export default function HomeScreen() {
                 // Streak completion popup
                 <>
                   <Text className="text-4xl mb-4">🔥</Text>
-                  <Text className="text-2xl font-bold text-center mb-2 text-primary">
+                  <Text className="text-2xl font-bold text-center mb-2 text-black">
                     {streakPopupMessage}
                   </Text>
                   <Text className="text-gray-600 text-center mb-4">
                     Keep it up! Come back tomorrow to maintain your streak.
                   </Text>
                   <TouchableOpacity
-                    className="bg-primary rounded-full px-6 py-3"
+                    className="bg-black rounded-full px-6 py-3"
                     onPress={() => {
                       setShowStreakPopup(false);
                       setStreakPopupMessage(""); // Clear message

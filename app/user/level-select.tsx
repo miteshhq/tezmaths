@@ -169,7 +169,7 @@ export default function LevelSelect() {
       const onBackPress = () => {
         // Stop sound before going back
         SoundManager.stopSound("levelSoundEffect").catch(console.error);
-        router.back();
+        router.push("/user/home");
         return true;
       };
       const backHandler = BackHandler.addEventListener(

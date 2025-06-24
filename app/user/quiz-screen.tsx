@@ -647,7 +647,7 @@ export default function QuizScreen() {
 
   const updateScoreInDatabase = useCallback(async (levelScore: number) => {
     const userId = auth.currentUser?.uid;
-    if (!userId || levelScore <= 0) {
+    if (!userId) {
       return;
     }
 
@@ -741,9 +741,7 @@ export default function QuizScreen() {
           });
         }
       } else {
-        if (quizScore > 0) {
-          await updateScoreInDatabase(quizScore);
-        }
+        await updateScoreInDatabase(quizScore);
 
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         await SoundManager.playSound("wrongAnswerSoundEffect");
@@ -792,7 +790,6 @@ export default function QuizScreen() {
         const newTotalPoints = currentTotalPoints + levelScore;
 
         const streakResult = await updateUserStreak();
-        const newStreak = streakResult.streak;
 
         if (!streakResult.alreadyPlayedToday) {
           await AsyncStorage.setItem("showStreakPopup", "true");
@@ -872,9 +869,7 @@ export default function QuizScreen() {
     stopTimer();
 
     // Update score in database on timeout
-    if (quizScore > 0) {
-      await updateScoreInDatabase(quizScore);
-    }
+    await updateScoreInDatabase(quizScore);
 
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     await SoundManager.playSound("wrongAnswerSoundEffect");
