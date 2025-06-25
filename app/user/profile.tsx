@@ -427,7 +427,7 @@ export default function ProfileScreen() {
               </View>
               <View className="items-center">
                 <Text className="text-2xl font-black text-custom-purple">
-                  {Math.max(1, Number.parseInt(userData.currentLevel) - 1)}
+                  {Math.max(0, isNaN(Number(userData.currentLevel)) ? 0 : Number(userData.currentLevel) - 1)}
                 </Text>
                 <Text className="text-custom-purple text-lg">Levels</Text>
               </View>

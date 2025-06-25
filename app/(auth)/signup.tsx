@@ -51,6 +51,27 @@ export default function SignUpScreen() {
     };
   }, []);
 
+  const handleUserRedirect = useCallback(
+    async (user, userData) => {
+      if (userData.isnewuser === true || userData.isnewuser === undefined) {
+        router.push("/register");
+        return;
+      }
+
+      if (userData.highestCompletedLevelCompleted !== undefined) {
+        await AsyncStorage.setItem(
+          LEVEL_STORAGE_KEY,
+          userData.highestCompletedLevelCompleted.toString()
+        );
+      }
+
+      const now = new Date().getTime().toString();
+      await AsyncStorage.setItem("lastLogin", now);
+      router.push("/user/home");
+    },
+    [router]
+  );
+
   const handleGoogleSignIn = useCallback(async () => {
     try {
       setErrorMessage(""); // Clear any previous errors
@@ -166,6 +187,7 @@ export default function SignUpScreen() {
     }
 
     try {
+      await createUserWithEmailAndPassword(auth, email, password);
       setErrorMessage("");
       router.push("/login");
     } catch (error) {
