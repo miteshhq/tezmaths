@@ -812,6 +812,7 @@ export default function QuizScreen() {
         const updates = {
           totalPoints: newTotalPoints,
           [`completedLevels/${currentLevel}`]: true,
+          currentLevel: currentLevel + 1,
         };
 
         // Always unlock next level if it exists and current level is completed

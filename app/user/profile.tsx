@@ -298,7 +298,7 @@ export default function ProfileScreen() {
       } catch (error1) {
         try {
           // Method 2: Try just signOut if revoke fails
-            await GoogleSignin.signOut();
+          await GoogleSignin.signOut();
         } catch (error2) {
           try {
             // Method 3: Try clearing tokens manually
@@ -427,7 +427,12 @@ export default function ProfileScreen() {
               </View>
               <View className="items-center">
                 <Text className="text-2xl font-black text-custom-purple">
-                  {Math.max(0, isNaN(Number(userData.currentLevel)) ? 0 : Number(userData.currentLevel) - 1)}
+                  {Math.max(
+                    0,
+                    isNaN(Number(userData.currentLevel))
+                      ? 0
+                      : Number(userData.currentLevel) - 1
+                  )}
                 </Text>
                 <Text className="text-custom-purple text-lg">Levels</Text>
               </View>
