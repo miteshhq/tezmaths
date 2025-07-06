@@ -12,6 +12,7 @@ import {
   View,
   Image,
   ImageBackground,
+  ScrollView,
 } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { auth, database } from "../../firebase/firebaseConfig";
@@ -720,131 +721,133 @@ export default function BattleScreen() {
           </View>
         </View>
       </ImageBackground>
-      {/* FIXED: Reduced padding */}
-      <View className="flex-1 p-2">
-        <View className="flex-row justify-between items-center mb-4">
-          <CircularProgress
-            size={70}
-            progress={
-              (roomData?.currentQuestion + 1) / roomData?.totalQuestions
-            }
-            strokeWidth={8}
-            color="#F97316"
-            text={`${roomData?.currentQuestion + 1}/${
-              roomData?.totalQuestions
-            }`}
-          />
-          <View className="flex-1 ml-4">
-            <View className="flex-row justify-between mb-1">
-              <Text className="text-primary">Time Remaining:</Text>
-              <Text className="text-primary font-bold">{timeLeft}s</Text>
-            </View>
-            <View className="bg-gray-300 h-4 rounded-full overflow-hidden">
-              <View
-                className="h-full rounded-full transition-all duration-1000"
-                style={{
-                  backgroundColor: getTimerColor(),
-                  width: `${(timeLeft / 15) * 100}%`,
-                }}
-              />
+      <ScrollView className="flex-1 bg-white">
+        <View className="flex-1 p-2">
+          <View className="flex-row justify-between items-center mb-4">
+            <CircularProgress
+              size={70}
+              progress={
+                (roomData?.currentQuestion + 1) / roomData?.totalQuestions
+              }
+              strokeWidth={8}
+              color="#F97316"
+              text={`${roomData?.currentQuestion + 1}/${
+                roomData?.totalQuestions
+              }`}
+            />
+            <View className="flex-1 ml-4">
+              <View className="flex-row justify-between mb-1">
+                <Text className="text-primary">Time Remaining:</Text>
+                <Text className="text-primary font-bold">{timeLeft}s</Text>
+              </View>
+              <View className="bg-gray-300 h-4 rounded-full overflow-hidden">
+                <View
+                  className="h-full rounded-full transition-all duration-1000"
+                  style={{
+                    backgroundColor: getTimerColor(),
+                    width: `${(timeLeft / 15) * 100}%`,
+                  }}
+                />
+              </View>
             </View>
           </View>
-        </View>
 
-        {renderProfileImages()}
+          {renderProfileImages()}
 
-        <View className="bg-white rounded-2xl border border-black p-4">
-          <Text className="text-3xl font-black text-black text-center">
-            What is {currentQuestion?.question} ?
-          </Text>
-          <TextInput
-            className="bg-custom-gray p-4 rounded-xl text-xl text-center border border-gray-100 mt-4"
-            ref={inputRef}
-            value={userAnswer}
-            onChangeText={handleInputChange}
-            placeholder="Type Your Answer"
-            keyboardType="numeric"
-            editable={
-              !isAnswered &&
-              timeLeft > 0 &&
-              !roomData.questionTransition &&
-              !isProcessing
-            }
-          />
-          {feedback && (
-            <Text
-              className={`text-center mt-2 ${
-                feedback.includes("✅") ? "text-green-500" : "text-red-500"
-              }`}
-            >
-              {feedback}
+          <View className="bg-white rounded-2xl border border-black p-4">
+            <Text className="text-3xl font-black text-black text-center">
+              What is {currentQuestion?.question} ?
             </Text>
-          )}
-          {isProcessing && (
-            <Text className="text-blue-500 text-center mt-2">
-              Processing...
-            </Text>
-          )}
-        </View>
-
-        {Object.values(roomData?.players || {}).map((player, index) => {
-          if (player.winner) {
-            return (
+            <TextInput
+              className="bg-custom-gray p-4 rounded-xl text-xl text-center border border-gray-100 mt-4"
+              ref={inputRef}
+              value={userAnswer}
+              onChangeText={handleInputChange}
+              placeholder="Type Your Answer"
+              keyboardType="numeric"
+              editable={
+                !isAnswered &&
+                timeLeft > 0 &&
+                !roomData.questionTransition &&
+                !isProcessing
+              }
+            />
+            {feedback && (
               <Text
-                key={`winner-${index}`}
-                className="text-green-500 text-center mt-4"
+                className={`text-center mt-2 ${
+                  feedback.includes("✅") ? "text-green-500" : "text-red-500"
+                }`}
               >
-                🏆 {player.username || player.name} got it right! (+
-                {currentQuestion?.points || 1} pts)
+                {feedback}
               </Text>
-            );
-          }
-          return null;
-        })}
-
-        {roomData?.players?.[userId]?.consecutiveCorrect > 0 &&
-          roomData.totalQuestions - roomData.currentQuestion >
-            roomData.consecutiveWinThreshold &&
-          !roomData?.currentWinner && (
-            <Text className="text-blue-500 text-center mt-2 font-bold">
-              🔥 {roomData.players[userId].consecutiveCorrect} correct in a row!
-              {(() => {
-                const remaining = Math.max(
-                  0,
-                  questionsArray.length - (roomData.currentQuestion + 1)
-                );
-                const toWin = Math.min(
-                  roomData.maxConsecutiveTarget,
-                  remaining
-                );
-                return toWin > 0 ? (
-                  <Text className="text-sm"> ({toWin} more to win!)</Text>
-                ) : null;
-              })()}
-            </Text>
-          )}
-
-        {timeLeft === 0 && !roomData.questionTransition && (
-          <View className="mt-4">
-            {showBetterLuckMessage ? (
-              <Text className="text-red-500 text-sm text-center font-semibold">
-                Better luck next time! Next question in {betterLuckCountdown}s
-              </Text>
-            ) : (
-              <Text className="text-red-500 text-center">
-                ⏰ Time's up! The correct answer was{" "}
-                {currentQuestion?.correctAnswer}.
+            )}
+            {isProcessing && (
+              <Text className="text-blue-500 text-center mt-2">
+                Processing...
               </Text>
             )}
           </View>
-        )}
 
-        {showNextQuestionCountdown && countdownValue > 0 && (
-          <Text className="text-blue-500 text-center mt-4 font-bold">
-            Next question in {countdownValue}s...
-          </Text>
-        )}
-      </View>
+          {Object.values(roomData?.players || {}).map((player, index) => {
+            if (player.winner) {
+              return (
+                <Text
+                  key={`winner-${index}`}
+                  className="text-green-500 text-center mt-4"
+                >
+                  🏆 {player.username || player.name} got it right! (+
+                  {currentQuestion?.points || 1} pts)
+                </Text>
+              );
+            }
+            return null;
+          })}
+
+          {roomData?.players?.[userId]?.consecutiveCorrect > 0 &&
+            roomData.totalQuestions - roomData.currentQuestion >
+              roomData.consecutiveWinThreshold &&
+            !roomData?.currentWinner && (
+              <Text className="text-blue-500 text-center mt-2 font-bold">
+                🔥 {roomData.players[userId].consecutiveCorrect} correct in a
+                row!
+                {(() => {
+                  const remaining = Math.max(
+                    0,
+                    questionsArray.length - (roomData.currentQuestion + 1)
+                  );
+                  const toWin = Math.min(
+                    roomData.maxConsecutiveTarget,
+                    remaining
+                  );
+                  return toWin > 0 ? (
+                    <Text className="text-sm"> ({toWin} more to win!)</Text>
+                  ) : null;
+                })()}
+              </Text>
+            )}
+
+          {timeLeft === 0 && !roomData.questionTransition && (
+            <View className="mt-4">
+              {showBetterLuckMessage ? (
+                <Text className="text-red-500 text-sm text-center font-semibold">
+                  Better luck next time! Next question in {betterLuckCountdown}s
+                </Text>
+              ) : (
+                <Text className="text-red-500 text-center">
+                  ⏰ Time's up! The correct answer was{" "}
+                  {currentQuestion?.correctAnswer}.
+                </Text>
+              )}
+            </View>
+          )}
+
+          {showNextQuestionCountdown && countdownValue > 0 && (
+            <Text className="text-blue-500 text-center mt-4 font-bold">
+              Next question in {countdownValue}s...
+            </Text>
+          )}
+        </View>
+      </ScrollView>
     </View>
   );
 }

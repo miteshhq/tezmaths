@@ -1,11 +1,11 @@
 import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import React, {
   useEffect,
   useState,
   useCallback,
   useRef,
-  useMemo,
 } from "react";
 import {
   ActivityIndicator,
@@ -17,7 +17,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  TouchableWithoutFeedback,
   Keyboard,
   BackHandler,
 } from "react-native";
@@ -48,24 +47,8 @@ export default function MultiplayerModeSelection() {
   const cleanupRef = useRef(false);
   const roomListenerRef = useRef(null);
 
-  const performCleanup = useCallback(() => {
-    if (cleanupRef.current) return;
-    cleanupRef.current = true;
-
-    if (roomListenerRef.current) {
-      roomListenerRef.current();
-      roomListenerRef.current = null;
-    }
-
-    if (roomId) {
-      battleManager.leaveRoom(roomId).catch(console.error);
-    }
-    battleManager.cancelMatchmaking().catch(console.error);
-  }, [roomId]);
-
-  // ADD this useEffect at the top:
-  useEffect(() => {
-    // Reset all states when component mounts
+  // Complete state reset function
+  const resetAllStates = useCallback(() => {
     setShowQuizCodeInput(false);
     setQuizCode("");
     setJoiningRoom(false);
@@ -73,12 +56,75 @@ export default function MultiplayerModeSelection() {
     setRoomCode("");
     setRoomName("");
     setRoomId("");
+    setCreatingRoom(false);
     setPlayersInRoom({});
     setSearchingRandom(false);
-
-    // Cancel any ongoing operations
-    battleManager.cancelMatchmaking().catch(() => {});
+    setClearingRooms(false);
   }, []);
+
+  // Enhanced cleanup function
+  const performCleanup = useCallback(async () => {
+    if (cleanupRef.current) return;
+    cleanupRef.current = true;
+
+    try {
+      // Remove room listener
+      if (roomListenerRef.current) {
+        roomListenerRef.current();
+        roomListenerRef.current = null;
+      }
+
+      // Leave room if in one
+      if (roomId) {
+        await battleManager.leaveRoom(roomId);
+      }
+
+      // Cancel matchmaking
+      await battleManager.cancelMatchmaking();
+    } catch (error) {
+      console.error("Cleanup error:", error);
+    }
+
+    // Reset cleanup flag for next use
+    cleanupRef.current = false;
+  }, [roomId]);
+
+  // MAIN RESET EFFECT - This runs every time screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log("MultiplayerModeSelection screen focused - resetting states");
+
+      // Reset all states immediately when screen comes into focus
+      resetAllStates();
+
+      // Perform cleanup of any ongoing operations
+      const cleanup = async () => {
+        try {
+          // Cancel any ongoing matchmaking
+          await battleManager.cancelMatchmaking();
+
+          // If there's any room listener, remove it
+          if (roomListenerRef.current) {
+            roomListenerRef.current();
+            roomListenerRef.current = null;
+          }
+        } catch (error) {
+          console.error("Initial cleanup error:", error);
+        }
+      };
+
+      cleanup();
+
+      // Dismiss keyboard if open
+      Keyboard.dismiss();
+
+      // Return cleanup function for when screen loses focus
+      return () => {
+        console.log("MultiplayerModeSelection screen unfocused - cleaning up");
+        performCleanup();
+      };
+    }, [resetAllStates, performCleanup])
+  );
 
   // Handle hardware back button
   useEffect(() => {
@@ -95,34 +141,14 @@ export default function MultiplayerModeSelection() {
     return () => backHandler.remove();
   }, [router]);
 
-  useEffect(() => {
-    return () => {
-      // Reset all states when component unmounts
-      setShowQuizCodeInput(false);
-      setQuizCode("");
-      setJoiningRoom(false);
-      setShowCreateRoom(false);
-      setRoomCode("");
-      setRoomName("");
-      setRoomId("");
-      setCreatingRoom(false);
-      setPlayersInRoom({});
-      setSearchingRandom(false);
-
-      // Cancel any ongoing operations
-      if (roomId) {
-        battleManager.leaveRoom(roomId);
-      }
-      battleManager.cancelMatchmaking();
-    };
-  }, []);
-
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       performCleanup();
     };
   }, [performCleanup]);
 
+  // Keyboard listeners
   useEffect(() => {
     const keyboardShowListener = Keyboard.addListener(
       "keyboardDidShow",
@@ -140,6 +166,7 @@ export default function MultiplayerModeSelection() {
     };
   }, []);
 
+  // Room listener cleanup
   useEffect(() => {
     return () => {
       if (roomId) {
@@ -155,18 +182,25 @@ export default function MultiplayerModeSelection() {
   const handleShowQuizCodeInput = () => {
     setShowQuizCodeInput(true);
     setShowCreateRoom(false); // Close create room section
+    // Reset create room states
     setRoomCode("");
     setRoomName("");
     setRoomId("");
     setPlayersInRoom({});
+    setCreatingRoom(false);
+    // Reset random search
+    setSearchingRandom(false);
   };
 
   // For Create Room section
   const handleShowCreateRoom = () => {
     setShowCreateRoom(true);
     setShowQuizCodeInput(false); // Close quiz code section
+    // Reset quiz code states
     setQuizCode("");
     setJoiningRoom(false);
+    // Reset random search
+    setSearchingRandom(false);
   };
 
   const handleJoinQuizCode = async () => {
@@ -182,7 +216,6 @@ export default function MultiplayerModeSelection() {
       setJoiningRoom(false);
       router.push(`/user/battle-room?roomId=${foundRoomId}&isHost=false`);
     } catch (error) {
-      //   console.error("Join room error:", error);
       Alert.alert("Error", error.message);
       setJoiningRoom(false);
     }
@@ -235,7 +268,6 @@ export default function MultiplayerModeSelection() {
       await battleManager.startBattle(roomId);
       router.push(`/user/battle-room?roomId=${roomId}&isHost=true`);
     } catch (error) {
-      //   console.error("Start battle error:", error);
       Alert.alert("Error", error.message || "Failed to start battle");
     }
   };
@@ -252,12 +284,13 @@ export default function MultiplayerModeSelection() {
         roomListenerRef.current = null;
       }
 
-      // Reset all states
+      // Reset all create room states
       setShowCreateRoom(false);
       setRoomName("");
       setRoomCode("");
       setRoomId("");
       setPlayersInRoom({});
+      setCreatingRoom(false);
     } catch (error) {
       console.error("Cancel room error:", error);
       // Reset states anyway
@@ -266,6 +299,7 @@ export default function MultiplayerModeSelection() {
       setRoomCode("");
       setRoomId("");
       setPlayersInRoom({});
+      setCreatingRoom(false);
     }
   }, [roomId]);
 
@@ -283,16 +317,39 @@ export default function MultiplayerModeSelection() {
     }
   };
 
-  const cancelRandomSearch = useCallback(() => {
+  const cancelRandomSearch = useCallback(async () => {
     setSearchingRandom(false);
-    battleManager.cancelMatchmaking().catch(() => {});
+    try {
+      await battleManager.cancelMatchmaking();
+    } catch (error) {
+      console.error("Cancel matchmaking error:", error);
+    }
 
     // Reset any room states
     if (roomId) {
-      battleManager.leaveRoom(roomId).catch(() => {});
+      try {
+        await battleManager.leaveRoom(roomId);
+      } catch (error) {
+        console.error("Leave room error:", error);
+      }
       setRoomId("");
     }
   }, [roomId]);
+
+  // Enhanced cancel functions for UI buttons
+  const handleCancelQuizCode = () => {
+    setShowQuizCodeInput(false);
+    setQuizCode("");
+    setJoiningRoom(false);
+    Keyboard.dismiss();
+  };
+
+  const handleCancelCreateRoom = () => {
+    setShowCreateRoom(false);
+    setRoomName("");
+    setCreatingRoom(false);
+    Keyboard.dismiss();
+  };
 
   return (
     <View className="flex-1 bg-white">
@@ -361,7 +418,7 @@ export default function MultiplayerModeSelection() {
                 </TouchableOpacity>
               ) : (
                 <View className="flex flex-col items-center gap-3">
-                  <ActivityIndicator size="large" color="#9333ea" />
+                  <ActivityIndicator size="large" color="#76184F" />
                   <Text className="text-custom-purple font-bold">
                     Searching for opponent...
                   </Text>
@@ -407,7 +464,7 @@ export default function MultiplayerModeSelection() {
                   <TextInput
                     className="border-2 border-custom-purple rounded-lg px-4 py-3 text-center text-lg font-bold text-custom-purple"
                     placeholder="Enter Quiz Code"
-                    placeholderTextColor="#9333ea"
+                    placeholderTextColor="#76184F"
                     value={quizCode}
                     onChangeText={setQuizCode}
                     maxLength={8}
@@ -444,11 +501,7 @@ export default function MultiplayerModeSelection() {
                     </TouchableOpacity>
                     <TouchableOpacity
                       className="px-4 py-3 bg-gray-200 rounded-lg"
-                      onPress={() => {
-                        setShowQuizCodeInput(false);
-                        setQuizCode("");
-                        Keyboard.dismiss();
-                      }}
+                      onPress={handleCancelQuizCode}
                     >
                       <Text className="text-custom-purple font-bold">
                         Cancel
@@ -491,7 +544,7 @@ export default function MultiplayerModeSelection() {
                   <TextInput
                     className="border-2 border-custom-purple rounded-lg px-4 py-3 text-center text-lg text-custom-purple"
                     placeholder="Enter Room Name"
-                    placeholderTextColor="#9333ea"
+                    placeholderTextColor="#76184F"
                     value={roomName}
                     onChangeText={setRoomName}
                     maxLength={20}
@@ -528,11 +581,7 @@ export default function MultiplayerModeSelection() {
                       </TouchableOpacity>
                       <TouchableOpacity
                         className="px-4 py-3 bg-gray-200 rounded-lg"
-                        onPress={() => {
-                          setShowCreateRoom(false);
-                          setRoomName("");
-                          Keyboard.dismiss();
-                        }}
+                        onPress={handleCancelCreateRoom}
                       >
                         <Text className="text-custom-purple font-bold">
                           Cancel

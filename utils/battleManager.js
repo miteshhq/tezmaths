@@ -553,14 +553,15 @@ export class BattleManager {
     }
 
 
-    getFallbackQuestions(count) {
-        console.log("[BattleManager] Using fallback questions");
+    getFallbackQuestions(count = 25) {
+        console.log(`[BattleManager] Using ${count} fallback questions`);
         return Array(count).fill().map((_, i) => ({
             question: `${i + 1} + ${i + 5}`,
-            correctAnswer: `${(i + 1) + (i + 5)}`, // Fixed: proper addition instead of string concatenation
+            correctAnswer: `${(i + 1) + (i + 5)}`,
             timeLimit: 15,
-            points: 10,
-            explanation: `Add ${i + 1} and ${i + 5} together`
+            points: Math.floor(i / 5) + 1, // Gradually increase points
+            explanation: `Add ${i + 1} and ${i + 5} together`,
+            level: Math.floor(i / 5) + 1
         }));
     }
 
@@ -593,17 +594,17 @@ export class BattleManager {
     async generateQuestions(startLevel = 1, maxLevels = 10) {
         const quizzesRef = ref(database, "quizzes");
         const snapshot = await get(quizzesRef);
-        if (!snapshot.exists()) return this.getFallbackQuestions(50);
+        if (!snapshot.exists()) return { questions: this.getFallbackQuestions(25), levelInfo: [], totalLevels: 0 };
 
         const questionsByLevel = {};
         const levelSettings = {};
 
+        // Collect questions by level
         snapshot.forEach((childSnapshot) => {
             const quiz = childSnapshot.val();
             const level = quiz.level || 1;
             if (level >= startLevel && level <= maxLevels) {
                 levelSettings[level] = {
-                    maxDisplayQuestions: Math.max(1, Number.parseInt(quiz.maxDisplayQuestions) || 20),
                     pointsPerQuestion: Number.parseInt(quiz.pointsPerQuestion) || level,
                 };
                 if (quiz.questions) {
@@ -625,25 +626,84 @@ export class BattleManager {
             }
         });
 
-        const allQuestions = [];
-        for (let level = startLevel; level <= maxLevels; level++) {
-            if (questionsByLevel[level]) {
-                const settings = levelSettings[level];
-                const maxQuestions = Math.min(settings.maxDisplayQuestions, questionsByLevel[level].length);
-                const shuffled = [...questionsByLevel[level]].sort(() => 0.5 - Math.random());
-                allQuestions.push(...shuffled.slice(0, maxQuestions));
+        // Get available levels
+        const availableLevels = Object.keys(questionsByLevel).map(Number).sort((a, b) => a - b);
+
+        if (availableLevels.length === 0) {
+            return { questions: this.getFallbackQuestions(25), levelInfo: [], totalLevels: 0 };
+        }
+
+        // Define question distribution for 25 total questions
+        const battleQuestions = [];
+        const targetTotal = 25;
+
+        // Strategy: 3 questions from levels 1-5, 2 questions from levels 6-10
+        const getQuestionsFromLevel = (level, count) => {
+            if (!questionsByLevel[level] || questionsByLevel[level].length === 0) return [];
+
+            const shuffled = [...questionsByLevel[level]].sort(() => 0.5 - Math.random());
+            return shuffled.slice(0, Math.min(count, shuffled.length));
+        };
+
+        // First, try to get questions according to the preferred distribution
+        let questionsCollected = 0;
+
+        // Levels 1-5: 3 questions each
+        for (let level = 1; level <= 5 && questionsCollected < targetTotal; level++) {
+            if (availableLevels.includes(level)) {
+                const questions = getQuestionsFromLevel(level, 3);
+                battleQuestions.push(...questions);
+                questionsCollected += questions.length;
             }
         }
 
+        // Levels 6-10: 2 questions each
+        for (let level = 6; level <= 10 && questionsCollected < targetTotal; level++) {
+            if (availableLevels.includes(level)) {
+                const questions = getQuestionsFromLevel(level, 2);
+                battleQuestions.push(...questions);
+                questionsCollected += questions.length;
+            }
+        }
+
+        // If we don't have 25 questions yet, fill from available levels
+        if (questionsCollected < targetTotal) {
+            const remainingNeeded = targetTotal - questionsCollected;
+            const allRemainingQuestions = [];
+
+            // Collect remaining questions from all levels
+            availableLevels.forEach(level => {
+                if (questionsByLevel[level]) {
+                    const usedQuestions = battleQuestions.filter(q => q.level === level).length;
+                    const remainingFromLevel = questionsByLevel[level].slice(usedQuestions);
+                    allRemainingQuestions.push(...remainingFromLevel);
+                }
+            });
+
+            // Shuffle and take what we need
+            const shuffled = allRemainingQuestions.sort(() => 0.5 - Math.random());
+            battleQuestions.push(...shuffled.slice(0, remainingNeeded));
+        }
+
+        // If we still don't have enough, use fallback
+        if (battleQuestions.length < targetTotal) {
+            const fallbackNeeded = targetTotal - battleQuestions.length;
+            const fallbackQuestions = this.getFallbackQuestions(fallbackNeeded);
+            battleQuestions.push(...fallbackQuestions);
+        }
+
+        // Shuffle final questions and limit to exactly 25
+        const finalQuestions = battleQuestions.sort(() => 0.5 - Math.random()).slice(0, targetTotal);
+
         return {
-            questions: allQuestions,
-            levelInfo: Object.keys(levelSettings).map(level => ({
-                level: Number(level),
+            questions: finalQuestions,
+            levelInfo: availableLevels.map(level => ({
+                level: level,
                 questionCount: questionsByLevel[level]?.length || 0,
-                pointsPerQuestion: levelSettings[level].pointsPerQuestion,
-                maxDisplayQuestions: levelSettings[level].maxDisplayQuestions
+                pointsPerQuestion: levelSettings[level]?.pointsPerQuestion || level,
+                usedInBattle: finalQuestions.filter(q => q.level === level).length
             })),
-            totalLevels: Object.keys(levelSettings).length
+            totalLevels: availableLevels.length
         };
     }
 
@@ -827,7 +887,8 @@ export class BattleManager {
 
             // Update user scores in database
             for (const [playerId, player] of Object.entries(roomData.players || {})) {
-                await this.updateUserScore(playerId, player.score || 0);
+                const battleScore = player.score || 0;
+                await this.updateUserScore(playerId, battleScore);
             }
 
         } catch (error) {
@@ -835,7 +896,6 @@ export class BattleManager {
         }
     }
 
-    // In battleManager.js, update updateUserScore
     async updateUserScore(userId, scoreToAdd) {
         try {
             if (scoreToAdd <= 0) return;
@@ -845,17 +905,21 @@ export class BattleManager {
             const userData = snapshot.val() || {};
 
             const currentTotalPoints = userData.totalPoints || 0;
+            const currentHighScore = userData.highScore || 0;
             const newTotalPoints = currentTotalPoints + scoreToAdd;
 
-            let newStreak;
+            // Update high score if current battle score is higher
+            const newHighScore = Math.max(currentHighScore, scoreToAdd);
 
+            let newStreak;
             const streakResult = await updateUserStreak();
             if (streakResult.increased) {
-                newStreak = streakResult.streak
+                newStreak = streakResult.streak;
             }
 
             await update(userRef, {
-                totalPoints: newTotalPoints
+                totalPoints: newTotalPoints,
+                highScore: newHighScore  // Add this line
             });
 
             if (!streakResult.alreadyPlayedToday) {
@@ -1013,6 +1077,10 @@ export class BattleManager {
                 score: players[id].score || 0,
                 avatar: players[id].avatar || 0,
             })).sort((a, b) => b.score - a.score);
+
+            for (const player of playerArray) {
+                await this.updateUserScore(player.userId, player.score);
+            }
 
             // Update room status
             await update(roomRef, {

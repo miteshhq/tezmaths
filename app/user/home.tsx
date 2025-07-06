@@ -53,29 +53,85 @@ export default function HomeScreen() {
   const [streakPopupMessage, setStreakPopupMessage] = useState("");
   const [isAllLevelsComplete, setIsAllLevelsComplete] = useState(false);
   const [completedLevels, setCompletedLevels] = useState<number[]>([]);
+  const [showExitDialog, setShowExitDialog] = useState(false);
 
   // Animation refs
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const scrollY = useRef(new Animated.Value(0)).current;
   const animatedValue = useRef(new Animated.Value(270)).current;
 
+  // App state tracking
+  const appStateRef = useRef(AppState.currentState);
+  const backgroundTimeRef = useRef(null);
+
+  // Enhanced exit confirmation function
+  const showExitConfirmation = () => {
+    setShowExitDialog(true);
+  };
+
+  const handleExitApp = () => {
+    setShowExitDialog(false);
+    BackHandler.exitApp();
+  };
+
+  const handleResumeApp = () => {
+    setShowExitDialog(false);
+  };
+
   // Back handler setup
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        Alert.alert("Exit App", "Are you sure you want to exit?", [
-          { text: "Cancel", style: "cancel" },
-          { text: "Yes", onPress: () => BackHandler.exitApp() },
-        ]);
-        return true;
+        showExitConfirmation();
+        return true; // Prevent default back behavior
       };
+
       const addedEvent = BackHandler.addEventListener(
         "hardwareBackPress",
         onBackPress
       );
+
       return () => addedEvent.remove();
     }, [])
   );
+
+  // Enhanced App state change handler
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (appStateRef.current === "active" && nextAppState === "background") {
+        // App is going to background (home button pressed)
+        backgroundTimeRef.current = Date.now();
+        // Show exit confirmation when app goes to background
+        showExitConfirmation();
+      } else if (
+        appStateRef.current === "background" &&
+        nextAppState === "active"
+      ) {
+        // App is coming back to foreground
+        const backgroundTime = backgroundTimeRef.current;
+        if (backgroundTime) {
+          const timeInBackground = Date.now() - backgroundTime;
+          // If user was in background for less than 2 seconds, they likely pressed home button
+          if (timeInBackground < 2000) {
+            // Don't show dialog again if they're returning quickly
+            setShowExitDialog(false);
+          }
+        }
+        loadAllData();
+      } else if (nextAppState === "active") {
+        loadAllData();
+      }
+
+      appStateRef.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener(
+      "change",
+      handleAppStateChange
+    );
+
+    return () => subscription.remove();
+  }, [loadAllData]);
 
   useEffect(() => {
     SoundManager.unloadAll();
@@ -380,21 +436,6 @@ export default function HomeScreen() {
     }, [loadAllData, checkStreakDecayOnFocus, checkAndUpdateStreak])
   );
 
-  // App state change handler
-  useEffect(() => {
-    const handleAppStateChange = (nextAppState) => {
-      if (nextAppState === "active") {
-        loadAllData();
-      }
-    };
-
-    const subscription = AppState.addEventListener(
-      "change",
-      handleAppStateChange
-    );
-    return () => subscription.remove();
-  }, [loadAllData]);
-
   // Refresh handler
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -611,6 +652,37 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* Exit App Confirmation Modal */}
+        <Modal visible={showExitDialog} transparent animationType="fade">
+          <View className="flex-1 justify-center items-center bg-black/60">
+            <View className="bg-white rounded-2xl p-6 mx-8 items-center">
+              <Text className="text-2xl font-bold text-center mb-4 text-black">
+                Exit App
+              </Text>
+              <Text className="text-gray-600 text-center mb-6">
+                Are you sure you want to quit TezMaths?
+              </Text>
+              <View className="flex-row gap-4">
+                <TouchableOpacity
+                  className="bg-gray-200 rounded-full px-6 py-3 flex-1"
+                  onPress={handleResumeApp}
+                >
+                  <Text className="text-black font-bold text-center">
+                    Resume
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className="bg-red-500 rounded-full px-6 py-3 flex-1"
+                  onPress={handleExitApp}
+                >
+                  <Text className="text-white font-bold text-center">Quit</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Streak Popup Modal */}
         <Modal visible={showStreakPopup} transparent animationType="fade">
           <View className="flex-1 justify-center items-center bg-black/60">
             <View className="bg-white rounded-2xl p-6 mx-8 items-center">

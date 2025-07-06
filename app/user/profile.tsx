@@ -60,8 +60,9 @@ export default function ProfileScreen() {
     points: 0,
     totalPoints: 0,
     highestCompletedLevelCompleted: 0,
-    avatar: 0, // Default to first avatar
+    avatar: 0,
     currentLevel: 0,
+    completedLevelsCount: 0, // Add this line
   });
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -141,6 +142,12 @@ export default function ProfileScreen() {
               data.highestCompletedLevelCompleted ?? 0,
             avatar: data.avatar ?? 0,
             currentLevel: data.currentLevel,
+            // Add this line here too
+            completedLevelsCount: data.completedLevels
+              ? Object.values(data.completedLevels).filter(
+                  (level) => level === true
+                ).length
+              : 0,
           };
 
           setUserData(formattedData);
@@ -198,6 +205,12 @@ export default function ProfileScreen() {
             data.highestCompletedLevelCompleted ?? 0,
           avatar: avatar,
           currentLevel: data.currentLevel,
+          // Add this new field to count completed levels
+          completedLevelsCount: data.completedLevels
+            ? Object.values(data.completedLevels).filter(
+                (level) => level === true
+              ).length
+            : 0,
         };
 
         setUserData(formattedData);
@@ -427,12 +440,7 @@ export default function ProfileScreen() {
               </View>
               <View className="items-center">
                 <Text className="text-2xl font-black text-custom-purple">
-                  {Math.max(
-                    0,
-                    isNaN(Number(userData.currentLevel))
-                      ? 0
-                      : Number(userData.currentLevel) - 1
-                  )}
+                  {userData.completedLevelsCount || 0}
                 </Text>
                 <Text className="text-custom-purple text-lg">Levels</Text>
               </View>

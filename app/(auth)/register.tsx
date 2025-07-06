@@ -249,7 +249,8 @@ export default function RegisterScreen() {
         highestCompletedLevelCompleted: 0,
         levelsScores: [],
         referrals: 0,
-        totalPoints: referralSuccess ? 5 : 0, // Give 5 points for successful referral
+        totalPoints: referralSuccess ? 5 : 0,
+        highScore: 0,
       };
 
       // If this is a Google user, preserve some Google-specific fields
@@ -315,9 +316,7 @@ export default function RegisterScreen() {
       >
         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
         <Text className="text-4xl text-black font-black text-center mb-4 font-['Poppins-Bold']">
-          {isGoogleUser === "true"
-            ? "Complete Your Profile"
-            : "Setup Your Profile"}
+          {email ? "Complete Your Profile" : "Setup Your Profile"}
         </Text>
 
         {/* Avatar Selection */}

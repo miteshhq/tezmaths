@@ -39,7 +39,7 @@ export default function LeaderboardScreen() {
       setLoading(true);
       const usersRef = query(
         ref(database, "users"),
-        orderByChild("points"),
+        orderByChild("highScore"),
         limitToLast(1000) // Increased to ensure we get all users
       );
       const snapshot = await get(usersRef);
@@ -49,7 +49,7 @@ export default function LeaderboardScreen() {
           .map(([id, user]) => ({
             id,
             username: user.username || "Unknown",
-            totalPoints: user.totalPoints ?? 0,
+            totalPoints: user.highScore ?? 0,
             fullName: user.fullName || "Unknown",
             email: user.email || "",
           }))
@@ -233,65 +233,6 @@ export default function LeaderboardScreen() {
       </View>
     </ImageBackground>
   );
-
-  const renderTopThree = () => {
-    const topThree = quizMasters.slice(0, 3);
-    if (topThree.length === 0) return null;
-
-    return (
-      <View className="mx-4 mb-6">
-        <View className="flex-row justify-center items-end space-x-4">
-          {/* Second Place */}
-          {topThree[1] && (
-            <View className="items-center">
-              <View className="w-16 h-16 rounded-full bg-gray-300 justify-center items-center mb-2">
-                <FontAwesome name="user" size={24} color="white" />
-              </View>
-              <FontAwesome name="trophy" size={20} color="#C0C0C0" />
-              <Text className="text-black font-semibold text-sm mt-1">
-                {topThree[1].username}
-              </Text>
-              <Text className="text-gray-600 text-xs">
-                {topThree[1].totalPoints} pts
-              </Text>
-            </View>
-          )}
-
-          {/* First Place */}
-          {topThree[0] && (
-            <View className="items-center -mt-4">
-              <View className="w-20 h-20 rounded-full bg-primary justify-center items-center mb-2 border-4 border-yellow-400">
-                <FontAwesome name="user" size={28} color="white" />
-              </View>
-              <FontAwesome name="trophy" size={24} color="#FFD700" />
-              <Text className="text-black font-bold text-base mt-1">
-                {topThree[0].username}
-              </Text>
-              <Text className="text-primary font-semibold text-sm">
-                {topThree[0].totalPoints} pts
-              </Text>
-            </View>
-          )}
-
-          {/* Third Place */}
-          {topThree[2] && (
-            <View className="items-center">
-              <View className="w-16 h-16 rounded-full bg-primary justify-center items-center mb-2">
-                <FontAwesome name="user" size={24} color="white" />
-              </View>
-              <FontAwesome name="trophy" size={20} color="#CD7F32" />
-              <Text className="text-black font-semibold text-sm mt-1">
-                {topThree[2].username}
-              </Text>
-              <Text className="text-gray-600 text-xs">
-                {topThree[2].totalPoints} pts
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
-    );
-  };
 
   return (
     <View className="flex-1 bg-white">

@@ -189,7 +189,7 @@ export default function SignUpScreen() {
     try {
       await createUserWithEmailAndPassword(auth, email, password);
       setErrorMessage("");
-      router.push("/login");
+      router.push("/register");
     } catch (error) {
       // console.error("Sign-up failed:", error.message);
       setErrorMessage(error.message);
