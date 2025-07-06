@@ -59,7 +59,7 @@ export default function ProfileScreen() {
     referrals: 0,
     points: 0,
     totalPoints: 0,
-    highScore: 0, // Add this line
+    highScore: 0,
     highestCompletedLevelCompleted: 0,
     avatar: 0,
     currentLevel: 0,
@@ -69,27 +69,19 @@ export default function ProfileScreen() {
   const [copied, setCopied] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [userRank, setUserRank] = useState<number>(0);
-  const [lastRefreshTime, setLastRefreshTime] = useState(0);
 
   // Get avatar image source based on avatar ID
   const getAvatarSource = () => {
-    // Find the avatar option that matches the user's avatar ID
     const avatar = avatarOptions.find((av) => av.id === userData.avatar);
     return avatar ? avatar.source : avatarOptions[0].source;
   };
-
-  useEffect(() => {
-    if (currentUserId && userData.highScore !== undefined) {
-      fetchUserRank();
-    }
-  }, [currentUserId, userData.highScore]);
 
   const fetchUserRank = async () => {
     try {
       const usersRef = query(
         ref(database, "users"),
         orderByChild("highScore"),
-        limitToLast(1000) // Increased to match leaderboard
+        limitToLast(1000)
       );
       const snapshot = await get(usersRef);
 
@@ -98,7 +90,7 @@ export default function ProfileScreen() {
           .map(([id, user]: [string, any]) => ({
             id,
             username: user.username || "Unknown",
-            highScore: user.highScore ?? 0, // Changed from totalPoints to highScore
+            highScore: user.highScore ?? 0,
             email: user.email || "",
           }))
           .filter(
@@ -106,7 +98,7 @@ export default function ProfileScreen() {
               user.email !== "tezmaths@admin.com" &&
               user.username.toLowerCase() !== "admin"
           )
-          .sort((a, b) => b.highScore - a.highScore) // Changed from totalPoints to highScore
+          .sort((a, b) => b.highScore - a.highScore)
           .map((user, index) => ({ ...user, rank: index + 1 }));
 
         const currentUser = users.find((user) => user.id === currentUserId);
@@ -122,6 +114,18 @@ export default function ProfileScreen() {
     }
   };
 
+  // Fixed useEffect for fetching user rank
+  useEffect(() => {
+    if (currentUserId && userData.highScore !== undefined) {
+      const timeoutId = setTimeout(() => {
+        fetchUserRank();
+      }, 500);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [currentUserId, userData.highScore]);
+
+  // Fixed useEffect for loading user data
   useEffect(() => {
     loadUserData();
 
@@ -131,17 +135,33 @@ export default function ProfileScreen() {
       const unsubscribe = onValue(userRef, (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.val();
+
+          // Calculate values properly within this scope
+          const referrals =
+            typeof data.referrals === "number" ? data.referrals : 0;
+          const totalPoints =
+            typeof data.totalPoints === "number" ? data.totalPoints : 0;
+
+          // Handle avatar data
+          let avatarValue = 0;
+          if (typeof data.avatar === "number") {
+            avatarValue = data.avatar;
+          } else if (typeof data.avatar === "string") {
+            avatarValue = parseInt(data.avatar) || 0;
+          }
+          const avatar = avatarValue >= 0 && avatarValue <= 5 ? avatarValue : 0;
+
           const formattedData = {
             fullName: data.fullName || "Unavailable",
             username: data.username || "Unavailable",
             email: data.email || "Unavailable",
-            referrals: referrals, // or data.referrals ?? 0
+            referrals: referrals,
             points: data.points ?? 0,
-            totalPoints: totalPoints, // or data.totalPoints ?? 0
-            highScore: data.highScore ?? 0, // Add this line
+            totalPoints: totalPoints,
+            highScore: data.highScore ?? 0,
             highestCompletedLevelCompleted:
               data.highestCompletedLevelCompleted ?? 0,
-            avatar: avatar, // or data.avatar ?? 0
+            avatar: avatar,
             currentLevel: data.currentLevel,
             completedLevelsCount: data.completedLevels
               ? Object.values(data.completedLevels).filter(
@@ -152,9 +172,6 @@ export default function ProfileScreen() {
 
           setUserData(formattedData);
           AsyncStorage.setItem("userData", JSON.stringify(formattedData));
-
-          // Call fetchUserRank immediately after updating userData
-          fetchUserRank();
         }
       });
 
@@ -168,7 +185,6 @@ export default function ProfileScreen() {
 
       const userId = auth.currentUser?.uid;
       if (!userId) {
-        // console.warn("[PROFILE] No authenticated user found.");
         setLoading(false);
         return;
       }
@@ -183,28 +199,26 @@ export default function ProfileScreen() {
         const totalPoints =
           typeof data.totalPoints === "number" ? data.totalPoints : 0;
 
-        // Handle avatar data - convert to number if needed
+        // Handle avatar data
         let avatarValue = 0;
         if (typeof data.avatar === "number") {
           avatarValue = data.avatar;
         } else if (typeof data.avatar === "string") {
           avatarValue = parseInt(data.avatar) || 0;
         }
-
-        // Ensure avatar is within valid range (0-5)
         const avatar = avatarValue >= 0 && avatarValue <= 5 ? avatarValue : 0;
 
         const formattedData = {
           fullName: data.fullName || "Unavailable",
           username: data.username || "Unavailable",
           email: data.email || "Unavailable",
-          referrals: referrals, // or data.referrals ?? 0
+          referrals: referrals,
           points: data.points ?? 0,
-          totalPoints: totalPoints, // or data.totalPoints ?? 0
-          highScore: data.highScore ?? 0, // Add this line
+          totalPoints: totalPoints,
+          highScore: data.highScore ?? 0,
           highestCompletedLevelCompleted:
             data.highestCompletedLevelCompleted ?? 0,
-          avatar: avatar, // or data.avatar ?? 0
+          avatar: avatar,
           currentLevel: data.currentLevel,
           completedLevelsCount: data.completedLevels
             ? Object.values(data.completedLevels).filter(
@@ -214,12 +228,11 @@ export default function ProfileScreen() {
         };
 
         setUserData(formattedData);
-        // console.log(userData);
         await AsyncStorage.setItem("userData", JSON.stringify(formattedData));
       }
       setLoading(false);
     } catch (error) {
-      // console.error("[PROFILE] Failed to load user data:", error);
+      console.error("[PROFILE] Failed to load user data:", error);
       setLoading(false);
     }
   };
@@ -230,7 +243,7 @@ export default function ProfileScreen() {
       await loadUserData();
       setRefreshing(false);
     } catch (error) {
-      // console.error("[PROFILE] Error refreshing data:", error);
+      console.error("[PROFILE] Error refreshing data:", error);
       setRefreshing(false);
     }
   };
@@ -303,18 +316,14 @@ export default function ProfileScreen() {
         });
       }
 
-      // Always try Google logout operations (even if isSignedIn returns false)
       try {
-        // Method 1: Try both revoke and signOut
         await GoogleSignin.revokeAccess();
         await GoogleSignin.signOut();
       } catch (error1) {
         try {
-          // Method 2: Try just signOut if revoke fails
           await GoogleSignin.signOut();
         } catch (error2) {
           try {
-            // Method 3: Try clearing tokens manually
             await GoogleSignin.clearCachedAccessToken();
           } catch (error3) {
             // All Google logout methods failed, continue anyway
@@ -322,13 +331,9 @@ export default function ProfileScreen() {
         }
       }
 
-      // Always sign out from Firebase
       await signOut(auth);
-
-      // Clear all local storage
       await AsyncStorage.clear();
 
-      // Force clear any remaining Google session data
       try {
         await AsyncStorage.removeItem("@google_signin_user");
         await AsyncStorage.removeItem("google_signin_account");

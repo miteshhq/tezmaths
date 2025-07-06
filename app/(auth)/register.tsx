@@ -244,8 +244,6 @@ export default function RegisterScreen() {
         return;
       }
 
-      const userId = user.uid;
-
       // Process referral if provided
       let referralSuccess = false;
       if (referralCode && referralCode.trim() !== "") {
@@ -271,7 +269,7 @@ export default function RegisterScreen() {
 
       // If this is a Google user, preserve some Google-specific fields
       if (isGoogleUser === "true") {
-        const userRef = ref(database, `users/${userId}`);
+        const userRef = ref(database, `users/${userIdToUse}`);
         const existingSnapshot = await get(userRef);
 
         if (existingSnapshot.exists()) {
@@ -285,18 +283,18 @@ export default function RegisterScreen() {
       }
 
       // Create/update user entry
-      const userRef = ref(database, `users/${userId}`);
+      const userRef = ref(database, `users/${userIdToUse}`);
       await set(userRef, userData);
 
-      //   console.log(
-      //     "Registration completed successfully for:",
-      //     isGoogleUser === "true" ? "Google user" : "regular user"
-      //   );
+      console.log(
+        "Registration completed successfully for:",
+        isGoogleUser === "true" ? "Google user" : "regular user"
+      );
       router.prefetch("/user/home");
 
       router.push("/user/home");
     } catch (error) {
-      // console.error("Registration failed:", error);
+      console.error("Registration failed:", error);
       setErrorMessage(
         `Registration failed: ${error.message || "Please try again."}`
       );
@@ -316,6 +314,7 @@ export default function RegisterScreen() {
     processReferral,
     isGoogleUser,
     router,
+    userId, // Make sure userId from params is in the dependency array
   ]);
 
   return (
