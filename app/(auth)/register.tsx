@@ -28,7 +28,7 @@ const avatarOptions = [
 export default function RegisterScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { email, isGoogleUser, displayName } = params;
+  const { email, isGoogleUser, displayName, userId } = params;
 
   const [fullName, setFullName] = useState((displayName as string) || "");
   const [username, setUsername] = useState("");
@@ -43,6 +43,16 @@ export default function RegisterScreen() {
   const [focusField, setFocusField] = useState(null);
 
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (!user) {
+        router.push("/login");
+      }
+    });
+
+    return () => unsubscribe();
+  }, [router]);
 
   useEffect(() => {
     const keyboardShowListener = Keyboard.addListener(
@@ -225,10 +235,16 @@ export default function RegisterScreen() {
       }
 
       // Get current user ID
-      const userId = auth.currentUser?.uid;
-      if (!userId) {
-        throw new Error("User ID is missing.");
+      const currentUser = auth.currentUser;
+      const userIdToUse = userId || currentUser?.uid;
+      if (!userIdToUse) {
+        console.error("No user ID available");
+        setErrorMessage("Authentication error. Please login again.");
+        router.push("/login");
+        return;
       }
+
+      const userId = user.uid;
 
       // Process referral if provided
       let referralSuccess = false;
@@ -276,6 +292,8 @@ export default function RegisterScreen() {
       //     "Registration completed successfully for:",
       //     isGoogleUser === "true" ? "Google user" : "regular user"
       //   );
+      router.prefetch("/user/home");
+
       router.push("/user/home");
     } catch (error) {
       // console.error("Registration failed:", error);

@@ -59,10 +59,11 @@ export default function ProfileScreen() {
     referrals: 0,
     points: 0,
     totalPoints: 0,
+    highScore: 0, // Add this line
     highestCompletedLevelCompleted: 0,
     avatar: 0,
     currentLevel: 0,
-    completedLevelsCount: 0, // Add this line
+    completedLevelsCount: 0,
   });
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -78,16 +79,16 @@ export default function ProfileScreen() {
   };
 
   useEffect(() => {
-    if (currentUserId && userData.totalPoints !== undefined) {
+    if (currentUserId && userData.highScore !== undefined) {
       fetchUserRank();
     }
-  }, [currentUserId, userData.totalPoints]);
+  }, [currentUserId, userData.highScore]);
 
   const fetchUserRank = async () => {
     try {
       const usersRef = query(
         ref(database, "users"),
-        orderByChild("totalPoints"),
+        orderByChild("highScore"),
         limitToLast(1000) // Increased to match leaderboard
       );
       const snapshot = await get(usersRef);
@@ -97,7 +98,7 @@ export default function ProfileScreen() {
           .map(([id, user]: [string, any]) => ({
             id,
             username: user.username || "Unknown",
-            totalPoints: user.totalPoints ?? 0,
+            highScore: user.highScore ?? 0, // Changed from totalPoints to highScore
             email: user.email || "",
           }))
           .filter(
@@ -105,10 +106,9 @@ export default function ProfileScreen() {
               user.email !== "tezmaths@admin.com" &&
               user.username.toLowerCase() !== "admin"
           )
-          .sort((a, b) => b.totalPoints - a.totalPoints)
+          .sort((a, b) => b.highScore - a.highScore) // Changed from totalPoints to highScore
           .map((user, index) => ({ ...user, rank: index + 1 }));
 
-        // Use currentUserId instead of username to find current user
         const currentUser = users.find((user) => user.id === currentUserId);
         if (currentUser) {
           setUserRank(currentUser.rank);
@@ -135,14 +135,14 @@ export default function ProfileScreen() {
             fullName: data.fullName || "Unavailable",
             username: data.username || "Unavailable",
             email: data.email || "Unavailable",
-            referrals: data.referrals ?? 0,
+            referrals: referrals, // or data.referrals ?? 0
             points: data.points ?? 0,
-            totalPoints: data.totalPoints ?? 0,
+            totalPoints: totalPoints, // or data.totalPoints ?? 0
+            highScore: data.highScore ?? 0, // Add this line
             highestCompletedLevelCompleted:
               data.highestCompletedLevelCompleted ?? 0,
-            avatar: data.avatar ?? 0,
+            avatar: avatar, // or data.avatar ?? 0
             currentLevel: data.currentLevel,
-            // Add this line here too
             completedLevelsCount: data.completedLevels
               ? Object.values(data.completedLevels).filter(
                   (level) => level === true
@@ -198,14 +198,14 @@ export default function ProfileScreen() {
           fullName: data.fullName || "Unavailable",
           username: data.username || "Unavailable",
           email: data.email || "Unavailable",
-          referrals: referrals,
+          referrals: referrals, // or data.referrals ?? 0
           points: data.points ?? 0,
-          totalPoints: totalPoints,
+          totalPoints: totalPoints, // or data.totalPoints ?? 0
+          highScore: data.highScore ?? 0, // Add this line
           highestCompletedLevelCompleted:
             data.highestCompletedLevelCompleted ?? 0,
-          avatar: avatar,
+          avatar: avatar, // or data.avatar ?? 0
           currentLevel: data.currentLevel,
-          // Add this new field to count completed levels
           completedLevelsCount: data.completedLevels
             ? Object.values(data.completedLevels).filter(
                 (level) => level === true

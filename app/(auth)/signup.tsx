@@ -187,14 +187,27 @@ export default function SignUpScreen() {
     }
 
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+      const user = userCredential.user;
+
       setErrorMessage("");
-      router.push({
-        pathname: "/register",
-        params: {
-          email: email,
-        },
-      });
+
+      // Ensure user is authenticated before navigation
+      if (user) {
+        router.push({
+          pathname: "/register",
+          params: {
+            email: email,
+            userId: user.uid, // Pass user ID as well
+          },
+        });
+      } else {
+        throw new Error("User creation failed");
+      }
     } catch (error) {
       // console.error("Sign-up failed:", error.message);
       setErrorMessage(error.message);

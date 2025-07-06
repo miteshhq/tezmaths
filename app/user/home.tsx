@@ -63,6 +63,7 @@ export default function HomeScreen() {
   // App state tracking
   const appStateRef = useRef(AppState.currentState);
   const backgroundTimeRef = useRef(null);
+  const backHandlerRef = useRef(null);
 
   // Enhanced exit confirmation function
   const showExitConfirmation = () => {
@@ -78,31 +79,45 @@ export default function HomeScreen() {
     setShowExitDialog(false);
   };
 
-  // Back handler setup
+  // Back handler setup - FIXED VERSION
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        showExitConfirmation();
-        return true; // Prevent default back behavior
+        // Only show exit confirmation if we're not already showing it
+        if (!showExitDialog) {
+          showExitConfirmation();
+        }
+        return true; // Always prevent default back behavior
       };
 
-      const addedEvent = BackHandler.addEventListener(
+      // Remove any existing back handler
+      if (backHandlerRef.current) {
+        backHandlerRef.current.remove();
+      }
+
+      // Add new back handler
+      backHandlerRef.current = BackHandler.addEventListener(
         "hardwareBackPress",
         onBackPress
       );
 
-      return () => addedEvent.remove();
-    }, [])
+      return () => {
+        if (backHandlerRef.current) {
+          backHandlerRef.current.remove();
+          backHandlerRef.current = null;
+        }
+      };
+    }, [showExitDialog]) // Add showExitDialog as dependency
   );
 
-  // Enhanced App state change handler
+  // Enhanced App state change handler - FIXED VERSION
   useEffect(() => {
     const handleAppStateChange = (nextAppState) => {
       if (appStateRef.current === "active" && nextAppState === "background") {
         // App is going to background (home button pressed)
         backgroundTimeRef.current = Date.now();
-        // Show exit confirmation when app goes to background
-        showExitConfirmation();
+        // DON'T show exit confirmation when app goes to background
+        // This was causing the interference with back press
       } else if (
         appStateRef.current === "background" &&
         nextAppState === "active"
@@ -132,6 +147,23 @@ export default function HomeScreen() {
 
     return () => subscription.remove();
   }, [loadAllData]);
+
+  // Alternative approach: Use useEffect for back handler (more reliable)
+  useEffect(() => {
+    const onBackPress = () => {
+      if (!showExitDialog) {
+        showExitConfirmation();
+      }
+      return true;
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      onBackPress
+    );
+
+    return () => backHandler.remove();
+  }, [showExitDialog]);
 
   useEffect(() => {
     SoundManager.unloadAll();
