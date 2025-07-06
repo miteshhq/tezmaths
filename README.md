@@ -18,8 +18,6 @@ Say there are 500 questions in level 1 and max display questions value is set to
 
 Its not viable to store history of previous battles etc, and this can't be done.
 
-There are too many issues in colors by yourside, we used those colors that were in your first given pdf, and now you are complaining. Somewhere you say use black somewhere purple and somewhere what and what. We will fix it only once and last time.
-
 For searching showing in battle mode selection, file instructions are given that user can reopen the app by closing it.
 
 No update will be made in other battle functionality from our side.
@@ -31,8 +29,6 @@ We can't find any clutter in leadersboard, and your team didn't made it clear th
 Profile showing wrong level will be checked.
 
 Old room code showing will be checked.
-
-Profile setup and registration flow will be checked.
 
 Explanation in quiz cut off will be fixed.
 
