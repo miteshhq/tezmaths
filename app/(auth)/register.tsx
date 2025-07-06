@@ -241,7 +241,7 @@ export default function RegisterScreen() {
         fullName,
         username: username.toLowerCase(),
         phoneNumber,
-        email: email,
+        email: email || "",
         avatar: selectedAvatar,
         isnewuser: false, // Mark as not new user anymore
         streak: 0,

@@ -1477,7 +1477,7 @@ export default function QuizScreen() {
         </View>
 
         {isProcessing && (
-          <Text className="text-primary text-center pb-2">Processing...</Text>
+          <Text className="text-primary text-center pb-2"></Text>
         )}
       </Animated.View>
     );
