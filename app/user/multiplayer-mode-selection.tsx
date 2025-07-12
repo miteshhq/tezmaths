@@ -1,12 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
-import React, {
-  useEffect,
-  useState,
-  useCallback,
-  useRef,
-} from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -22,6 +17,11 @@ import {
 } from "react-native";
 import { battleManager } from "../../utils/battleManager";
 
+type Player = {
+  name: string;
+  // add other properties if needed
+};
+
 export default function MultiplayerModeSelection() {
   const router = useRouter();
 
@@ -36,7 +36,9 @@ export default function MultiplayerModeSelection() {
   const [roomName, setRoomName] = useState("");
   const [roomId, setRoomId] = useState("");
   const [creatingRoom, setCreatingRoom] = useState(false);
-  const [playersInRoom, setPlayersInRoom] = useState({});
+  const [playersInRoom, setPlayersInRoom] = useState<Record<string, Player>>(
+    {}
+  );
 
   const [searchingRandom, setSearchingRandom] = useState(false);
 
@@ -171,9 +173,7 @@ export default function MultiplayerModeSelection() {
     return () => {
       if (roomId) {
         battleManager.removeRoomListener(roomId);
-        if (!router.pathname?.includes("battle")) {
-          battleManager.leaveRoom(roomId).catch(console.error);
-        }
+        if (!roomId) return;
       }
     };
   }, [roomId]);

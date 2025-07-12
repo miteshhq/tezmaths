@@ -16,7 +16,8 @@ import ViewShot from "react-native-view-shot";
 import * as Sharing from "expo-sharing"; // Add this import
 import * as FileSystem from "expo-file-system"; // Add this import
 import SoundManager from "../../components/soundManager";
-import logo from "../../assets/branding/tezmaths-full-logo.png";
+// Import logo as a module declaration instead of direct import
+const logo = require("../../assets/branding/tezmaths-full-logo.png");
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const shareConfig = {
@@ -33,22 +34,57 @@ const shareConfig = {
 export default function ResultsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const cardRef = useRef();
-  const viewShotRef = useRef();
+  // Fix useRef with proper type annotations
+  const cardRef = useRef<View>(null);
+  const viewShotRef = useRef<ViewShot>(null);
   const [userData, setUserData] = useState({ username: "player" });
 
   const [isPopupVisible, setPopupVisible] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
 
-  const totalGameTimeMs = Number.parseInt(params.totalGameTime) || 0;
-  const quizScore = Number.parseInt(params.quizScore) || 0;
-  const correctAnswers = Number.parseInt(params.correctAnswers) || 0;
-  const totalQuestions = Number.parseInt(params.totalQuestions) || 1;
-  const currentLevel = Number.parseInt(params.currentLevel) || 1;
-  const username = params.username || "player";
-  const fullname = params.fullname || "Player";
-  const avatar = params.avatar || "0";
-  const isPassed = params.isPassed;
+  // Fix parameter parsing by ensuring they're strings
+  const totalGameTimeMs =
+    Number.parseInt(
+      Array.isArray(params.totalGameTime)
+        ? params.totalGameTime[0]
+        : params.totalGameTime || "0"
+    ) || 0;
+  const quizScore =
+    Number.parseInt(
+      Array.isArray(params.quizScore)
+        ? params.quizScore[0]
+        : params.quizScore || "0"
+    ) || 0;
+  const correctAnswers =
+    Number.parseInt(
+      Array.isArray(params.correctAnswers)
+        ? params.correctAnswers[0]
+        : params.correctAnswers || "0"
+    ) || 0;
+  const totalQuestions =
+    Number.parseInt(
+      Array.isArray(params.totalQuestions)
+        ? params.totalQuestions[0]
+        : params.totalQuestions || "1"
+    ) || 1;
+  const currentLevel =
+    Number.parseInt(
+      Array.isArray(params.currentLevel)
+        ? params.currentLevel[0]
+        : params.currentLevel || "1"
+    ) || 1;
+  const username = Array.isArray(params.username)
+    ? params.username[0]
+    : params.username || "player";
+  const fullname = Array.isArray(params.fullname)
+    ? params.fullname[0]
+    : params.fullname || "Player";
+  const avatar = Array.isArray(params.avatar)
+    ? params.avatar[0]
+    : params.avatar || "0";
+  const isPassed = Array.isArray(params.isPassed)
+    ? params.isPassed[0]
+    : params.isPassed;
 
   const percentage = Math.round((correctAnswers / totalQuestions) * 100);
 
@@ -94,7 +130,7 @@ export default function ResultsScreen() {
           active = false;
         }
       };
-    }, [isPassed])
+    }, [isPassed, quizScore])
   );
 
   // Motivational quotes based on performance
@@ -180,11 +216,12 @@ export default function ResultsScreen() {
   };
 
   const captureImage = async () => {
-    const uri = await viewShotRef.current.capture({
-      format: "png",
-      quality: 0.9,
-      result: "tmpfile",
-    });
+    // Add null check for viewShotRef
+    if (!viewShotRef.current) {
+      throw new Error("ViewShot ref is not available");
+    }
+
+    const uri = await viewShotRef.current.capture();
 
     const timestamp = Date.now();
     const newUri = `${FileSystem.documentDirectory}tezmaths_result_${timestamp}.png`;
@@ -197,7 +234,7 @@ export default function ResultsScreen() {
     setPopupVisible(true);
   };
 
-  const avatarImages = (avatar) => {
+  const avatarImages = (avatar: string) => {
     switch (avatar) {
       case "0":
         return require("../../assets/avatars/avatar1.jpg");

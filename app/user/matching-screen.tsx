@@ -1,6 +1,7 @@
 import { View, Text, ActivityIndicator, ImageBackground } from "react-native";
 import { useRouter } from "expo-router";
 import { useEffect } from "react";
+import React from "react";
 
 export default function MatchingScreen() {
   const router = useRouter();

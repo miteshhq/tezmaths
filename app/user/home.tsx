@@ -17,10 +17,42 @@ import {
   Text,
   TouchableOpacity,
   View,
+  AppStateStatus,
 } from "react-native";
 import SoundManager from "../../components/soundManager";
 import { auth, database } from "../../firebase/firebaseConfig";
 import { checkStreakDecay } from "../../utils/streakManager";
+
+// Define interfaces for type safety
+interface Quiz {
+  id: string;
+  level: number;
+  title?: string;
+  description?: string;
+  questions?: any[];
+  [key: string]: any;
+}
+
+interface UserData {
+  username: string;
+  fullName: string;
+  avatar?: number;
+  referrals: number;
+  totalPoints: number;
+  streak: number;
+  currentLevel: number;
+  highestCompletedLevelCompleted: number;
+}
+
+interface AppData {
+  maxLevel: number;
+  availableLevels: number[];
+  finishedQuizzes: Quiz[];
+  highestCompletedLevelCompleted: number;
+  isAllLevelsComplete: boolean;
+  completedLevels: number[];
+  lastUpdated?: number;
+}
 
 export default function HomeScreen() {
   const LEVEL_STORAGE_KEY = "highestLevelReached";
@@ -38,10 +70,10 @@ export default function HomeScreen() {
   const [currentLevel, setCurrentLevel] = useState(1);
 
   // Quiz State
-  const [availableLevels, setAvailableLevels] = useState([]);
+  const [availableLevels, setAvailableLevels] = useState<number[]>([]);
   const [highestCompletedLevelCompleted, setHighestCompletedLevelComplete] =
     useState(0);
-  const [finishedQuizzes, setFinishedQuizzes] = useState([]);
+  const [finishedQuizzes, setFinishedQuizzes] = useState<Quiz[]>([]);
   const [maxLevel, setMaxLevel] = useState(1);
   const [quizCode, setQuizCode] = useState("");
 
@@ -62,8 +94,222 @@ export default function HomeScreen() {
 
   // App state tracking
   const appStateRef = useRef(AppState.currentState);
-  const backgroundTimeRef = useRef(null);
-  const backHandlerRef = useRef(null);
+  const backgroundTimeRef = useRef<number | null>(null);
+  const backHandlerRef = useRef<any>(null);
+
+  // Load cached data for immediate UI update
+  const loadCachedData = async () => {
+    try {
+      const [cachedUserData, cachedAppData] = await Promise.all([
+        AsyncStorage.getItem(USER_DATA_KEY),
+        AsyncStorage.getItem(APP_DATA_KEY),
+      ]);
+
+      if (cachedUserData) {
+        const userData = JSON.parse(cachedUserData);
+        updateUserState(userData);
+      }
+
+      if (cachedAppData) {
+        const appData = JSON.parse(cachedAppData);
+        updateAppState(appData);
+      }
+    } catch (error) {
+      // console.error("Error loading cached data:", error);
+    }
+  };
+
+  // Fetch user data from Firebase
+  const fetchUserData = async (userId: string) => {
+    const userRef = ref(database, `users/${userId}`);
+    const snapshot = await get(userRef);
+    return snapshot.exists() ? snapshot.val() : {};
+  };
+
+  // Fetch quizzes data from Firebase
+  const fetchQuizzesData = async () => {
+    const quizzesRef = ref(database, "quizzes");
+    const snapshot = await get(quizzesRef);
+    return snapshot.exists() ? snapshot.val() : {};
+  };
+
+  // Fetch completed quizzes for user
+  const fetchCompletedQuizzes = async (userId: string) => {
+    const userRef = ref(database, `users/${userId}/completedQuizzes`);
+    const snapshot = await get(userRef);
+    return snapshot.exists() ? snapshot.val() : {};
+  };
+
+  // Process and update all data
+  const processAndUpdateData = async (
+    userData: any,
+    quizzesData: any,
+    completedQuizzes: any
+  ) => {
+    setLoading(false);
+
+    // Update user state
+    const processedUserData: UserData = {
+      username: userData.username || "User",
+      fullName: userData.fullName || "Unavailable",
+      referrals: userData.referrals || 0,
+      totalPoints: userData.totalPoints || 0,
+      streak: userData.streak || 0,
+      currentLevel: userData.currentLevel || 1,
+      highestCompletedLevelCompleted:
+        userData.highestCompletedLevelCompleted || 0,
+    };
+
+    updateUserState(processedUserData);
+
+    // Calculate max level
+    let calculatedMaxLevel = 1;
+    Object.values(quizzesData).forEach((quiz: any) => {
+      if (quiz && typeof quiz === "object" && quiz.level > calculatedMaxLevel) {
+        calculatedMaxLevel = quiz.level;
+      }
+    });
+
+    // Process finished quizzes
+    const finished: Quiz[] = [];
+    const completedLevelsSet = new Set<number>(); // Track completed levels
+    Object.entries(quizzesData).forEach(([key, quiz]: [string, any]) => {
+      if (
+        quiz &&
+        typeof quiz === "object" &&
+        completedQuizzes[key]?.completed
+      ) {
+        finished.push({ id: key, ...quiz });
+        completedLevelsSet.add(quiz.level);
+      }
+    });
+
+    // Generate available levels
+    const availableLevelsArray = Array.from(
+      { length: processedUserData.currentLevel },
+      (_, i) => i + 1
+    );
+
+    // Get stored level from AsyncStorage
+    const storedLevel = await AsyncStorage.getItem(LEVEL_STORAGE_KEY);
+    const highestCompleted = storedLevel ? Number(storedLevel) : 0;
+
+    // Update app state
+    const appData: AppData = {
+      maxLevel: calculatedMaxLevel,
+      availableLevels: availableLevelsArray,
+      finishedQuizzes: finished.reverse().slice(0, 5),
+      highestCompletedLevelCompleted: highestCompleted,
+      isAllLevelsComplete: processedUserData.currentLevel >= calculatedMaxLevel,
+      completedLevels: Array.from(completedLevelsSet), // Add completed levels
+    };
+
+    updateAppState(appData);
+  };
+
+  // Update user-related state
+  const updateUserState = (userData: UserData) => {
+    setUserName(userData.fullName || userData.username);
+    setFullName(userData.fullName);
+    setReferrals(userData.referrals || 0);
+    setUserPoints(
+      userData.totalPoints % 1 !== 0
+        ? Math.round(userData.totalPoints * 10) / 10
+        : userData.totalPoints || 0
+    );
+    setUserStreak(userData.streak || 0);
+    setCurrentLevel(userData.currentLevel || 1);
+  };
+
+  // Update app-related state
+  const updateAppState = (appData: AppData) => {
+    setMaxLevel(appData.maxLevel || 1);
+    setAvailableLevels(appData.availableLevels || []);
+    setFinishedQuizzes(appData.finishedQuizzes || []);
+    setHighestCompletedLevelComplete(
+      appData.highestCompletedLevelCompleted || 0
+    );
+    setIsAllLevelsComplete(appData.isAllLevelsComplete || false);
+    setCompletedLevels(appData.completedLevels || []); // Set completed levels
+  };
+
+  const cacheAllData = async (userData: any, quizzesData: any) => {
+    try {
+      const userDataToCache = {
+        username: userData.username || "User",
+        fullName: userData.fullName || "Unavailable",
+        avatar: userData.avatar || 0,
+        referrals: userData.referrals || 0,
+        totalPoints: userData.totalPoints || 0,
+        streak: userData.streak || 0,
+        currentLevel: userData.currentLevel || 1,
+        highestCompletedLevelCompleted:
+          userData.highestCompletedLevelCompleted || 0,
+      };
+
+      // Calculate max level from current quizzesData
+      let calculatedMaxLevel = 1;
+      Object.values(quizzesData || {}).forEach((quiz: any) => {
+        if (
+          quiz &&
+          typeof quiz === "object" &&
+          quiz.level > calculatedMaxLevel
+        ) {
+          calculatedMaxLevel = quiz.level;
+        }
+      });
+
+      const appDataToCache = {
+        maxLevel: calculatedMaxLevel,
+        availableLevels: availableLevels,
+        finishedQuizzes: finishedQuizzes,
+        highestCompletedLevelCompleted: highestCompletedLevelCompleted,
+        isAllLevelsComplete: isAllLevelsComplete,
+        lastUpdated: Date.now(),
+        completedLevels: completedLevels, // Cache completed levels
+      };
+
+      await Promise.all([
+        AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(userDataToCache)),
+        AsyncStorage.setItem(APP_DATA_KEY, JSON.stringify(appDataToCache)),
+      ]);
+    } catch (error) {
+      // console.error("Error caching data:", error);
+    }
+  };
+
+  // MOVED loadAllData definition BEFORE its usage
+  const loadAllData = useCallback(async (forceRefresh = false) => {
+    const userId = auth.currentUser?.uid;
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Always load from cache first for immediate UI response
+      await loadCachedData();
+
+      // Fetch fresh data from Firebase
+      const [userData, quizzesData, completedQuizzes] = await Promise.all([
+        fetchUserData(userId),
+        fetchQuizzesData(),
+        fetchCompletedQuizzes(userId),
+      ]);
+
+      // Process and update all data
+      await processAndUpdateData(userData, quizzesData, completedQuizzes);
+
+      // Cache the fresh data
+      await cacheAllData(userData, quizzesData);
+    } catch (error) {
+      // console.error("Error loading data:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   // Enhanced exit confirmation function
   const showExitConfirmation = () => {
@@ -112,7 +358,7 @@ export default function HomeScreen() {
 
   // Enhanced App state change handler - FIXED VERSION
   useEffect(() => {
-    const handleAppStateChange = (nextAppState) => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (appStateRef.current === "active" && nextAppState === "background") {
         // App is going to background (home button pressed)
         backgroundTimeRef.current = Date.now();
@@ -177,7 +423,7 @@ export default function HomeScreen() {
         // console.log("[HOME] Real-time update received:", data);
 
         // Update state with latest data
-        const processedUserData = {
+        const processedUserData: UserData = {
           username: data.username || "User",
           fullName: data.fullName || "Unavailable",
           avatar: data.avatar || 0,
@@ -201,211 +447,6 @@ export default function HomeScreen() {
 
     return () => unsubscribe();
   }, []);
-
-  const loadAllData = useCallback(async (forceRefresh = false) => {
-    const userId = auth.currentUser?.uid;
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      // Always load from cache first for immediate UI response
-      await loadCachedData();
-
-      // Fetch fresh data from Firebase
-      const [userData, quizzesData, completedQuizzes] = await Promise.all([
-        fetchUserData(userId),
-        fetchQuizzesData(),
-        fetchCompletedQuizzes(userId),
-      ]);
-
-      // Process and update all data
-      await processAndUpdateData(userData, quizzesData, completedQuizzes);
-
-      // Cache the fresh data
-      await cacheAllData(userData, quizzesData);
-    } catch (error) {
-      // console.error("Error loading data:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Load cached data for immediate UI update
-  const loadCachedData = async () => {
-    try {
-      const [cachedUserData, cachedAppData] = await Promise.all([
-        AsyncStorage.getItem(USER_DATA_KEY),
-        AsyncStorage.getItem(APP_DATA_KEY),
-      ]);
-
-      if (cachedUserData) {
-        const userData = JSON.parse(cachedUserData);
-        updateUserState(userData);
-      }
-
-      if (cachedAppData) {
-        const appData = JSON.parse(cachedAppData);
-        updateAppState(appData);
-      }
-    } catch (error) {
-      // console.error("Error loading cached data:", error);
-    }
-  };
-
-  // Fetch user data from Firebase
-  const fetchUserData = async (userId) => {
-    const userRef = ref(database, `users/${userId}`);
-    const snapshot = await get(userRef);
-    return snapshot.exists() ? snapshot.val() : {};
-  };
-
-  // Fetch quizzes data from Firebase
-  const fetchQuizzesData = async () => {
-    const quizzesRef = ref(database, "quizzes");
-    const snapshot = await get(quizzesRef);
-    return snapshot.exists() ? snapshot.val() : {};
-  };
-
-  // Fetch completed quizzes for user
-  const fetchCompletedQuizzes = async (userId) => {
-    const userRef = ref(database, `users/${userId}/completedQuizzes`);
-    const snapshot = await get(userRef);
-    return snapshot.exists() ? snapshot.val() : {};
-  };
-
-  // Process and update all data
-  const processAndUpdateData = async (
-    userData,
-    quizzesData,
-    completedQuizzes
-  ) => {
-    setLoading(false);
-
-    // Update user state
-    const processedUserData = {
-      username: userData.username || "User",
-      fullName: userData.fullName || "Unavailable",
-      referrals: userData.referrals || 0,
-      totalPoints: userData.totalPoints || 0,
-      streak: userData.streak || 0,
-      currentLevel: userData.currentLevel || 1,
-      highestCompletedLevelCompleted:
-        userData.highestCompletedLevelCompleted || 0,
-    };
-
-    updateUserState(processedUserData);
-
-    // Calculate max level
-    let calculatedMaxLevel = 1;
-    Object.values(quizzesData).forEach((quiz) => {
-      if (quiz.level > calculatedMaxLevel) {
-        calculatedMaxLevel = quiz.level;
-      }
-    });
-
-    // Process finished quizzes
-    const finished = [];
-    const completedLevelsSet = new Set(); // Track completed levels
-    Object.entries(quizzesData).forEach(([key, quiz]) => {
-      if (completedQuizzes[key]?.completed) {
-        finished.push({ id: key, ...quiz });
-        completedLevelsSet.add(quiz.level);
-      }
-    });
-
-    // Generate available levels
-    const availableLevelsArray = Array.from(
-      { length: processedUserData.currentLevel },
-      (_, i) => i + 1
-    );
-
-    // Get stored level from AsyncStorage
-    const storedLevel = await AsyncStorage.getItem(LEVEL_STORAGE_KEY);
-    const highestCompleted = storedLevel ? Number(storedLevel) : 0;
-
-    // Update app state
-    const appData = {
-      maxLevel: calculatedMaxLevel,
-      availableLevels: availableLevelsArray,
-      finishedQuizzes: finished.reverse().slice(0, 5),
-      highestCompletedLevelCompleted: highestCompleted,
-      isAllLevelsComplete: processedUserData.currentLevel >= calculatedMaxLevel,
-      completedLevels: Array.from(completedLevelsSet), // Add completed levels
-    };
-
-    updateAppState(appData);
-  };
-
-  // Update user-related state
-  const updateUserState = (userData) => {
-    setUserName(userData.fullName || userData.username);
-    setFullName(userData.fullName);
-    setReferrals(userData.referrals || 0);
-    setUserPoints(
-      userData.totalPoints % 1 !== 0
-        ? Math.round(userData.totalPoints * 10) / 10
-        : userData.totalPoints || 0
-    );
-    setUserStreak(userData.streak || 0);
-    setCurrentLevel(userData.currentLevel || 1);
-  };
-
-  // Update app-related state
-  const updateAppState = (appData) => {
-    setMaxLevel(appData.maxLevel || 1);
-    setAvailableLevels(appData.availableLevels || []);
-    setFinishedQuizzes(appData.finishedQuizzes || []);
-    setHighestCompletedLevelComplete(
-      appData.highestCompletedLevelCompleted || 0
-    );
-    setIsAllLevelsComplete(appData.isAllLevelsComplete || false);
-    setCompletedLevels(appData.completedLevels || []); // Set completed levels
-  };
-
-  const cacheAllData = async (userData, quizzesData) => {
-    try {
-      const userDataToCache = {
-        username: userData.username || "User",
-        fullName: userData.fullName || "Unavailable",
-        avatar: userData.avatar || 0,
-        referrals: userData.referrals || 0,
-        totalPoints: userData.totalPoints || 0,
-        streak: userData.streak || 0,
-        currentLevel: userData.currentLevel || 1,
-        highestCompletedLevelCompleted:
-          userData.highestCompletedLevelCompleted || 0,
-      };
-
-      // Calculate max level from current quizzesData
-      let calculatedMaxLevel = 1;
-      Object.values(quizzesData || {}).forEach((quiz) => {
-        if (quiz.level > calculatedMaxLevel) {
-          calculatedMaxLevel = quiz.level;
-        }
-      });
-
-      const appDataToCache = {
-        maxLevel: calculatedMaxLevel,
-        availableLevels: availableLevels,
-        finishedQuizzes: finishedQuizzes,
-        highestCompletedLevelCompleted: highestCompletedLevelCompleted,
-        isAllLevelsComplete: isAllLevelsComplete,
-        lastUpdated: Date.now(),
-        completedLevels: completedLevels, // Cache completed levels
-      };
-
-      await Promise.all([
-        AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(userDataToCache)),
-        AsyncStorage.setItem(APP_DATA_KEY, JSON.stringify(appDataToCache)),
-      ]);
-    } catch (error) {
-      // console.error("Error caching data:", error);
-    }
-  };
 
   const params = useLocalSearchParams();
 

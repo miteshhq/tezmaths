@@ -80,17 +80,17 @@ const SoundManager = {
     if (sound) {
       try {
         // First set looping to false to ensure it stops completely
-        await sound.setIsLoopingAsync(false);
+        await (sound as Audio.Sound).setIsLoopingAsync(false);
         // Then stop the sound
-        await sound.stopAsync();
+        await (sound as Audio.Sound).stopAsync();
         // Reset position to beginning
-        await sound.setPositionAsync(0);
+        await (sound as Audio.Sound).setPositionAsync(0);
         // console.log(`Stopped sound: ${key}`);
       } catch (error) {
         // console.error(`Error stopping sound for ${key}:`, error);
         // If normal stop fails, try to unload and reload
         try {
-          await sound.unloadAsync();
+          await (sound as Audio.Sound).unloadAsync();
           delete this.soundObjects[key];
           //   console.log(`Force unloaded sound: ${key}`);
         } catch (unloadError) {
@@ -123,18 +123,18 @@ const SoundManager = {
 
       // Set volume if specified (0.0 to 1.0)
       if (typeof playOptions.volume !== "undefined") {
-        await sound.setVolumeAsync(
+        await (sound as Audio.Sound).setVolumeAsync(
           Math.max(0, Math.min(1, playOptions.volume))
         );
       }
 
       // Set looping if specified
       if (typeof playOptions.isLooping !== "undefined") {
-        await sound.setIsLoopingAsync(playOptions.isLooping);
+        await (sound as Audio.Sound).setIsLoopingAsync(playOptions.isLooping);
       }
 
       // Play the sound
-      await sound.playAsync();
+      await (sound as Audio.Sound).playAsync();
       //   console.log(`Successfully started playing: ${key}`);
     } catch (error) {
       // console.error(`Error playing sound for ${key}:`, error);
@@ -146,9 +146,9 @@ const SoundManager = {
     if (sound) {
       try {
         // Multiple stop attempts
-        await sound.setIsLoopingAsync(false);
-        await sound.stopAsync();
-        await sound.unloadAsync();
+        await (sound as Audio.Sound).setIsLoopingAsync(false);
+        await (sound as Audio.Sound).stopAsync();
+        await (sound as Audio.Sound).unloadAsync();
         delete this.soundObjects[key];
         // console.log(`Force stopped and unloaded sound: ${key}`);
         return true;
@@ -171,9 +171,9 @@ const SoundManager = {
       for (const [key, sound] of Object.entries(this.soundObjects)) {
         if (sound) {
           try {
-            await sound.setIsLoopingAsync(false);
-            await sound.stopAsync();
-            await sound.unloadAsync();
+            await (sound as Audio.Sound).setIsLoopingAsync(false);
+            await (sound as Audio.Sound).stopAsync();
+            await (sound as Audio.Sound).unloadAsync();
             // console.log(`Nuked sound: ${key}`);
           } catch (error) {
             // console.error(`Error nuking sound ${key}:`, error);
@@ -214,7 +214,7 @@ const SoundManager = {
         async ([key, sound]) => {
           if (sound) {
             try {
-              await sound.unloadAsync();
+              await (sound as Audio.Sound).unloadAsync();
               //   console.log(`Unloaded sound: ${key}`);
             } catch (error) {
               // console.error(`Error unloading sound ${key}:`, error);

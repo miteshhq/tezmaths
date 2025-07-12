@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
   BackHandler,
+  Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../firebase/firebaseConfig";
@@ -73,7 +74,7 @@ export default function TabsLayout() {
           const previousRoute =
             tabHistory.current[tabHistory.current.length - 1];
           // Navigate to previous tab
-          router.push(`/user/${previousRoute}`);
+          router.push(`/user/${previousRoute}` as any);
           return true;
         } else {
           // No history, exit app
@@ -105,18 +106,18 @@ export default function TabsLayout() {
             tabBarInactiveTintColor: "#aaaaaa",
             tabBarStyle: styles.tabBar,
             tabBarItemStyle: { width: "100%", height: "100%" },
-            tabBarButton: (props) => (
-              <TouchableOpacity
-                {...props}
-                android_ripple={{ color: "#F97316" }}
-                onPress={() => {
-                  // Custom tab press to create navigation history
-                  if (props.onPress) {
-                    props.onPress();
-                  }
-                }}
-              />
-            ),
+            tabBarButton: (props: any) => {
+              const { onPress, children, ...rest } = props;
+              return (
+                <Pressable
+                  android_ripple={{ color: "#F97316" }}
+                  onPress={onPress}
+                  {...rest}
+                >
+                  {children}
+                </Pressable>
+              );
+            },
           }}
           initialRouteName="home"
         >

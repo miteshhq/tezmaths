@@ -22,9 +22,44 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const DEBUG_MODE = false;
 
-const avatarImages = (avatar) => {
+// Type definitions
+interface Player {
+  id?: string;
+  username?: string;
+  name?: string;
+  avatar: number | string;
+  score?: number;
+  winner?: boolean;
+  points?: number;
+  consecutiveCorrect?: number;
+}
+
+interface Question {
+  question: string;
+  correctAnswer: string;
+  points?: number;
+}
+
+interface RoomData {
+  status: string;
+  currentQuestion: number;
+  totalQuestions: number;
+  questionStartedAt: number;
+  questionTimeLimit?: number;
+  questionTransition?: boolean;
+  nextQuestionStartTime?: number;
+  hostId: string;
+  currentLevel?: number;
+  players?: { [key: string]: Player };
+  questions?: Question[];
+  currentWinner?: string;
+  consecutiveWinThreshold?: number;
+  maxConsecutiveTarget?: number;
+}
+
+const avatarImages = (avatar: number | string) => {
   const avatarNumber =
-    typeof avatar === "number" ? avatar : parseInt(avatar) || 0;
+    typeof avatar === "number" ? avatar : parseInt(avatar as string) || 0;
   switch (avatarNumber) {
     case 0:
       return require("../../assets/avatars/avatar1.jpg");
@@ -111,7 +146,7 @@ const CircularProgress = ({
 
 export default function BattleScreen() {
   const { roomId } = useLocalSearchParams();
-  const [roomData, setRoomData] = useState(null);
+  const [roomData, setRoomData] = useState<RoomData | null>(null);
   const [timeLeft, setTimeLeft] = useState(15);
   const [userAnswer, setUserAnswer] = useState("");
   const [feedback, setFeedback] = useState("");
@@ -119,8 +154,8 @@ export default function BattleScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const timerAnimation = useRef(new Animated.Value(1)).current;
   const userId = auth.currentUser?.uid;
-  const submitTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const submitTimeoutRef = useRef<number | null>(null);
+  const timerRef = useRef<number | null>(null);
   const timeExpiryHandled = useRef(false);
   const [userData, setUserData] = useState({ avatar: 0 });
   const [networkError, setNetworkError] = useState(false);
@@ -239,7 +274,7 @@ export default function BattleScreen() {
   }, [roomData?.currentQuestion]);
 
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout | undefined;
+    let timeoutId: number;
 
     if (
       roomData?.questionTransition &&
@@ -283,7 +318,7 @@ export default function BattleScreen() {
 
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) clearTimeout(timerRef.current);
       if (submitTimeoutRef.current) clearTimeout(submitTimeoutRef.current);
       timeExpiryHandled.current = false;
     };
@@ -299,7 +334,7 @@ export default function BattleScreen() {
 
     const interval = setInterval(() => {
       const now = Date.now();
-      const timeLeft = Math.max(0, roomData.nextQuestionStartTime - now);
+      const timeLeft = Math.max(0, roomData.nextQuestionStartTime! - now);
       const seconds = Math.ceil(timeLeft / 1000);
 
       setCountdownValue(seconds);
@@ -324,7 +359,6 @@ export default function BattleScreen() {
 
         if (!data) {
           setNetworkError(true);
-          // Don't show alert, just set error state
           return;
         }
 
@@ -334,26 +368,25 @@ export default function BattleScreen() {
       (error) => {
         console.error("Database listener error:", error);
         setNetworkError(true);
-        // Remove alerts here
       }
     );
 
     return () => {
       unsubscribe();
       if (roomId) {
-        battleManager.updatePlayerConnection(roomId, false);
+        battleManager.updatePlayerConnection(roomId as string, false);
       }
     };
   }, [roomId]);
 
   const otherWinnerAnnouncedRef = useRef(false);
-  const inputRef = useRef(null);
+  const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     if (!roomData?.players) return;
 
     const winners = Object.entries(roomData.players)
-      .filter(([uid, p]) => p.winner === true)
+      .filter(([uid, p]) => (p as Player).winner === true)
       .map(([uid]) => uid);
 
     if (
@@ -364,7 +397,7 @@ export default function BattleScreen() {
       otherWinnerAnnouncedRef.current = true;
       SoundManager.playSound("wrongAnswerSoundEffect").catch(console.error);
     }
-  }, [roomData?.players]);
+  }, [roomData?.players, userId]);
 
   // FIXED: Timer management with proper calculation
   useEffect(() => {
@@ -378,17 +411,17 @@ export default function BattleScreen() {
       const timeLimit = roomData.questionTimeLimit || 15;
 
       if (timerRef.current) {
-        clearInterval(timerRef.current);
+        clearTimeout(timerRef.current);
       }
 
       const updateTimer = () => {
-        const now = Date.now(); // Use Date.now() instead of serverTimestamp()
+        const now = Date.now();
         const elapsed = Math.floor((now - startTime) / 1000);
         const remaining = Math.max(0, timeLimit - elapsed);
         setTimeLeft(remaining);
 
         if (remaining <= 0) {
-          clearInterval(timerRef.current);
+          if (timerRef.current) clearTimeout(timerRef.current);
           timerRef.current = null;
         }
       };
@@ -398,13 +431,13 @@ export default function BattleScreen() {
 
       return () => {
         if (timerRef.current) {
-          clearInterval(timerRef.current);
+          clearTimeout(timerRef.current);
           timerRef.current = null;
         }
       };
     } else {
       if (timerRef.current) {
-        clearInterval(timerRef.current);
+        clearTimeout(timerRef.current);
         timerRef.current = null;
       }
     }
@@ -425,10 +458,9 @@ export default function BattleScreen() {
 
   useEffect(() => {
     return () => {
-      // Clean up room listeners
       if (roomId) {
-        battleManager.removeRoomListener(roomId);
-        battleManager.updatePlayerConnection(roomId, false);
+        battleManager.removeRoomListener(roomId as string);
+        battleManager.updatePlayerConnection(roomId as string, false);
       }
     };
   }, [roomId]);
@@ -437,15 +469,14 @@ export default function BattleScreen() {
     if (roomData?.status === "finished") {
       const navigateToResults = async () => {
         try {
-          const playerArray = await battleManager.endBattle(roomId);
+          const playerArray = await battleManager.endBattle(roomId as string);
 
-          // Calculate total battle time
           const battleEndTime = Date.now();
           let totalBattleTimeMs = 0;
           if (battleStartTimeRef.current > 0) {
             const rawTimeMs = battleEndTime - battleStartTimeRef.current;
-            const maxReasonableTime = 2 * 60 * 60 * 1000; // 2 hours
-            const minReasonableTime = 1000; // 1 second
+            const maxReasonableTime = 2 * 60 * 60 * 1000;
+            const minReasonableTime = 1000;
             if (
               rawTimeMs >= minReasonableTime &&
               rawTimeMs <= maxReasonableTime
@@ -457,7 +488,6 @@ export default function BattleScreen() {
             }
           }
 
-          // Always navigate, even with empty array
           router.replace({
             pathname: "/user/battle-results",
             params: {
@@ -469,8 +499,6 @@ export default function BattleScreen() {
             },
           });
         } catch (error) {
-          //   console.error("Error in navigateToResults:", error);
-          // Fallback navigation
           router.replace("/user/multiplayer-mode-selection");
         }
       };
@@ -480,9 +508,9 @@ export default function BattleScreen() {
 
   // Update handleInputChange
   const handleInputChange = async (text: string) => {
-    // Only validate when answer is correct
     const normalizedAnswer = text.trim().toLowerCase();
-    const normalizedCorrect = currentQuestion?.correctAnswer.toLowerCase();
+    const currentQuestion = roomData?.questions?.[roomData.currentQuestion];
+    const normalizedCorrect = currentQuestion?.correctAnswer?.toLowerCase();
 
     if (normalizedAnswer === normalizedCorrect) {
       handleAnswerSubmit(text);
@@ -565,11 +593,11 @@ export default function BattleScreen() {
     const players = Object.entries(roomData.players || {}).map(
       ([id, player]) => ({
         id,
-        ...player,
+        ...(player as Player),
         avatar:
-          typeof player.avatar === "number"
-            ? player.avatar
-            : parseInt(player.avatar) || 0,
+          typeof (player as Player).avatar === "number"
+            ? (player as Player).avatar
+            : parseInt((player as Player).avatar as string) || 0,
       })
     );
 
@@ -681,10 +709,7 @@ export default function BattleScreen() {
     );
   }
 
-  const questionsArray = roomData.questions
-    ? Object.values(roomData.questions)
-    : [];
-
+  const questionsArray = roomData.questions ? roomData.questions : [];
   const currentQuestion = questionsArray[roomData.currentQuestion];
 
   if (!currentQuestion) {
@@ -709,7 +734,7 @@ export default function BattleScreen() {
             <View className="flex-row items-center gap-4">
               <View className="flex-row items-center bg-primary px-3 py-1 rounded-full">
                 <Text className="text-white text-sm font-black">
-                  {roomData?.players?.[userId]?.score || 0} pts
+                  {roomData?.players?.[userId!]?.score || 0} pts
                 </Text>
               </View>
               <View className="flex-row items-center bg-blue-500 px-3 py-1 rounded-full">
@@ -789,13 +814,14 @@ export default function BattleScreen() {
           </View>
 
           {Object.values(roomData?.players || {}).map((player, index) => {
-            if (player.winner) {
+            const typedPlayer = player as Player;
+            if (typedPlayer.winner) {
               return (
                 <Text
                   key={`winner-${index}`}
                   className="text-green-500 text-center mt-4"
                 >
-                  🏆 {player.username || player.name} got it right! (+
+                  🏆 {typedPlayer.username || typedPlayer.name} got it right! (+
                   {currentQuestion?.points || 1} pts)
                 </Text>
               );
@@ -803,12 +829,13 @@ export default function BattleScreen() {
             return null;
           })}
 
-          {roomData?.players?.[userId]?.consecutiveCorrect > 0 &&
+          {roomData?.players?.[userId!]?.consecutiveCorrect &&
+            roomData?.players?.[userId!]?.consecutiveCorrect! > 0 &&
             roomData.totalQuestions - roomData.currentQuestion >
-              roomData.consecutiveWinThreshold &&
+              (roomData.consecutiveWinThreshold || 0) &&
             !roomData?.currentWinner && (
               <Text className="text-blue-500 text-center mt-2 font-bold">
-                🔥 {roomData.players[userId].consecutiveCorrect} correct in a
+                🔥 {roomData.players[userId!].consecutiveCorrect} correct in a
                 row!
                 {(() => {
                   const remaining = Math.max(
@@ -816,7 +843,7 @@ export default function BattleScreen() {
                     questionsArray.length - (roomData.currentQuestion + 1)
                   );
                   const toWin = Math.min(
-                    roomData.maxConsecutiveTarget,
+                    roomData.maxConsecutiveTarget || 0,
                     remaining
                   );
                   return toWin > 0 ? (

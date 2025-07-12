@@ -13,13 +13,44 @@ import {
   BackHandler,
 } from "react-native";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
-import ViewShot from "react-native-view-shot";
+import ViewShot, { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system";
 import SoundManager from "../../components/soundManager";
-import logo from "../../assets/branding/tezmaths-full-logo.png";
+const logo = require("../../assets/branding/tezmaths-full-logo.png");
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { battleManager } from "../../utils/battleManager";
+
+interface PlayerData {
+  name?: string;
+  username?: string;
+  avatar?: number | string;
+  score?: number | string;
+  userId?: string;
+  isHost?: boolean;
+  ready?: boolean;
+  connected?: boolean;
+}
+
+interface BattlePlayer {
+  userId: string;
+  username: string;
+  avatar: number;
+  score: number;
+}
+
+interface UserData {
+  avatar: number;
+  username: string;
+}
+
+interface BattleDataState {
+  players: BattlePlayer[];
+  totalQuestions: number;
+  userRank: number;
+  userScore: number;
+  isValid: boolean;
+}
 
 const shareConfig = {
   additionalText:
@@ -32,7 +63,7 @@ const shareConfig = {
     "#TezMaths #MathQuiz #BrainTraining #Education #MathSkills #LearningApp #FreeApp",
 };
 
-const avatarImages = (avatar) => {
+const avatarImages = (avatar: number | string) => {
   const avatarNumber = Number(avatar) || 0;
   switch (avatarNumber) {
     case 0:
@@ -57,9 +88,14 @@ export default function BattleResultsScreen() {
   const { roomId, players, totalQuestions, currentUserId, totalBattleTime } =
     params;
 
-  const totalGameTimeMs = Number.parseInt(totalBattleTime) || 0;
+  const totalGameTimeMs =
+    Number.parseInt(
+      Array.isArray(totalBattleTime)
+        ? totalBattleTime[0]
+        : totalBattleTime || "0"
+    ) || 0;
 
-  const viewShotRef = useRef();
+  const viewShotRef = useRef<ViewShot>(null);
   const cleanupExecuted = useRef(false);
   const navigationInProgress = useRef(false);
   const soundPlayed = useRef(false);
@@ -67,8 +103,11 @@ export default function BattleResultsScreen() {
   // State management
   const [isPopupVisible, setPopupVisible] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
-  const [userData, setUserData] = useState({ avatar: 0, username: "player" });
-  const [battleData, setBattleData] = useState({
+  const [userData, setUserData] = useState<UserData>({
+    avatar: 0,
+    username: "player",
+  });
+  const [battleData, setBattleData] = useState<BattleDataState>({
     players: [],
     totalQuestions: 0,
     userRank: 0,
@@ -85,9 +124,9 @@ export default function BattleResultsScreen() {
     // Non-blocking cleanup in background
     setTimeout(() => {
       Promise.allSettled([
-        battleManager.removeRoomListener?.(roomId),
-        battleManager.updatePlayerConnection?.(roomId, false),
-        battleManager.cleanupRoom?.(roomId, "battle_ended"),
+        battleManager.removeRoomListener?.(roomId as string),
+        battleManager.updatePlayerConnection?.(roomId as string, false),
+        battleManager.cleanupRoom?.(roomId as string, "battle_ended"),
       ]).catch(() => {}); // Ignore cleanup errors
     }, 100);
   }, [roomId]);
@@ -106,27 +145,31 @@ export default function BattleResultsScreen() {
         }
 
         // Parse players data with better error handling
-        let parsedPlayers = [];
+        let parsedPlayers: any[] = [];
         try {
-          const playersData = JSON.parse(players);
+          const playersData = JSON.parse(
+            Array.isArray(players) ? players[0] : players
+          );
 
           if (Array.isArray(playersData)) {
             parsedPlayers = playersData;
           } else if (typeof playersData === "object" && playersData !== null) {
             parsedPlayers = Object.entries(playersData).map(
-              ([userId, playerData]) => ({
-                userId: userId,
-                username:
-                  playerData.name || playerData.username || "Unknown Player",
-                avatar:
-                  typeof playerData.avatar === "number"
-                    ? playerData.avatar
-                    : parseInt(playerData.avatar) || 0,
-                score:
-                  typeof playerData.score === "number"
-                    ? playerData.score
-                    : parseInt(playerData.score) || 0,
-              })
+              ([userId, playerData]) => {
+                const player = playerData as PlayerData;
+                return {
+                  userId: userId,
+                  username: player.name || player.username || "Unknown Player",
+                  avatar:
+                    typeof player.avatar === "number"
+                      ? player.avatar
+                      : parseInt(String(player.avatar)) || 0,
+                  score:
+                    typeof player.score === "number"
+                      ? player.score
+                      : parseInt(String(player.score)) || 0,
+                };
+              }
             );
           } else {
             throw new Error("Invalid players data format");
@@ -156,39 +199,46 @@ export default function BattleResultsScreen() {
           ];
         }
 
-        // Ensure all players have required fields
-        const processedPlayers = parsedPlayers.map((player, index) => ({
-          userId: player.userId || `player_${index}`,
-          username: player.username || player.name || "Unknown Player",
-          avatar:
-            typeof player.avatar === "number"
-              ? player.avatar
-              : parseInt(player.avatar) || 0,
-          score:
-            typeof player.score === "number"
-              ? player.score
-              : parseInt(player.score) || 0,
-        }));
+        const processedPlayers: BattlePlayer[] = parsedPlayers.map(
+          (player: any, index: number) => ({
+            userId: player.userId || `player_${index}`,
+            username: player.name || player.username || "Unknown Player",
+            avatar:
+              typeof player.avatar === "number"
+                ? player.avatar
+                : parseInt(String(player.avatar)) || 0,
+            score:
+              typeof player.score === "number"
+                ? player.score
+                : parseInt(String(player.score)) || 0,
+          })
+        );
 
         // Sort players by score (highest first)
         processedPlayers.sort((a, b) => b.score - a.score);
 
         // Find current user's rank and score
         let userIndex = processedPlayers.findIndex(
-          (p) => p.userId === currentUserId
+          (p) =>
+            p.userId ===
+            (Array.isArray(currentUserId) ? currentUserId[0] : currentUserId)
         );
 
         // **FIXED: If user not found, add them**
         if (userIndex === -1) {
           processedPlayers.push({
-            userId: currentUserId,
+            userId: Array.isArray(currentUserId)
+              ? currentUserId[0]
+              : currentUserId,
             username: "You",
             avatar: 0,
             score: 0,
           });
           processedPlayers.sort((a, b) => b.score - a.score);
           userIndex = processedPlayers.findIndex(
-            (p) => p.userId === currentUserId
+            (p) =>
+              p.userId ===
+              (Array.isArray(currentUserId) ? currentUserId[0] : currentUserId)
           );
         }
 
@@ -197,7 +247,12 @@ export default function BattleResultsScreen() {
 
         setBattleData({
           players: processedPlayers,
-          totalQuestions: parseInt(totalQuestions) || 0,
+          totalQuestions:
+            parseInt(
+              Array.isArray(totalQuestions)
+                ? totalQuestions[0]
+                : totalQuestions || "0"
+            ) || 0,
           userRank,
           userScore,
           isValid: true,
@@ -208,13 +263,20 @@ export default function BattleResultsScreen() {
         setBattleData({
           players: [
             {
-              userId: currentUserId,
+              userId: Array.isArray(currentUserId)
+                ? currentUserId[0]
+                : currentUserId,
               username: "You",
               avatar: 0,
               score: 0,
             },
           ],
-          totalQuestions: parseInt(totalQuestions) || 0,
+          totalQuestions:
+            parseInt(
+              Array.isArray(totalQuestions)
+                ? totalQuestions[0]
+                : totalQuestions || "0"
+            ) || 0,
           userRank: 1,
           userScore: 0,
           isValid: true,
@@ -399,11 +461,15 @@ export default function BattleResultsScreen() {
 
   const captureImage = async () => {
     try {
-      const uri = await viewShotRef.current.capture({
+      const uri = await captureRef(viewShotRef, {
         format: "png",
         quality: 0.9,
         result: "tmpfile",
       });
+
+      if (!uri) {
+        throw new Error("Failed to capture image");
+      }
 
       const timestamp = Date.now();
       const newUri = `${FileSystem.documentDirectory}tezmaths_battle_result_${timestamp}.png`;
@@ -517,14 +583,22 @@ export default function BattleResultsScreen() {
                 <View
                   key={player.userId}
                   className={`flex-row justify-between items-center w-full p-4 py-2 rounded-lg mb-2 bg-light-orange ${
-                    player.userId === currentUserId
+                    player.userId ===
+                    (Array.isArray(currentUserId)
+                      ? currentUserId[0]
+                      : currentUserId)
                       ? "border-2 border-primary"
                       : "border-transparent border-2"
                   }`}
                 >
                   <Text className="text-xl font-bold">
                     {index + 1}. {player.username}
-                    {player.userId === currentUserId ? " (You)" : ""}
+                    {player.userId ===
+                    (Array.isArray(currentUserId)
+                      ? currentUserId[0]
+                      : currentUserId)
+                      ? " (You)"
+                      : ""}
                   </Text>
                   <Text className="text-xl">{player.score} pts</Text>
                 </View>

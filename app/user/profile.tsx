@@ -324,7 +324,12 @@ export default function ProfileScreen() {
           await GoogleSignin.signOut();
         } catch (error2) {
           try {
-            await GoogleSignin.clearCachedAccessToken();
+            const userInfo = await GoogleSignin.getCurrentUser();
+            const accessToken = userInfo?.idToken;
+
+            if (accessToken) {
+              await GoogleSignin.clearCachedAccessToken(accessToken);
+            }
           } catch (error3) {
             // All Google logout methods failed, continue anyway
           }

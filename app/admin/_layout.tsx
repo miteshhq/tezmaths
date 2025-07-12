@@ -6,9 +6,11 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
+  TouchableNativeFeedback,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -16,6 +18,21 @@ import { auth } from "../../firebase/firebaseConfig";
 
 const { width } = Dimensions.get("window");
 const ACTIVE_COLOR = "#F97316";
+
+// Custom touchable component that handles platform-specific ripple effect
+const CustomTouchable = ({ children, ...props }) => {
+  if (Platform.OS === "android") {
+    return (
+      <TouchableNativeFeedback
+        {...props}
+        background={TouchableNativeFeedback.Ripple("transparent", false)}
+      >
+        {children}
+      </TouchableNativeFeedback>
+    );
+  }
+  return <TouchableOpacity {...props}>{children}</TouchableOpacity>;
+};
 
 export default function AdminTabsLayout() {
   const router = useRouter();
@@ -215,12 +232,7 @@ export default function AdminTabsLayout() {
             tabBarInactiveTintColor: "#aaaaaa",
             tabBarStyle: styles.tabBar,
             tabBarItemStyle: { width: "100%", height: "100%" },
-            tabBarButton: (props) => (
-              <TouchableOpacity
-                {...props}
-                android_ripple={{ color: "transparent" }}
-              />
-            ),
+            tabBarButton: (props) => <CustomTouchable {...props} />,
           }}
         >
           <Tabs.Screen

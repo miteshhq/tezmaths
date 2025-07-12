@@ -13,7 +13,7 @@ import {
   View,
   StatusBar,
 } from "react-native";
-import welcomeImage from "../assets/branding/png-logo.png";
+const welcomeImage = require("../assets/branding/png-logo.png");
 import { auth } from "../firebase/firebaseConfig";
 
 export default function WelcomeScreen() {

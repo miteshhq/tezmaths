@@ -168,7 +168,7 @@ export default function QuestionManagement() {
         // Find and remove ALL existing quizzes with same level
         const removePromises = [];
         for (const [key, quiz] of Object.entries(quizzes)) {
-          if (quiz.level === levelNum) {
+          if ((quiz as { level: number }).level === levelNum) {
             removePromises.push(remove(ref(database, `quizzes/${key}`)));
           }
         }

@@ -239,7 +239,7 @@ const Dashboard = () => {
               <TouchableOpacity
                 key={index}
                 className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200 flex-row items-center"
-                onPress={() => router.push(button.route)}
+                onPress={() => router.push(button.route as any)}
                 activeOpacity={0.7}
               >
                 <View

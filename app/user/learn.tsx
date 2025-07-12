@@ -1,6 +1,6 @@
 // app/user/learn.tsx
 import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
-import { get, ref } from "firebase/database";
+import { get, ref, set } from "firebase/database"; // Added 'set' import
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,6 +13,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  StyleSheet,
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { database } from "../../firebase/firebaseConfig";
@@ -62,9 +63,16 @@ const mockVideosData = [
   },
 ];
 
+interface Video {
+  id: string;
+  name: string;
+  description: string;
+  videoId: string;
+}
+
 export default function LearnScreen() {
-  const [videos, setVideos] = useState([]);
-  const [filteredVideos, setFilteredVideos] = useState([]);
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [filteredVideos, setFilteredVideos] = useState<Video[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -83,36 +91,25 @@ export default function LearnScreen() {
           }));
 
           // If no videos found or empty array, use mock data
-          // Add to your fetchVideos function
           if (videoList.length === 0) {
-            // console.log("No videos found, using mock data");
-
-            // Attempt to write mock data to DB for future use
             try {
               const videosRef = ref(database, "videos");
               await set(videosRef, mockVideosData);
-              // console.log("Mock videos written to database");
-
-              // Use the mock data we just wrote
               setVideos(mockVideosData);
               setFilteredVideos(mockVideosData);
             } catch (error) {
-              // console.error("Failed to write mock videos:", error);
               setVideos(mockVideosData);
               setFilteredVideos(mockVideosData);
             }
           } else {
             setVideos(videoList);
             setFilteredVideos(videoList);
-            // console.log("Fetched videos from Firebase:", videoList);
           }
         } else {
-          // console.log("No videos found in database, using mock data");
           setVideos(mockVideosData);
           setFilteredVideos(mockVideosData);
         }
       } catch (error) {
-        // console.error("Failed to fetch videos, using mock data:", error);
         setVideos(mockVideosData);
         setFilteredVideos(mockVideosData);
       } finally {
@@ -125,7 +122,7 @@ export default function LearnScreen() {
 
   // Memoize the handleSearch function to prevent recreating it on every render
   const handleSearch = useCallback(
-    (query) => {
+    (query: string) => {
       setSearchQuery(query);
       if (query === "") {
         setFilteredVideos(videos);
@@ -139,28 +136,26 @@ export default function LearnScreen() {
     [videos]
   );
 
-  const openYoutubeVideo = (videoId) => {
+  const openYoutubeVideo = (videoId: string) => {
     const url = `https://www.youtube.com/watch?v=${videoId}`;
     Linking.canOpenURL(url).then((supported) => {
       if (supported) {
         Linking.openURL(url);
-      } else {
-        // console.log("Don't know how to open URI: " + url);
       }
     });
   };
 
-  const renderVideoContent = (item) => {
+  const renderVideoContent = (item: Video) => {
     // Check if we can use WebView on this platform
     if (Platform.OS === "web" || !item.videoId) {
       return (
         <TouchableOpacity
-          className="w-full aspect-video bg-custom-gray justify-center items-center rounded-xl border border-gray-200"
+          style={styles.videoContainer}
           onPress={() => item.videoId && openYoutubeVideo(item.videoId)}
         >
-          <View className="items-center">
+          <View style={styles.videoPlaceholder}>
             <FontAwesome name="youtube-play" size={48} color="#FF0000" />
-            <Text className="text-red-500 font-medium text-base mt-2">
+            <Text style={styles.youtubeText}>
               {item.videoId ? "Watch on YouTube" : "No video available"}
             </Text>
           </View>
@@ -171,9 +166,9 @@ export default function LearnScreen() {
     // For platforms that support WebView
     try {
       return (
-        <View className="w-full aspect-video overflow-hidden rounded-xl">
+        <View style={styles.webViewContainer}>
           <WebView
-            className="w-full h-full"
+            style={styles.webView}
             source={{ uri: `https://www.youtube.com/embed/${item.videoId}` }}
             allowsFullscreenVideo
             javaScriptEnabled={true}
@@ -182,158 +177,262 @@ export default function LearnScreen() {
         </View>
       );
     } catch (error) {
-      // console.log("WebView error:", error);
       return (
         <TouchableOpacity
-          className="w-full aspect-video bg-custom-gray justify-center items-center rounded-xl border border-gray-200"
+          style={styles.videoContainer}
           onPress={() => openYoutubeVideo(item.videoId)}
         >
-          <View className="items-center">
+          <View style={styles.videoPlaceholder}>
             <FontAwesome name="youtube-play" size={48} color="#FF0000" />
-            <Text className="text-red-500 font-medium text-base mt-2">
-              Watch on YouTube
-            </Text>
+            <Text style={styles.youtubeText}>Watch on YouTube</Text>
           </View>
         </TouchableOpacity>
       );
     }
   };
 
-  // Move the header outside of the component to prevent re-renders
-  const renderHeader = () => (
-    <View className="mb-6">
-      <View className="mx-4 mt-4">
-        <View className="relative">
-          <TextInput
-            className="bg-white text-black py-3 pl-12 pr-4 rounded-xl text-base border border-gray-200"
-            placeholder="Search videos by name"
-            placeholderTextColor="#9CA3AF"
-            value={searchQuery}
-            onChangeText={handleSearch}
-          />
-          <FontAwesome
-            name="search"
-            size={18}
-            color="#9CA3AF"
-            className="absolute left-4 top-4"
-            style={{ position: "absolute", left: 16, top: 14 }}
-          />
-        </View>
-      </View>
-    </View>
-  );
-
-  const renderVideoItem = ({ item, index }) => (
-    <View className="bg-white rounded-3xl p-4 mx-4 mb-4 shadow-sm border border-primary">
-      <View className="flex-row items-start">
-        {/* <View className="w-10 h-10 rounded-full bg-primary justify-center items-center mr-3">
-          <Text className="text-white text-sm font-bold">{index + 1}</Text>
-        </View> */}
-        <View className="flex-1 flex items-center">
-          <Text className="text-custom-purple text-2xl font-black text-center">
-            {item.name}
-          </Text>
-          {/* <Text className="text-gray-600 text-sm leading-5">
-            {item.description}
-          </Text> */}
+  const renderVideoItem = ({ item }: { item: Video }) => (
+    <View style={styles.videoItem}>
+      <View style={styles.videoHeader}>
+        <View style={styles.videoTitleContainer}>
+          <Text style={styles.videoTitle}>{item.name}</Text>
         </View>
       </View>
 
-      <View className="mt-3">{renderVideoContent(item)}</View>
-
-      {/* <View className="flex-row items-center justify-between mt-3 pt-3 border-t border-gray-100">
-        <View className="flex-row items-center">
-          <FontAwesome name="play-circle" size={16} color="#6B7280" />
-          <Text className="text-gray-500 text-sm ml-2">
-            Educational Content
-          </Text>
-        </View>
-        <TouchableOpacity
-          className="flex-row items-center bg-primary/10 px-3 py-1 rounded-full"
-          onPress={() => item.videoId && openYoutubeVideo(item.videoId)}
-        >
-          <FontAwesome name="external-link" size={12} color="#primary" />
-          <Text className="text-primary text-xs font-medium ml-1">Open</Text>
-        </TouchableOpacity>
-      </View> */}
+      <View style={styles.videoContentContainer}>
+        {renderVideoContent(item)}
+      </View>
     </View>
   );
 
   const renderEmptyState = () => (
-    <View className="flex-1 justify-center items-center px-8">
+    <View style={styles.emptyState}>
       <MaterialIcons name="search-off" size={64} color="#9CA3AF" />
-      <Text className="text-gray-500 text-lg font-semibold mt-4 text-center">
-        No videos found
-      </Text>
-      <Text className="text-gray-400 text-sm text-center mt-2">
+      <Text style={styles.emptyStateTitle}>No videos found</Text>
+      <Text style={styles.emptyStateSubtitle}>
         Try adjusting your search terms or check back later for new content.
       </Text>
     </View>
   );
 
   return (
-    <View className="flex-1 bg-white">
+    <View style={styles.container}>
       {loading ? (
-        <View className="flex-1 justify-center items-center">
-          <ActivityIndicator size="large" color="#primary" />
-          <Text className="text-gray-600 text-base mt-4">
-            Loading videos...
-          </Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#8B5CF6" />
+          <Text style={styles.loadingText}>Loading videos...</Text>
         </View>
       ) : (
-        <View className="flex-1 bg-white">
+        <View style={styles.mainContainer}>
           {/* HEADER HERE */}
           <ImageBackground
             source={require("../../assets/gradient.jpg")}
-            style={{ overflow: "hidden", marginTop: 20 }}
+            style={styles.headerBackground}
           >
-            <View className="px-4 py-4">
-              <View className="flex-row justify-center items-center gap-2">
+            <View style={styles.headerContent}>
+              <View style={styles.headerTitleContainer}>
                 <Image
                   source={require("../../assets/icons/learn.png")}
-                  style={{ width: 24, height: 24 }}
+                  style={styles.headerIcon}
                   tintColor="#FF6B35"
                 />
-                <Text className="text-white text-3xl font-black">Learning</Text>
+                <Text style={styles.headerTitle}>Learning</Text>
               </View>
             </View>
           </ImageBackground>
-          <>
-            {/* Search Input - moved outside FlatList */}
-            <View className="mb-6">
-              <View className="mx-4 mt-4">
-                <View className="relative">
-                  <TextInput
-                    className="bg-white text-black py-3 pl-12 pr-4 rounded-xl text-base border border-gray-200"
-                    placeholder="Search videos by name"
-                    placeholderTextColor="#9CA3AF"
-                    value={searchQuery}
-                    onChangeText={handleSearch}
-                  />
-                  <FontAwesome
-                    name="search"
-                    size={18}
-                    color="#9CA3AF"
-                    style={{ position: "absolute", left: 16, top: 14 }}
-                  />
-                </View>
+
+          {/* Search Input */}
+          <View style={styles.searchContainer}>
+            <View style={styles.searchInputContainer}>
+              <View style={styles.searchWrapper}>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search videos by name"
+                  placeholderTextColor="#9CA3AF"
+                  value={searchQuery}
+                  onChangeText={handleSearch}
+                />
+                <FontAwesome
+                  name="search"
+                  size={18}
+                  color="#9CA3AF"
+                  style={styles.searchIcon}
+                />
               </View>
             </View>
+          </View>
 
-            <FlatList
-              data={filteredVideos}
-              keyExtractor={(item) => item.id}
-              renderItem={renderVideoItem}
-              ListEmptyComponent={renderEmptyState}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{
-                paddingBottom: 20,
-                ...(filteredVideos.length === 0 && { flexGrow: 1 }),
-              }}
-            />
-          </>
+          <FlatList
+            data={filteredVideos}
+            keyExtractor={(item) => item.id}
+            renderItem={renderVideoItem}
+            ListEmptyComponent={renderEmptyState}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={[
+              styles.flatListContent,
+              filteredVideos.length === 0 && styles.flatListEmpty,
+            ]}
+          />
         </View>
       )}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "white",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    color: "#6B7280",
+    fontSize: 16,
+    marginTop: 16,
+  },
+  mainContainer: {
+    flex: 1,
+    backgroundColor: "white",
+  },
+  headerBackground: {
+    overflow: "hidden",
+    marginTop: 20,
+  },
+  headerContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  headerTitleContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+  headerIcon: {
+    width: 24,
+    height: 24,
+  },
+  headerTitle: {
+    color: "white",
+    fontSize: 30,
+    fontWeight: "900",
+  },
+  searchContainer: {
+    marginBottom: 24,
+  },
+  searchInputContainer: {
+    marginHorizontal: 16,
+    marginTop: 16,
+  },
+  searchWrapper: {
+    position: "relative",
+  },
+  searchInput: {
+    backgroundColor: "white",
+    color: "black",
+    paddingVertical: 12,
+    paddingLeft: 48,
+    paddingRight: 16,
+    borderRadius: 12,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  searchIcon: {
+    position: "absolute",
+    left: 16,
+    top: 14,
+  },
+  videoItem: {
+    backgroundColor: "white",
+    borderRadius: 24,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#8B5CF6",
+  },
+  videoHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  videoTitleContainer: {
+    flex: 1,
+    alignItems: "center",
+  },
+  videoTitle: {
+    color: "#8B5CF6",
+    fontSize: 24,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  videoContentContainer: {
+    marginTop: 12,
+  },
+  videoContainer: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    backgroundColor: "#F3F4F6",
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  videoPlaceholder: {
+    alignItems: "center",
+  },
+  youtubeText: {
+    color: "#EF4444",
+    fontWeight: "500",
+    fontSize: 16,
+    marginTop: 8,
+  },
+  webViewContainer: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    overflow: "hidden",
+    borderRadius: 12,
+  },
+  webView: {
+    width: "100%",
+    height: "100%",
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  emptyStateTitle: {
+    color: "#6B7280",
+    fontSize: 18,
+    fontWeight: "600",
+    marginTop: 16,
+    textAlign: "center",
+  },
+  emptyStateSubtitle: {
+    color: "#9CA3AF",
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 8,
+  },
+  flatListContent: {
+    paddingBottom: 20,
+  },
+  flatListEmpty: {
+    flexGrow: 1,
+  },
+});

@@ -1,3 +1,4 @@
+import React from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -10,6 +11,28 @@ import {
 } from "react-native";
 import { auth } from "../../firebase/firebaseConfig";
 import { battleManager } from "../../utils/battleManager";
+
+interface RoomPlayer {
+  name: string;
+  username?: string;
+  avatar?: number;
+  score?: number;
+  userId?: string;
+  isHost?: boolean;
+  ready: boolean;
+  connected: boolean;
+}
+
+interface Room {
+  roomName?: string;
+  code?: string;
+  players: Record<string, RoomPlayer>;
+  status: string;
+  hostId?: string;
+  matchmakingRoom?: boolean;
+  questions?: any[];
+  currentQuestion?: number;
+}
 
 export default function BattleRoom() {
   const router = useRouter();
@@ -32,6 +55,8 @@ export default function BattleRoom() {
   const battleStartTimeoutRef = useRef(null);
   const battleNavigationTimeoutRef = useRef(null);
   const cleanupRef = useRef(false);
+
+  const roomListenerRef = useRef<(() => void) | null>(null);
 
   const performCleanup = useCallback(() => {
     if (cleanupRef.current) return;
@@ -189,10 +214,11 @@ export default function BattleRoom() {
       Object.keys(room.players || {}).length === 2 &&
       room.status === "waiting"
     ) {
-      const players = Object.values(room.players || {});
+      const players = Object.values(room.players || {}) as RoomPlayer[];
       const readyAndConnectedCount = players.filter(
-        (p) => p.ready && p.connected
+        (p: RoomPlayer) => p.ready && p.connected
       ).length;
+
       if (readyAndConnectedCount === 2 && room.hostId === userId) {
         console.log("Starting battle immediately with 2 ready players...");
         const startBattle = async () => {
@@ -313,7 +339,7 @@ export default function BattleRoom() {
           if (!isMounted || navigationRef.current) return;
 
           // Add this check to prevent state updates during navigation
-          if (router.isNavigating) return;
+          //   if (router.isNavigating) return;
 
           setRoom(roomData);
           setLoading(false);
@@ -564,15 +590,16 @@ export default function BattleRoom() {
         {Object.entries(room.players).map(([id, player]) => (
           <View key={id} className="flex-row items-center py-2 border-b">
             <Text className="flex-1 text-lg">
-              {player.name} {player.isHost && "(Host)"}
+              {(player as RoomPlayer).name}{" "}
+              {(player as RoomPlayer).isHost && "(Host)"}
               {id === userId && " (You)"}
             </Text>
             <Text
               className={`${
-                player.ready ? "text-green-600" : "text-red-600"
+                (player as RoomPlayer).ready ? "text-green-600" : "text-red-600"
               } font-semibold`}
             >
-              {player.ready ? "✅ Ready" : "❌ Not Ready"}
+              {(player as RoomPlayer).ready ? "✅ Ready" : "❌ Not Ready"}
             </Text>
           </View>
         ))}
@@ -599,17 +626,21 @@ export default function BattleRoom() {
         {isHost === "true" && (
           <TouchableOpacity
             className={`px-6 py-3 rounded-lg ${
-              Object.values(room.players).filter((p) => p.ready).length <
-                Object.values(room.players).filter((p) => p.connected).length ||
-              battleStarting
+              Object.values(room.players).filter((p: RoomPlayer) => p.ready)
+                .length <
+                Object.values(room.players).filter(
+                  (p: RoomPlayer) => p.connected
+                ).length || battleStarting
                 ? "bg-gray-400"
                 : "bg-green-500"
             }`}
             onPress={handleStartBattle}
             disabled={
-              Object.values(room.players).filter((p) => p.ready).length <
-                Object.values(room.players).filter((p) => p.connected).length ||
-              battleStarting
+              Object.values(room.players).filter((p: RoomPlayer) => p.ready)
+                .length <
+                Object.values(room.players).filter(
+                  (p: RoomPlayer) => p.connected
+                ).length || battleStarting
             }
           >
             <Text className="text-white font-bold">

@@ -7,6 +7,7 @@ import {
   Alert,
   Animated,
   AppState,
+  AppStateStatus,
   BackHandler,
   Easing,
   Image,
@@ -149,10 +150,10 @@ export default function QuizScreen() {
   const [levelPointsEarned, setLevelPointsEarned] = useState(0);
 
   // Refs
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const submitTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const explanationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const appStateRef = useRef(AppState.currentState);
+  const timerRef = useRef<number | null>(null);
+  const submitTimeoutRef = useRef<number | null>(null);
+  const explanationTimeoutRef = useRef<number | null>(null);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const inputRef = useRef<TextInput>(null);
   const isMountedRef = useRef(true);
 
@@ -190,7 +191,7 @@ export default function QuizScreen() {
 
     // Mark quiz as inactive
     setIsQuizActive(false);
-  }, []);
+  }, [timerAnimation, questionTransition]);
 
   const clearAllQuizCache = useCallback(async () => {
     try {
@@ -220,209 +221,6 @@ export default function QuizScreen() {
       // console.error("Error clearing level cache:", error);
     }
   }, [currentLevel]);
-
-  useEffect(() => {
-    // Only use accumulated score when coming from a previous level in same session
-    const accScore =
-      params.isSelectedLevel === "true"
-        ? 0
-        : Number(params.accumulatedScore) || 0;
-    // console.log(`Setting accumulated score from params: ${accScore}`);
-    setAccumulatedScore(accScore);
-    setStartingLevel(currentLevel);
-
-    // Get game start time from params if continuing from previous level
-    if (params.gameStartTime) {
-      const startTime = Number(params.gameStartTime);
-      setGameStartTime(startTime);
-      //   console.log(
-      //     `Retrieved game start time from params: ${new Date(
-      //       startTime
-      //     ).toLocaleTimeString()}`
-      //   );
-    }
-  }, [
-    params.accumulatedScore,
-    params.gameStartTime,
-    currentLevel,
-    params.isSelectedLevel,
-  ]);
-
-  // Handle app state changes
-  useEffect(() => {
-    const handleAppStateChange = (nextAppState: string) => {
-      if (
-        appStateRef.current.match(/active/) &&
-        nextAppState === "background"
-      ) {
-        cleanupQuiz();
-      } else if (
-        appStateRef.current === "background" &&
-        nextAppState === "active"
-      ) {
-        if (isScreenFocused && isQuizActive) {
-          handleQuizInterruption();
-        }
-      }
-      appStateRef.current = nextAppState;
-    };
-
-    const subscription = AppState.addEventListener(
-      "change",
-      handleAppStateChange
-    );
-    return () => subscription?.remove();
-  }, [isScreenFocused, isQuizActive, cleanupQuiz]);
-
-  useFocusEffect(
-    useCallback(() => {
-      console.log(`🎯 Focus effect triggered for level ${currentLevel}`);
-      setIsScreenFocused(true);
-
-      // Initialize game start time logic
-      let startTime: number;
-
-      if (params.isSelectedLevel === "true" || !params.gameStartTime) {
-        startTime = Date.now();
-        console.log(
-          `🎮 NEW GAME - Start time: ${new Date(
-            startTime
-          ).toLocaleTimeString()}`
-        );
-      } else {
-        const existingStartTime = Number(params.gameStartTime);
-        if (existingStartTime && existingStartTime > 0) {
-          startTime = existingStartTime;
-          console.log(
-            `🔄 CONTINUING - Start time: ${new Date(
-              startTime
-            ).toLocaleTimeString()}`
-          );
-        } else {
-          startTime = Date.now();
-          console.log(
-            `⚠️ FALLBACK - Start time: ${new Date(
-              startTime
-            ).toLocaleTimeString()}`
-          );
-        }
-      }
-
-      setGameStartTime(startTime);
-      gameStartTimeRef.current = startTime;
-      gameInitializedRef.current = true;
-
-      // Clear cache and reset state if it's a selected level
-      if (params.isSelectedLevel === "true") {
-        clearAllQuizCache().then(() => {
-          resetQuizState();
-          loadQuestions();
-        });
-      } else {
-        resetQuizState();
-        loadQuestions();
-      }
-
-      return () => {
-        console.log(`🚪 Cleanup for level ${currentLevel}`);
-        setIsScreenFocused(false);
-        cleanupQuiz();
-      };
-    }, [
-      currentLevel,
-      params.isSelectedLevel,
-      params.gameStartTime,
-      clearAllQuizCache,
-      resetQuizState,
-      loadQuestions,
-      cleanupQuiz,
-    ])
-  );
-
-  // Debug questions state
-  useEffect(() => {
-    // console.log(
-    //   `Questions updated: ${questions.length} questions for level ${currentLevel}`
-    // );
-    // console.log("Current question index:", currentQuestionIndex);
-    if (questions.length > 0) {
-      //   console.log("First question:", questions[0]?.questionText);
-    }
-  }, [questions, currentQuestionIndex, currentLevel]);
-
-  // Handle quiz interruption
-  const handleQuizInterruption = useCallback(() => {
-    Alert.alert(
-      "Quiz Interrupted",
-      "Your quiz session was interrupted. You'll need to restart this level.",
-      [
-        {
-          text: "Restart Level",
-          onPress: () => {
-            resetQuizState();
-            loadQuestions();
-          },
-        },
-        {
-          text: "Go Home",
-          onPress: () => router.push("/user/home"),
-        },
-      ]
-    );
-  }, [resetQuizState]);
-
-  const loadUserData = useCallback(async () => {
-    try {
-      const cachedData = await AsyncStorage.getItem("userData");
-      if (cachedData) {
-        const data = JSON.parse(cachedData);
-        setUsername(data.username || "player");
-        setFullname(data.fullName || "Player");
-        setAvatar(data.avatar || 0);
-      }
-
-      // Also load high score
-      await loadHighScore();
-    } catch (error) {
-      console.error("Error loading user data:", error);
-    }
-  }, [loadHighScore]);
-
-  const updateHighScore = useCallback(
-    async (newScore: number) => {
-      try {
-        const userId = auth.currentUser?.uid;
-        if (!userId) return false;
-
-        // Check if new score is higher than current high score
-        if (newScore > currentHighScore) {
-          // Update local state
-          setCurrentHighScore(newScore);
-
-          // Update AsyncStorage
-          await AsyncStorage.setItem("highScore", newScore.toString());
-
-          // Update Firebase database
-          const userRef = ref(database, `users/${userId}`);
-          await update(userRef, {
-            highScore: newScore,
-            lastHighScoreDate: Date.now(),
-          });
-
-          console.log(
-            `🎉 New High Score: ${newScore} (Previous: ${currentHighScore})`
-          );
-          return true; // Return true if it's a new high score
-        }
-
-        return false; // Return false if it's not a new high score
-      } catch (error) {
-        console.error("Error updating high score:", error);
-        return false;
-      }
-    },
-    [currentHighScore]
-  );
 
   const resetQuizState = useCallback(() => {
     if (!isMountedRef.current) return;
@@ -614,177 +412,207 @@ export default function QuizScreen() {
   }, [currentLevel, questionTransition, params.isSelectedLevel]);
 
   useEffect(() => {
-    if (initialLoadComplete && level) {
-      // Only reset when level actually changes after initial load
-      resetQuizState();
-      loadQuestions();
-    }
-  }, [level, initialLoadComplete]);
+    // Only use accumulated score when coming from a previous level in same session
+    const accScore =
+      params.isSelectedLevel === "true"
+        ? 0
+        : Number(params.accumulatedScore) || 0;
+    // console.log(`Setting accumulated score from params: ${accScore}`);
+    setAccumulatedScore(accScore);
+    setStartingLevel(currentLevel);
 
-  // Add this new effect to track initial load
+    // Get game start time from params if continuing from previous level
+    if (params.gameStartTime) {
+      const startTime = Number(params.gameStartTime);
+      setGameStartTime(startTime);
+      //   console.log(
+      //     `Retrieved game start time from params: ${new Date(
+      //       startTime
+      //     ).toLocaleTimeString()}`
+      //   );
+    }
+  }, [
+    params.accumulatedScore,
+    params.gameStartTime,
+    currentLevel,
+    params.isSelectedLevel,
+  ]);
+
+  // Handle app state changes
   useEffect(() => {
-    if (!initialLoadComplete && !loading) {
-      setInitialLoadComplete(true);
-    }
-  }, [loading, initialLoadComplete]);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    loadUserData();
-
-    // Only load questions if not already loaded
-    if (questions.length === 0) {
-      loadQuestions();
-    }
-
-    return () => {
-      isMountedRef.current = false;
-      cleanupQuiz();
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (
+        appStateRef.current.match(/active/) &&
+        nextAppState === "background"
+      ) {
+        cleanupQuiz();
+      } else if (
+        appStateRef.current === "background" &&
+        nextAppState === "active"
+      ) {
+        if (isScreenFocused && isQuizActive) {
+          handleQuizInterruption();
+        }
+      }
+      appStateRef.current = nextAppState;
     };
-  }, []); // Remove dependencies to prevent re-initialization
 
-  const startTimer = useCallback(() => {
-    if (!isQuizActive || !isScreenFocused || isProcessing || showExplanation) {
-      return;
-    }
+    const subscription = AppState.addEventListener(
+      "change",
+      handleAppStateChange
+    );
+    return () => subscription?.remove();
+  }, [isScreenFocused, isQuizActive, cleanupQuiz]);
 
-    // Always clear existing timer first
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
+  // Handle quiz interruption
+  const handleQuizInterruption = useCallback(() => {
+    Alert.alert(
+      "Quiz Interrupted",
+      "Your quiz session was interrupted. You'll need to restart this level.",
+      [
+        {
+          text: "Restart Level",
+          onPress: () => {
+            resetQuizState();
+            loadQuestions();
+          },
+        },
+        {
+          text: "Go Home",
+          onPress: () => router.push("/user/home"),
+        },
+      ]
+    );
+  }, [resetQuizState, loadQuestions]);
 
-    setTimeLeft(QUIZ_TIME_LIMIT);
-    timerAnimation.setValue(1);
+  useFocusEffect(
+    useCallback(() => {
+      console.log(`🎯 Focus effect triggered for level ${currentLevel}`);
+      setIsScreenFocused(true);
 
-    Animated.timing(timerAnimation, {
-      toValue: 0,
-      duration: QUIZ_TIME_LIMIT * 1000,
-      easing: Easing.linear,
-      useNativeDriver: false,
-    }).start();
+      // Initialize game start time logic
+      let startTime: number;
 
-    timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
-          }
-          // Only call handleTimeUp if not already showing explanation
-          if (!showExplanation) {
-            handleTimeUp();
-          }
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }, [isQuizActive, isScreenFocused, isProcessing, showExplanation]);
-
-  const stopTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    timerAnimation.stopAnimation();
-  }, []);
-
-  useEffect(() => {
-    if (
-      !loading &&
-      questions.length > 0 &&
-      isQuizActive &&
-      !showExplanation &&
-      isScreenFocused &&
-      !isProcessing
-    ) {
-      // Add small delay to ensure state is settled
-      const timer = setTimeout(() => {
-        startTimer();
-      }, 100);
-
-      return () => clearTimeout(timer);
-    }
-  }, [
-    currentQuestionIndex, // This is the key dependency
-    loading,
-    isQuizActive,
-    showExplanation,
-    isScreenFocused,
-    isProcessing,
-    // Remove questions.length and other complex dependencies
-  ]);
-
-  // Focus input when question changes
-  useEffect(() => {
-    if (!showExplanation && questions.length > 0 && isScreenFocused) {
-      const timer = setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [
-    currentQuestionIndex,
-    showExplanation,
-    questions.length,
-    isScreenFocused,
-  ]);
-
-  const handleInputChange = useCallback(
-    (text) => {
-      if (!isQuizActive || showExplanation || !isScreenFocused || isProcessing)
-        return;
-
-      setUserAnswer(text);
-
-      // Clear existing timeout
-      if (submitTimeoutRef.current) {
-        clearTimeout(submitTimeoutRef.current);
-      }
-
-      // Auto-submit if answer is provided
-      if (text.trim() !== "" && AUTO_SUBMIT_DELAY === 0) {
-        const normalizedUserAnswer = text.trim().toLowerCase();
-        const normalizedCorrect = questions[currentQuestionIndex]?.correctAnswer
-          .trim()
-          .toLowerCase();
-
-        if (normalizedUserAnswer === normalizedCorrect) {
-          handleSubmitAnswer(true);
+      if (params.isSelectedLevel === "true" || !params.gameStartTime) {
+        startTime = Date.now();
+        console.log(
+          `🎮 NEW GAME - Start time: ${new Date(
+            startTime
+          ).toLocaleTimeString()}`
+        );
+      } else {
+        const existingStartTime = Number(params.gameStartTime);
+        if (existingStartTime && existingStartTime > 0) {
+          startTime = existingStartTime;
+          console.log(
+            `🔄 CONTINUING - Start time: ${new Date(
+              startTime
+            ).toLocaleTimeString()}`
+          );
+        } else {
+          startTime = Date.now();
+          console.log(
+            `⚠️ FALLBACK - Start time: ${new Date(
+              startTime
+            ).toLocaleTimeString()}`
+          );
         }
       }
-    },
-    [
-      isQuizActive,
-      showExplanation,
-      isScreenFocused,
-      isProcessing,
-      questions,
-      currentQuestionIndex,
-      handleSubmitAnswer,
-    ]
+
+      setGameStartTime(startTime);
+      gameStartTimeRef.current = startTime;
+      gameInitializedRef.current = true;
+
+      // Clear cache and reset state if it's a selected level
+      if (params.isSelectedLevel === "true") {
+        clearAllQuizCache().then(() => {
+          resetQuizState();
+          loadQuestions();
+        });
+      } else {
+        resetQuizState();
+        loadQuestions();
+      }
+
+      return () => {
+        console.log(`🚪 Cleanup for level ${currentLevel}`);
+        setIsScreenFocused(false);
+        cleanupQuiz();
+      };
+    }, [
+      currentLevel,
+      params.isSelectedLevel,
+      params.gameStartTime,
+      clearAllQuizCache,
+      resetQuizState,
+      loadQuestions,
+      cleanupQuiz,
+    ])
   );
 
-  // Validate answer
-  const validateAnswer = (answer: string) => {
-    if (
-      !questions[currentQuestionIndex] ||
-      isProcessing ||
-      !isScreenFocused ||
-      showExplanation
-    )
-      return;
-
-    const normalizedUserAnswer = answer.trim().toLowerCase();
-    const normalizedCorrect = questions[currentQuestionIndex].correctAnswer
-      .trim()
-      .toLowerCase();
-
-    if (normalizedUserAnswer === normalizedCorrect) {
-      handleSubmitAnswer(true);
+  // Debug questions state
+  useEffect(() => {
+    // console.log(
+    //   `Questions updated: ${questions.length} questions for level ${currentLevel}`
+    // );
+    // console.log("Current question index:", currentQuestionIndex);
+    if (questions.length > 0) {
+      //   console.log("First question:", questions[0]?.questionText);
     }
-  };
+  }, [questions, currentQuestionIndex, currentLevel]);
+
+  const loadUserData = useCallback(async () => {
+    try {
+      const cachedData = await AsyncStorage.getItem("userData");
+      if (cachedData) {
+        const data = JSON.parse(cachedData);
+        setUsername(data.username || "player");
+        setFullname(data.fullName || "Player");
+        setAvatar(data.avatar || 0);
+      }
+
+      // Also load high score
+      await loadHighScore();
+    } catch (error) {
+      console.error("Error loading user data:", error);
+    }
+  }, [loadHighScore]);
+
+  const updateHighScore = useCallback(
+    async (newScore: number) => {
+      try {
+        const userId = auth.currentUser?.uid;
+        if (!userId) return false;
+
+        // Check if new score is higher than current high score
+        if (newScore > currentHighScore) {
+          // Update local state
+          setCurrentHighScore(newScore);
+
+          // Update AsyncStorage
+          await AsyncStorage.setItem("highScore", newScore.toString());
+
+          // Update Firebase database
+          const userRef = ref(database, `users/${userId}`);
+          await update(userRef, {
+            highScore: newScore,
+            lastHighScoreDate: Date.now(),
+          });
+
+          console.log(
+            `🎉 New High Score: ${newScore} (Previous: ${currentHighScore})`
+          );
+          return true; // Return true if it's a new high score
+        }
+
+        return false; // Return false if it's not a new high score
+      } catch (error) {
+        console.error("Error updating high score:", error);
+        return false;
+      }
+    },
+    [currentHighScore]
+  );
 
   const updateScoreInDatabase = useCallback(
     async (levelScore: number) => {
@@ -963,8 +791,112 @@ export default function QuizScreen() {
     ]
   );
 
+  const handleGameEnd = useCallback(
+    async (
+      finalScore?: number,
+      finalCorrectAnswers?: number,
+      isGameComplete = false
+    ) => {
+      if (!isQuizActive) return;
+
+      const startTime = gameStartTimeRef.current || gameStartTime;
+      const gameEndTime = Date.now();
+
+      let calculatedTimeMs = 0;
+
+      if (startTime && startTime > 0 && gameInitializedRef.current) {
+        const rawTimeMs = gameEndTime - startTime;
+        const maxReasonableTime = 2 * 60 * 60 * 1000; // 2 hours in ms
+        const minReasonableTime = 1000; // 1 second minimum
+
+        if (rawTimeMs >= minReasonableTime && rawTimeMs <= maxReasonableTime) {
+          calculatedTimeMs = rawTimeMs;
+        } else {
+          console.warn(
+            `⚠️ Time out of range: ${rawTimeMs}ms (${rawTimeMs / 1000}s)`
+          );
+          calculatedTimeMs =
+            rawTimeMs < minReasonableTime ? minReasonableTime : 0;
+        }
+      } else {
+        console.warn(`⚠️ Invalid start time or game not initialized`);
+      }
+
+      setTotalGameTimeMs(calculatedTimeMs);
+
+      setIsQuizActive(false);
+      cleanupQuiz();
+
+      // Calculate total accumulated score
+      let totalAccumulatedScore: number;
+      if (typeof finalScore === "number") {
+        totalAccumulatedScore = finalScore;
+      } else {
+        totalAccumulatedScore =
+          accumulatedScore === 0 ? quizScore : accumulatedScore;
+      }
+
+      const gameCorrectAnswers = finalCorrectAnswers ?? correctAnswers;
+
+      // Check if this is a new high score
+      const isNewHighScore = totalAccumulatedScore > currentHighScore;
+
+      try {
+        const isPassed =
+          isGameComplete &&
+          (finalCorrectAnswers === questions.length ||
+            gameCorrectAnswers === questions.length);
+
+        router.push({
+          pathname: "/user/results",
+          params: {
+            quizScore: totalAccumulatedScore.toString(),
+            correctAnswers: gameCorrectAnswers.toString(),
+            totalQuestions: questions.length.toString(),
+            currentLevel: currentLevel.toString(),
+            username: username || "player",
+            fullname: fullname || "Player",
+            avatar: avatar.toString(),
+            isPassed: isPassed.toString(),
+            isGameComplete: isGameComplete.toString(),
+            totalGameTime: calculatedTimeMs.toString(),
+            isNewHighScore: isNewHighScore.toString(), // Add this
+            highScore: Math.max(
+              totalAccumulatedScore,
+              currentHighScore
+            ).toString(), // Add this
+          },
+        });
+      } catch (error) {
+        router.push("/user/home");
+      }
+    },
+    [
+      quizScore,
+      correctAnswers,
+      accumulatedScore,
+      currentLevel,
+      username,
+      fullname,
+      avatar,
+      isQuizActive,
+      cleanupQuiz,
+      questions.length,
+      gameStartTime,
+      currentHighScore, // Add this dependency
+    ]
+  );
+
+  const stopTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    timerAnimation.stopAnimation();
+  }, [timerAnimation]);
+
   const handleSubmitAnswer = useCallback(
-    async (isCorrect) => {
+    async (isCorrect: boolean) => {
       if (isProcessing || !isQuizActive || !isScreenFocused) return;
 
       const currentQ = questions[currentQuestionIndex];
@@ -1177,6 +1109,45 @@ export default function QuizScreen() {
     [accumulatedScore, currentLevel, gameStartTime, updateHighScore]
   );
 
+  const startTimer = useCallback(() => {
+    if (!isQuizActive || !isScreenFocused || isProcessing || showExplanation) {
+      return;
+    }
+
+    // Always clear existing timer first
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    setTimeLeft(QUIZ_TIME_LIMIT);
+    timerAnimation.setValue(1);
+
+    Animated.timing(timerAnimation, {
+      toValue: 0,
+      duration: QUIZ_TIME_LIMIT * 1000,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    }).start();
+
+    timerRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
+          // Only call handleTimeUp if not already showing explanation
+          if (!showExplanation) {
+            handleTimeUp();
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, [isQuizActive, isScreenFocused, isProcessing, showExplanation]);
+
   const handleTimeUp = useCallback(async () => {
     if (!isQuizActive || isProcessing || !isScreenFocused || showExplanation)
       return;
@@ -1211,103 +1182,136 @@ export default function QuizScreen() {
     quizScore,
     correctAnswers,
     accumulatedScore, // Important dependency
+    updateScoreInDatabase,
+    handleGameEnd,
   ]);
 
-  const handleGameEnd = useCallback(
-    async (
-      finalScore?: number,
-      finalCorrectAnswers?: number,
-      isGameComplete = false
-    ) => {
-      if (!isQuizActive) return;
+  useEffect(() => {
+    if (initialLoadComplete && level) {
+      // Only reset when level actually changes after initial load
+      resetQuizState();
+      loadQuestions();
+    }
+  }, [level, initialLoadComplete, resetQuizState, loadQuestions]);
 
-      const startTime = gameStartTimeRef.current || gameStartTime;
-      const gameEndTime = Date.now();
+  // Add this new effect to track initial load
+  useEffect(() => {
+    if (!initialLoadComplete && !loading) {
+      setInitialLoadComplete(true);
+    }
+  }, [loading, initialLoadComplete]);
 
-      let calculatedTimeMs = 0;
+  useEffect(() => {
+    isMountedRef.current = true;
+    loadUserData();
 
-      if (startTime && startTime > 0 && gameInitializedRef.current) {
-        const rawTimeMs = gameEndTime - startTime;
-        const maxReasonableTime = 2 * 60 * 60 * 1000; // 2 hours in ms
-        const minReasonableTime = 1000; // 1 second minimum
+    // Only load questions if not already loaded
+    if (questions.length === 0) {
+      loadQuestions();
+    }
 
-        if (rawTimeMs >= minReasonableTime && rawTimeMs <= maxReasonableTime) {
-          calculatedTimeMs = rawTimeMs;
-        } else {
-          console.warn(
-            `⚠️ Time out of range: ${rawTimeMs}ms (${rawTimeMs / 1000}s)`
-          );
-          calculatedTimeMs =
-            rawTimeMs < minReasonableTime ? minReasonableTime : 0;
-        }
-      } else {
-        console.warn(`⚠️ Invalid start time or game not initialized`);
-      }
-
-      setTotalGameTimeMs(calculatedTimeMs);
-
-      setIsQuizActive(false);
+    return () => {
+      isMountedRef.current = false;
       cleanupQuiz();
+    };
+  }, [loadUserData, loadQuestions, cleanupQuiz]); // Add dependencies
 
-      // Calculate total accumulated score
-      let totalAccumulatedScore: number;
-      if (typeof finalScore === "number") {
-        totalAccumulatedScore = finalScore;
-      } else {
-        totalAccumulatedScore =
-          accumulatedScore === 0 ? quizScore : accumulatedScore;
+  useEffect(() => {
+    if (
+      !loading &&
+      questions.length > 0 &&
+      isQuizActive &&
+      !showExplanation &&
+      isScreenFocused &&
+      !isProcessing
+    ) {
+      // Add small delay to ensure state is settled
+      const timer = setTimeout(() => {
+        startTimer();
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [
+    currentQuestionIndex, // This is the key dependency
+    loading,
+    isQuizActive,
+    showExplanation,
+    isScreenFocused,
+    isProcessing,
+    startTimer,
+    // Remove questions.length and other complex dependencies
+  ]);
+
+  // Focus input when question changes
+  useEffect(() => {
+    if (!showExplanation && questions.length > 0 && isScreenFocused) {
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [
+    currentQuestionIndex,
+    showExplanation,
+    questions.length,
+    isScreenFocused,
+  ]);
+
+  const handleInputChange = useCallback(
+    (text: string) => {
+      if (!isQuizActive || showExplanation || !isScreenFocused || isProcessing)
+        return;
+
+      setUserAnswer(text);
+
+      // Clear existing timeout
+      if (submitTimeoutRef.current) {
+        clearTimeout(submitTimeoutRef.current);
       }
 
-      const gameCorrectAnswers = finalCorrectAnswers ?? correctAnswers;
+      // Auto-submit if answer is provided
+      if (text.trim() !== "" && AUTO_SUBMIT_DELAY === 0) {
+        const normalizedUserAnswer = text.trim().toLowerCase();
+        const normalizedCorrect = questions[currentQuestionIndex]?.correctAnswer
+          .trim()
+          .toLowerCase();
 
-      // Check if this is a new high score
-      const isNewHighScore = totalAccumulatedScore > currentHighScore;
-
-      try {
-        const isPassed =
-          isGameComplete &&
-          (finalCorrectAnswers === questions.length ||
-            gameCorrectAnswers === questions.length);
-
-        router.push({
-          pathname: "/user/results",
-          params: {
-            quizScore: totalAccumulatedScore.toString(),
-            correctAnswers: gameCorrectAnswers.toString(),
-            totalQuestions: questions.length.toString(),
-            currentLevel: currentLevel.toString(),
-            username: username || "player",
-            fullname: fullname || "Player",
-            avatar: avatar.toString(),
-            isPassed: isPassed.toString(),
-            isGameComplete: isGameComplete.toString(),
-            totalGameTime: calculatedTimeMs.toString(),
-            isNewHighScore: isNewHighScore.toString(), // Add this
-            highScore: Math.max(
-              totalAccumulatedScore,
-              currentHighScore
-            ).toString(), // Add this
-          },
-        });
-      } catch (error) {
-        router.push("/user/home");
+        if (normalizedUserAnswer === normalizedCorrect) {
+          handleSubmitAnswer(true);
+        }
       }
     },
     [
-      quizScore,
-      correctAnswers,
-      accumulatedScore,
-      currentLevel,
-      username,
-      fullname,
-      avatar,
       isQuizActive,
-      cleanupQuiz,
-      questions.length,
-      gameStartTime,
-      currentHighScore, // Add this dependency
+      showExplanation,
+      isScreenFocused,
+      isProcessing,
+      questions,
+      currentQuestionIndex,
+      handleSubmitAnswer,
     ]
   );
+
+  // Validate answer
+  const validateAnswer = (answer: string) => {
+    if (
+      !questions[currentQuestionIndex] ||
+      isProcessing ||
+      !isScreenFocused ||
+      showExplanation
+    )
+      return;
+
+    const normalizedUserAnswer = answer.trim().toLowerCase();
+    const normalizedCorrect = questions[currentQuestionIndex].correctAnswer
+      .trim()
+      .toLowerCase();
+
+    if (normalizedUserAnswer === normalizedCorrect) {
+      handleSubmitAnswer(true);
+    }
+  };
 
   const handleManualSubmit = useCallback(() => {
     if (!userAnswer.trim() || isProcessing || showExplanation) return;
@@ -1364,7 +1368,7 @@ export default function QuizScreen() {
       timerRef.current = null;
       timerAnimation.stopAnimation();
     }
-  }, [showExplanation]);
+  }, [showExplanation, timerAnimation]);
 
   // Handle back button
   useEffect(() => {
@@ -1387,7 +1391,7 @@ export default function QuizScreen() {
   useEffect(() => {
     // whenever we move to a new question, make sure it starts fully visible
     questionTransition.setValue(1);
-  }, [currentQuestionIndex]);
+  }, [currentQuestionIndex, questionTransition]);
 
   // Get timer color
   const getTimerColor = () => {

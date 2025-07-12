@@ -15,6 +15,26 @@ import {
 } from "react-native";
 import { auth, database } from "../../firebase/firebaseConfig";
 
+// Define the user data interface
+interface UserData {
+  fullName: string;
+  username: string;
+  phoneNumber: string;
+  email: string | string[];
+  avatar: number;
+  isnewuser: boolean;
+  streak: number;
+  lastCompletionDate: any;
+  highestCompletedLevelCompleted: number;
+  levelsScores: any[];
+  referrals: number;
+  totalPoints: number;
+  highScore: number;
+  photoURL?: string;
+  providerId?: string;
+  createdAt?: string;
+}
+
 // Avatar options
 const avatarOptions = [
   { id: 0, source: require("../../assets/avatars/avatar1.jpg") },
@@ -250,8 +270,8 @@ export default function RegisterScreen() {
         referralSuccess = await processReferral(referralCode.trim());
       }
 
-      // Create user data object
-      const userData = {
+      // Create user data object with proper typing
+      const userData: UserData = {
         fullName,
         username: username.toLowerCase(),
         phoneNumber,

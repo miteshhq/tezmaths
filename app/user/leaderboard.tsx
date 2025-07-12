@@ -14,23 +14,110 @@ import {
 import { database, auth } from "../../firebase/firebaseConfig";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+// Define interfaces for type safety
+interface FirebaseUser {
+  username?: string;
+  highScore?: number;
+  fullName?: string;
+  email?: string;
+}
+
+interface LeaderboardUser {
+  id: string;
+  username: string;
+  totalPoints: number;
+  fullName: string;
+  email: string;
+  rank: number;
+}
+
 // Mock data for when Firebase returns empty results
-const mockLeaderboardData = [
-  { id: "1", username: "QuizMaster01", totalPoints: 2500, rank: 1 },
-  { id: "2", username: "Brainiac", totalPoints: 2200, rank: 2 },
-  { id: "3", username: "SmartPlayer", totalPoints: 1950, rank: 3 },
-  { id: "4", username: "ThinkFast", totalPoints: 1700, rank: 4 },
-  { id: "5", username: "WiseOwl", totalPoints: 1500, rank: 5 },
-  { id: "6", username: "CleverCat", totalPoints: 1350, rank: 6 },
-  { id: "7", username: "SharpMind", totalPoints: 1200, rank: 7 },
-  { id: "8", username: "QuickWit", totalPoints: 1100, rank: 8 },
-  { id: "9", username: "Genius99", totalPoints: 1000, rank: 9 },
-  { id: "10", username: "SmartCookie", totalPoints: 950, rank: 10 },
+const mockLeaderboardData: LeaderboardUser[] = [
+  {
+    id: "1",
+    username: "QuizMaster01",
+    totalPoints: 2500,
+    rank: 1,
+    fullName: "Quiz Master",
+    email: "",
+  },
+  {
+    id: "2",
+    username: "Brainiac",
+    totalPoints: 2200,
+    rank: 2,
+    fullName: "Brainiac",
+    email: "",
+  },
+  {
+    id: "3",
+    username: "SmartPlayer",
+    totalPoints: 1950,
+    rank: 3,
+    fullName: "Smart Player",
+    email: "",
+  },
+  {
+    id: "4",
+    username: "ThinkFast",
+    totalPoints: 1700,
+    rank: 4,
+    fullName: "Think Fast",
+    email: "",
+  },
+  {
+    id: "5",
+    username: "WiseOwl",
+    totalPoints: 1500,
+    rank: 5,
+    fullName: "Wise Owl",
+    email: "",
+  },
+  {
+    id: "6",
+    username: "CleverCat",
+    totalPoints: 1350,
+    rank: 6,
+    fullName: "Clever Cat",
+    email: "",
+  },
+  {
+    id: "7",
+    username: "SharpMind",
+    totalPoints: 1200,
+    rank: 7,
+    fullName: "Sharp Mind",
+    email: "",
+  },
+  {
+    id: "8",
+    username: "QuickWit",
+    totalPoints: 1100,
+    rank: 8,
+    fullName: "Quick Wit",
+    email: "",
+  },
+  {
+    id: "9",
+    username: "Genius99",
+    totalPoints: 1000,
+    rank: 9,
+    fullName: "Genius",
+    email: "",
+  },
+  {
+    id: "10",
+    username: "SmartCookie",
+    totalPoints: 950,
+    rank: 10,
+    fullName: "Smart Cookie",
+    email: "",
+  },
 ];
 
 export default function LeaderboardScreen() {
   const currentUserId = auth.currentUser?.uid;
-  const [quizMasters, setQuizMasters] = useState([]);
+  const [quizMasters, setQuizMasters] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -45,14 +132,18 @@ export default function LeaderboardScreen() {
       const snapshot = await get(usersRef);
 
       if (snapshot.exists()) {
-        const users = Object.entries(snapshot.val())
-          .map(([id, user]) => ({
-            id,
-            username: user.username || "Unknown",
-            totalPoints: user.highScore ?? 0,
-            fullName: user.fullName || "Unknown",
-            email: user.email || "",
-          }))
+        const firebaseData = snapshot.val() as Record<string, FirebaseUser>;
+        const users = Object.entries(firebaseData)
+          .map(
+            ([id, user]): LeaderboardUser => ({
+              id,
+              username: user.username || "Unknown",
+              totalPoints: user.highScore ?? 0,
+              fullName: user.fullName || "Unknown",
+              email: user.email || "",
+              rank: 0, // Will be set after sorting
+            })
+          )
           .filter(
             (user) =>
               user.email !== "tezmaths@admin.com" &&
@@ -121,14 +212,20 @@ export default function LeaderboardScreen() {
   }, [currentUserId]);
 
   // Also update the renderQuizMaster to better handle the separator:
-  const renderQuizMaster = ({ item, index }) => {
+  const renderQuizMaster = ({
+    item,
+    index,
+  }: {
+    item: LeaderboardUser;
+    index: number;
+  }) => {
     const isCurrentUser = item.id === currentUserId;
     const isAfterTop10 = item.rank > 10;
     const showSeparator =
       isAfterTop10 && quizMasters.findIndex((user) => user.rank > 10) === index;
 
     // Get medal icon for top 3
-    const getMedalIcon = (rank) => {
+    const getMedalIcon = (rank: number) => {
       switch (rank) {
         case 1:
           return <FontAwesome name="trophy" size={20} color="#FFD700" />;
