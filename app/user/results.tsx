@@ -3,7 +3,6 @@ import React, { useState, useRef, useCallback, useEffect } from "react";
 import {
   Alert,
   Image,
-  Share,
   Text,
   TouchableOpacity,
   View,
@@ -13,12 +12,15 @@ import {
   ActivityIndicator,
 } from "react-native";
 import ViewShot from "react-native-view-shot";
+import Share from 'react-native-share';
 import * as Sharing from "expo-sharing"; // Add this import
 import * as FileSystem from "expo-file-system"; // Add this import
 import SoundManager from "../../components/soundManager";
 // Import logo as a module declaration instead of direct import
 const logo = require("../../assets/branding/tezmaths-full-logo.png");
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import {generateShareUrl} from '../../utils/generateUrl'
+
 
 const shareConfig = {
   additionalText:
@@ -182,38 +184,91 @@ export default function ResultsScreen() {
 
     return shareMessage;
   };
-
-  const shareImageOnly = async () => {
-    setIsSharing(true);
-    try {
-      const newUri = await captureImage();
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(newUri);
-      } else {
-        await Share.share({ url: newUri });
-      }
-    } catch (error) {
-      console.error("Error sharing image:", error);
-      Alert.alert("Error", "Couldn't share image. Please try again.");
-    } finally {
-      setIsSharing(false);
-      setPopupVisible(false);
+  const avatarImages = (avatar: string) => {
+    switch (avatar) {
+      case "0":
+        return require("../../assets/avatars/avatar1.jpg");
+      case "1":
+        return require("../../assets/avatars/avatar2.jpg");
+      case "2":
+        return require("../../assets/avatars/avatar3.jpg");
+      case "3":
+        return require("../../assets/avatars/avatar4.jpg");
+      case "4":
+        return require("../../assets/avatars/avatar5.jpg");
+      case "5":
+        return require("../../assets/avatars/avatar6.jpg");
+      default:
+        return require("../../assets/avatars/avatar1.jpg");
     }
   };
+  const generateShareUrl = () => {
+  return 'https://tezmaths.app/result?username=aryan';
+};
 
-  // Share only the text
-  const shareTextOnly = async () => {
-    setIsSharing(true);
-    try {
-      const shareMessage = getShareMessage();
-      await Share.share({ message: shareMessage });
-    } catch (error) {
-      console.error("Error sharing text:", error);
-    } finally {
-      setIsSharing(false);
-      setPopupVisible(false);
-    }
-  };
+
+  
+  // const ShareComponent: React.FC = () => {
+ const shareImageAndText = async () => {
+  setIsSharing(true);
+  try {
+    // Capture the image from ViewShot
+    if (!viewShotRef.current) throw new Error("ViewShot ref not available");
+    const uri = await viewShotRef.current.capture();
+
+    // Save image to file system
+    const timestamp = Date.now();
+    const newUri = `${FileSystem.documentDirectory}tezmaths_result_${timestamp}.jpg`;
+    await FileSystem.copyAsync({ from: uri, to: newUri });
+
+    const shareOptions = {
+      title: "Check this out!",
+      message: getShareMessage(),
+      url: newUri, // ✅ Share the captured image URI
+      type: "image/jpeg",
+    };
+
+    await Share.open(shareOptions);
+  } catch (error: any) {
+    Alert.alert("Sharing failed", error.message || "Something went wrong.");
+    console.error("Share error:", error);
+  } finally {
+    setIsSharing(false);
+    setPopupVisible(false);
+  }
+};
+
+  // const shareImageOnly = async () => {
+  //   setIsSharing(true);
+  //   try {
+  //     const newUri = await captureImage();
+  //     if (await Sharing.isAvailableAsync()) {
+  //       await Sharing.shareAsync(newUri);
+  //     } else {
+  //       await Share.share({ url: newUri });
+  //     }
+  //   } catch (error) {
+  //     console.error("Error sharing image:", error);
+  //     Alert.alert("Error", "Couldn't share image. Please try again.");
+  //   } finally {
+  //     setIsSharing(false);
+  //     setPopupVisible(false);
+  //   }
+  // };
+
+  // // Share only the text
+  // const shareTextOnly = async () => {
+  //   setIsSharing(true);
+  //   try {
+  //     const shareMessage = getShareMessage();
+  //     await Share.share({ message: shareMessage });
+  //   } catch (error) {
+  //     console.error("Error sharing text:", error);
+  //   } finally {
+  //     setIsSharing(false);
+  //     setPopupVisible(false);
+  //   }
+  // };
 
   const captureImage = async () => {
     // Add null check for viewShotRef
@@ -234,24 +289,7 @@ export default function ResultsScreen() {
     setPopupVisible(true);
   };
 
-  const avatarImages = (avatar: string) => {
-    switch (avatar) {
-      case "0":
-        return require("../../assets/avatars/avatar1.jpg");
-      case "1":
-        return require("../../assets/avatars/avatar2.jpg");
-      case "2":
-        return require("../../assets/avatars/avatar3.jpg");
-      case "3":
-        return require("../../assets/avatars/avatar4.jpg");
-      case "4":
-        return require("../../assets/avatars/avatar5.jpg");
-      case "5":
-        return require("../../assets/avatars/avatar6.jpg");
-      default:
-        return require("../../assets/avatars/avatar1.jpg");
-    }
-  };
+  
 
   return (
     <ScrollView
@@ -383,22 +421,13 @@ export default function ResultsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Share Your Results</Text>
-
             <TouchableOpacity
-              style={styles.optionButton}
-              onPress={shareImageOnly}
-              disabled={isSharing}
-            >
-              <Text style={styles.optionText}>Share Image</Text>
+            style= {styles.optionButton}
+            onPress={shareImageAndText}
+            disabled= {isSharing}>
+              <Text style= {styles.optionText}>Share Link</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.optionButton}
-              onPress={shareTextOnly}
-              disabled={isSharing}
-            >
-              <Text style={styles.optionText}>Share Text</Text>
-            </TouchableOpacity>
+            
 
             <TouchableOpacity
               style={styles.cancelButton}

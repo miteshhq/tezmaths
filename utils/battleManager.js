@@ -96,7 +96,7 @@ export class BattleManager {
         throw new Error("Failed to generate unique room code");
     }
 
-    async createRoom(roomName, maxPlayers = 4) {
+    async createRoom(roomName, maxPlayers = 2) {
         try {
             if (!roomName || typeof roomName !== 'string') {
                 throw new Error("Room name is required and must be a string");
@@ -229,77 +229,85 @@ export class BattleManager {
         }
     }
 
-    async findRandomMatch() {
-        try {
-            const user = await this.waitForAuth();
-            const userId = user.uid;
+  async findRandomMatch(maxPlayers = 2) {
+  try {
+    const user = await this.waitForAuth();
+    const userId = user.uid;
 
-            const roomsSnapshot = await get(ref(database, "rooms"));
-            const rooms = roomsSnapshot.val() || {};
+    const roomsSnapshot = await get(ref(database, "rooms"));
+    const rooms = roomsSnapshot.val() || {};
 
-            // Current timestamp
-            const now = Date.now();
-            const halfMinutesAgo = now - (30 * 1000);
+    const now = Date.now();
+    const halfMinuteAgo = now - 30 * 1000;
 
-            const availableRooms = Object.entries(rooms).filter(([roomId, room]) => {
-                // Check if room meets basic criteria
-                const isMatchmakingRoom = room.matchmakingRoom;
-                const isWaiting = room.status === "waiting";
-                const hasSpace = Object.keys(room.players || {}).length < room.maxPlayers;
+  const availableRooms = Object.entries(rooms).filter(([roomId, room]) => {
+  // 🧹 Clean up disconnected players (ghosts)
+  if (room.players) {
+    Object.entries(room.players).forEach(([playerId, player]) => {
+      if (!player.connected) {
+        delete room.players[playerId];
+      }
+    });
+  }
 
-                // Check if room is recent (created within last 2 minutes)
-                const lastActivity = room.lastActivity || 0;
-                const isRecent = lastActivity > halfMinutesAgo;
+  const isMatchmakingRoom = room.matchmakingRoom === true;
+  const isWaiting = room.status === "waiting";
+  const hasSpace =
+    room.players &&
+    Object.keys(room.players).length < (room.maxPlayers || 2);
+  const isRecent = (room.lastActivity || 0) > halfMinuteAgo;
+  const matchesMaxPlayers = room.maxPlayers === maxPlayers;
 
-                // Additional check: ensure the room hasn't been abandoned
-                // (no activity for more than 2 minutes means it's stale)
-                const isActive = lastActivity > halfMinutesAgo;
+  return (
+    isMatchmakingRoom &&
+    isWaiting &&
+    hasSpace &&
+    isRecent &&
+    matchesMaxPlayers
+  );
+});
 
-                return isMatchmakingRoom && isWaiting && hasSpace && isRecent && isActive;
-            });
 
-            if (availableRooms.length > 0) {
-                // Sort by most recent activity first
-                availableRooms.sort(([, roomA], [, roomB]) =>
-                    (roomB.lastActivity || 0) - (roomA.lastActivity || 0)
-                );
+    if (availableRooms.length > 0) {
+      // Sort by most recent activity
+      availableRooms.sort(
+        ([, a], [, b]) => (b.lastActivity || 0) - (a.lastActivity || 0)
+      );
 
-                const [roomId, roomData] = availableRooms[0];
+      const [roomId, roomData] = availableRooms[0];
 
-                // Update lastActivity before joining
-                await update(ref(database, `rooms/${roomId}`), {
-                    lastActivity: now
-                });
+      // Mark activity before joining
+      await update(ref(database, `rooms/${roomId}`), {
+        lastActivity: now,
+      });
 
-                await this.joinRoom(roomData.code);
-                return {
-                    roomId,
-                    roomCode: roomData.code,
-                    isHost: false
-                };
-            }
+      await this.joinRoom(roomData.code);
 
-            // No available rooms found, create a new one
-            const roomName = `Quick Battle ${Date.now()}`;
-            const { roomId, roomCode } = await this.createRoom(roomName, 2);
+      return {
+        roomId,
+        roomCode: roomData.code,
+        isHost: false,
+      };
+    } else {
+      // No available room, create a new matchmaking room
+      const newRoom = await this.createRoom("Quick Battle", maxPlayers);
+      await update(ref(database, `rooms/${newRoom.roomId}`), {
+        matchmakingRoom: true,
+        lastActivity: now,
+      });
 
-            // Set up the room for matchmaking with current timestamp
-            await update(ref(database, `rooms/${roomId}`), {
-                matchmakingRoom: true,
-                lastActivity: now,
-                [`players/${userId}/ready`]: true
-            });
-
-            return {
-                roomId,
-                roomCode,
-                isHost: true
-            };
-        } catch (error) {
-            console.error("Random match error:", error);
-            throw new Error("Failed to find or create a match: " + error.message);
-        }
+      return {
+        ...newRoom,
+        isHost: true,
+      };
     }
+  } catch (error) {
+    console.error("Random match error:", error);
+    throw new Error("Failed to find or create match");
+  }
+}
+
+
 
 
     async cleanupMatchmakingRoom(roomId) {

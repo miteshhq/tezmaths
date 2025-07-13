@@ -514,32 +514,21 @@ export default function BattleResultsScreen() {
   //   }
   // };
 
-  const shareImageWithText = async () => {
-  setIsSharing(true);
-  try {
-    const newUri = await captureImage();
-    const shareMessage = getShareMessage();
+//  const ShareComponent: React.FC = () => {
+  const shareImageAndText = async () => {
+    try {
+      const shareOptions = {
+        title: 'Check this out!',
+        message: 'Here is an image and some text.',
+        url: 'file:///path-to-your-image.jpg', // Replace with actual file URI
+        type: 'image/jpeg',
+      };
 
-    if (Platform.OS === "android") {
-      await Share.share({
-        title: "TezMaths Battle Result",
-        message: `${shareMessage}\n\n[Image attached separately below if supported]`,
-        url: newUri, // Not all apps will show this image
-      });
-    } else if (Platform.OS === "ios") {
-      await Share.share({
-        url: newUri,
-        message: shareMessage,
-      });
+      await Share.share(shareOptions);
+    } catch (error: any) {
+      Alert.alert('Sharing failed', error.message);
     }
-  } catch (error) {
-    console.error("Error sharing image with text:", error);
-    Alert.alert("Error", "Sharing failed. Try again.");
-  } finally {
-    setIsSharing(false);
-    setPopupVisible(false);
-  }
-};
+  };
 
 
   // **FIXED: Always show results, never show loading indefinitely**
@@ -720,7 +709,7 @@ export default function BattleResultsScreen() {
 
              <TouchableOpacity
               style={styles.optionButton}
-              onPress={shareImageWithText}
+              onPress={shareImageAndText}
               disabled={isSharing}
             >
               <Text style={styles.optionText}>Share image + Text</Text>

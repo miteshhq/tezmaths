@@ -2,7 +2,7 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { get, ref } from "firebase/database";
-import React, { useCallback, useState, useRef } from "react";
+import React, { useCallback, useState, useRef, useEffect } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -163,22 +163,22 @@ export default function LevelSelect() {
     }
   }, [loadAvailableLevels]);
 
-  // 1. Back handler useFocusEffect
-  useFocusEffect(
-    useCallback(() => {
-      const onBackPress = () => {
-        // Stop sound before going back
-        SoundManager.stopSound("levelSoundEffect").catch(console.error);
-        router.push("/user/home");
-        return true;
-      };
-      const backHandler = BackHandler.addEventListener(
-        "hardwareBackPress",
-        onBackPress
-      );
-      return () => backHandler.remove();
-    }, [router])
-  );
+  // // 1. Back handler useFocusEffect
+  // useFocusEffect(
+  //   useCallback(() => {
+  //     const onBackPress = () => {
+  //       // Stop sound before going back
+  //       SoundManager.stopSound("levelSoundEffect").catch(console.error);
+  //       router.push("/user/home");
+  //       return true;
+  //     };
+  //     const backHandler = BackHandler.addEventListener(
+  //       "hardwareBackPress",
+  //       onBackPress
+  //     );
+  //     return () => backHandler.remove();
+  //   }, [router])
+  // );
 
   const isScreenActiveRef = useRef(true);
 
@@ -228,28 +228,56 @@ export default function LevelSelect() {
   const handleContinue = () => {
     handleLevelSelect(currentLevel);
   };
-
+   
   const handleBack = async () => {
-    try {
-      await SoundManager.nukeSounds(); // ⬅️ Ensure total stop
-      router.back();
-    } catch (error) {
-      //   // console.error("Error going back:", error);
-      router.back();
-    }
+  Alert.alert(
+    "Quit Game?",
+    "Are you sure you want to quit? Your progress will be lost.",
+    [
+      {
+        text: "Resume",
+        style: "cancel", // just closes the dialog
+      },
+      {
+        text: "Quit",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await SoundManager.nukeSounds(); // stop all game sounds
+            router.back(); // go back to previous screen
+          } catch (error) {
+            router.back(); // still try to go back on error
+          }
+        },
+      },
+    ],
+    { cancelable: true }
+  );
+};
+
+  useEffect(() => {
+  const onBackPress = () => {
+    handleBack();
+    return true; // prevent default behavior
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView className="flex-1 bg-white">
-        <StatusBar barStyle="light-content" backgroundColor="#fff" />
-        <View className="flex-1 justify-center items-center">
-          <ActivityIndicator size="large" color="#FF6B35" />
-          <Text className="text-gray-600 mt-4">Loading levels...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+  return () => sub.remove();
+}, []);
+
+
+
+  // if (loading) {
+  //   return (
+  //     <SafeAreaView className="flex-1 bg-white">
+  //       <StatusBar barStyle="light-content" backgroundColor="#fff" />
+  //       <View className="flex-1 justify-center items-center">
+  //         <ActivityIndicator size="large" color="#FF6B35" />
+  //         <Text className="text-gray-600 mt-4">Loading levels...</Text>
+  //       </View>
+  //     </SafeAreaView>
+  //   );
+  // }
 
   return (
     <SafeAreaView className="flex-1 bg-white">

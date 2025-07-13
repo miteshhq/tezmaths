@@ -377,7 +377,10 @@ export default function BattleRoom() {
             return;
           }
 
-          setRoom(roomData);
+          if (JSON.stringify(roomData) !== JSON.stringify(room)) {
+  setRoom(roomData);
+}
+
           setLoading(false);
 
           // Enhanced navigation to battle screen

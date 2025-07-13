@@ -14,7 +14,14 @@
             "googleServicesFile": "./GoogleService-Info.plist",
             "buildNumber": "2"
         },
+         "googleSignIn": {
+    "androidClientId": "YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com",
+    "iosClientId": "YOUR_IOS_CLIENT_ID.apps.googleusercontent.com",
+    "expoClientId": "YOUR_EXPO_GO_CLIENT_ID.apps.googleusercontent.com",
+    "webClientId": "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com"
+  },
         "android": {
+            "jsEngine": "jsc",
             "adaptiveIcon": {
                 "foregroundImage": "./assets/branding/main-logo.png",
                 "backgroundColor": "#ffffff"

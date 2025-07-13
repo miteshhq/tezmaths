@@ -21,6 +21,7 @@ import {
   ScrollView,
   ActivityIndicator,
   StyleSheet,
+  
 } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import SoundManager from "../../components/soundManager";
@@ -1413,6 +1414,7 @@ useEffect(()=>{
     }
   }, [showExplanation, timerAnimation]);
 
+ 
   // Handle back button
   useEffect(() => {
     const backAction = () => {

@@ -16,5 +16,5 @@
         "expo-env.d.ts",
         "nativewind-env.d.ts",
         "utils/useGoogleSignIn.js"
-    ]
+, "utils/generateUrl.js"    ]
 }
