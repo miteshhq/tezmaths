@@ -19,7 +19,10 @@ import { auth, database } from "../../firebase/firebaseConfig";
 import { battleManager } from "../../utils/battleManager";
 import SoundManager from "../../components/soundManager";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Audio } from "expo-av";
 
+
+ 
 const DEBUG_MODE = false;
 
 // Type definitions
@@ -56,6 +59,11 @@ interface RoomData {
   consecutiveWinThreshold?: number;
   maxConsecutiveTarget?: number;
 }
+
+
+
+
+
 
 const avatarImages = (avatar: number | string) => {
   const avatarNumber =
@@ -171,12 +179,7 @@ export default function BattleScreen() {
   const battleStartTimeRef = useRef<number>(0);
   const isFirstQuestionRef = useRef(true);
 
-  useEffect(() => {
-    return () => {
-      SoundManager.stopSound("rightAnswerSoundEffect").catch(() => {});
-      SoundManager.stopSound("wrongAnswerSoundEffect").catch(() => {});
-    };
-  }, []);
+  
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -563,8 +566,7 @@ export default function BattleScreen() {
 
       if (isFirstCorrect) {
         setFeedback(
-          `✅ Correct! ${
-            isFirstCorrect ? "You got it first! " : ""
+          `✅ Correct! ${isFirstCorrect ? "You got it first! " : ""
           }+${pointsEarned} points`
         );
       } else {
@@ -756,9 +758,8 @@ export default function BattleScreen() {
               }
               strokeWidth={8}
               color="#F97316"
-              text={`${roomData?.currentQuestion + 1}/${
-                roomData?.totalQuestions
-              }`}
+              text={`${roomData?.currentQuestion + 1}/${roomData?.totalQuestions
+                }`}
             />
             <View className="flex-1 ml-4">
               <View className="flex-row justify-between mb-1">
@@ -799,9 +800,8 @@ export default function BattleScreen() {
             />
             {feedback && (
               <Text
-                className={`text-center mt-2 ${
-                  feedback.includes("✅") ? "text-green-500" : "text-red-500"
-                }`}
+                className={`text-center mt-2 ${feedback.includes("✅") ? "text-green-500" : "text-red-500"
+                  }`}
               >
                 {feedback}
               </Text>
@@ -832,7 +832,7 @@ export default function BattleScreen() {
           {roomData?.players?.[userId!]?.consecutiveCorrect &&
             roomData?.players?.[userId!]?.consecutiveCorrect! > 0 &&
             roomData.totalQuestions - roomData.currentQuestion >
-              (roomData.consecutiveWinThreshold || 0) &&
+            (roomData.consecutiveWinThreshold || 0) &&
             !roomData?.currentWinner && (
               <Text className="text-blue-500 text-center mt-2 font-bold">
                 🔥 {roomData.players[userId!].consecutiveCorrect} correct in a

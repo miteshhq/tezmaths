@@ -11,6 +11,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   BackHandler,
+  Platform
 } from "react-native";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
 import ViewShot, { captureRef } from "react-native-view-shot";
@@ -481,37 +482,65 @@ export default function BattleResultsScreen() {
     }
   };
 
-  const shareImageOnly = async () => {
-    setIsSharing(true);
-    try {
-      const newUri = await captureImage();
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(newUri);
-      } else {
-        await Share.share({ url: newUri });
-      }
-    } catch (error) {
-      console.error("Error sharing image:", error);
-      Alert.alert("Error", "Couldn't share image. Please try again.");
-    } finally {
-      setIsSharing(false);
-      setPopupVisible(false);
-    }
-  };
+  // const shareImageOnly = async () => {
+  //   setIsSharing(true);
+  //   try {
+  //     const newUri = await captureImage();
+  //     if (await Sharing.isAvailableAsync()) {
+  //       await Sharing.shareAsync(newUri);
+  //     } else {
+  //       await Share.share({ url: newUri });
+  //     }
+  //   } catch (error) {
+  //     console.error("Error sharing image:", error);
+  //     Alert.alert("Error", "Couldn't share image. Please try again.");
+  //   } finally {
+  //     setIsSharing(false);
+  //     setPopupVisible(false);
+  //   }
+  // };
 
-  const shareTextOnly = async () => {
-    setIsSharing(true);
-    try {
-      const shareMessage = getShareMessage();
-      await Share.share({ message: shareMessage });
-    } catch (error) {
-      console.error("Error sharing text:", error);
-      Alert.alert("Error", "Couldn't share text. Please try again.");
-    } finally {
-      setIsSharing(false);
-      setPopupVisible(false);
+  // const shareTextOnly = async () => {
+  //   setIsSharing(true);
+  //   try {
+  //     const shareMessage = getShareMessage();
+  //     await Share.share({ message: shareMessage });
+  //   } catch (error) {
+  //     console.error("Error sharing text:", error);
+  //     Alert.alert("Error", "Couldn't share text. Please try again.");
+  //   } finally {
+  //     setIsSharing(false);
+  //     setPopupVisible(false);
+  //   }
+  // };
+
+  const shareImageWithText = async () => {
+  setIsSharing(true);
+  try {
+    const newUri = await captureImage();
+    const shareMessage = getShareMessage();
+
+    if (Platform.OS === "android") {
+      await Share.share({
+        title: "TezMaths Battle Result",
+        message: `${shareMessage}\n\n[Image attached separately below if supported]`,
+        url: newUri, // Not all apps will show this image
+      });
+    } else if (Platform.OS === "ios") {
+      await Share.share({
+        url: newUri,
+        message: shareMessage,
+      });
     }
-  };
+  } catch (error) {
+    console.error("Error sharing image with text:", error);
+    Alert.alert("Error", "Sharing failed. Try again.");
+  } finally {
+    setIsSharing(false);
+    setPopupVisible(false);
+  }
+};
+
 
   // **FIXED: Always show results, never show loading indefinitely**
   if (!battleData.isValid) {
@@ -673,7 +702,7 @@ export default function BattleResultsScreen() {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Share Your Battle Results</Text>
 
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.optionButton}
               onPress={shareImageOnly}
               disabled={isSharing}
@@ -687,6 +716,14 @@ export default function BattleResultsScreen() {
               disabled={isSharing}
             >
               <Text style={styles.optionText}>Share Text</Text>
+            </TouchableOpacity> */}
+
+             <TouchableOpacity
+              style={styles.optionButton}
+              onPress={shareImageWithText}
+              disabled={isSharing}
+            >
+              <Text style={styles.optionText}>Share image + Text</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

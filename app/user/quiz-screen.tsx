@@ -19,11 +19,15 @@ import {
   TouchableOpacity,
   View,
   ScrollView,
+  ActivityIndicator,
+  StyleSheet,
 } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import SoundManager from "../../components/soundManager";
+
 import { auth, database } from "../../firebase/firebaseConfig";
 import { updateUserStreak } from "../../utils/streakManager";
+import { reload } from "firebase/auth";
 
 // Configuration
 const QUIZ_TIME_LIMIT = 15;
@@ -120,7 +124,7 @@ export default function QuizScreen() {
   const [showExplanation, setShowExplanation] = useState(false);
   const [isAnswerWrong, setIsAnswerWrong] = useState(false);
   const [isTimeOut, setIsTimeOut] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [username, setUsername] = useState("");
   const [avatar, setAvatar] = useState(1);
   const [fullname, setFullname] = useState("");
@@ -130,9 +134,9 @@ export default function QuizScreen() {
   const [networkError, setNetworkError] = useState(false);
   const [isScreenFocused, setIsScreenFocused] = useState(true);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
-
+  const [quizReady, setQuizReady] = useState(false);
   const [currentHighScore, setCurrentHighScore] = useState(0);
-
+  const [inputReady, setInputReady] = useState(false);
   const [maxDisplayQuestions, setMaxDisplayQuestions] = useState(20);
 
   const [accumulatedScore, setAccumulatedScore] = useState(0);
@@ -160,6 +164,8 @@ export default function QuizScreen() {
   // Animated values
   const timerAnimation = useRef(new Animated.Value(1)).current;
   const questionTransition = useRef(new Animated.Value(1)).current;
+
+
 
   const loadHighScore = useCallback(async () => {
     try {
@@ -190,7 +196,7 @@ export default function QuizScreen() {
     questionTransition.stopAnimation();
 
     // Mark quiz as inactive
-    setIsQuizActive(false);
+    setIsQuizActive(true);
   }, [timerAnimation, questionTransition]);
 
   const clearAllQuizCache = useCallback(async () => {
@@ -220,197 +226,262 @@ export default function QuizScreen() {
     } catch (error) {
       // console.error("Error clearing level cache:", error);
     }
-  }, [currentLevel]);
+  }, [currentLevel]);  
+const resetQuizState = useCallback(() => {
+  if (!isMountedRef.current) return;
 
-  const resetQuizState = useCallback(() => {
-    if (!isMountedRef.current) return;
+  console.log(`🔄 Resetting quiz state for level ${currentLevel}`);
+  cleanupQuiz();
 
-    console.log(`🔄 Resetting quiz state for level ${currentLevel}`);
+  setCurrentQuestionIndex(0);
+  setUserAnswer("");
+  setQuizScore(0);
+  setCorrectAnswers(0);
+  setShowExplanation(false);
+  setIsAnswerWrong(false);
+  setIsTimeOut(false);
+  setTimeLeft(QUIZ_TIME_LIMIT);
+  setIsProcessing(false);
+  setIsQuizActive(false);
+  setLoading(true);
+  setNetworkError(false);
+  setIsLevelComplete(false);
+  setLevelPointsEarned(0);
+  setQuestions([]);
+  setMaxDisplayQuestions(20);
+  timerAnimation.setValue(1);
+  questionTransition.setValue(1);
+  inputRef.current?.blur();
+  setInputReady(false);
 
-    // Stop all timers first
-    cleanupQuiz();
+  if (params.isSelectedLevel === "true") {
+    setAccumulatedScore(0);
+    console.log("🆕 Fresh start - Reset accumulated score to 0");
+   
+  }
+}, [cleanupQuiz, currentLevel, params.isSelectedLevel])
 
-    // Reset all quiz-related state
-    setCurrentQuestionIndex(0);
-    setUserAnswer("");
-    setQuizScore(0);
-    setCorrectAnswers(0);
-    setShowExplanation(false);
-    setIsAnswerWrong(false);
-    setIsTimeOut(false);
-    setTimeLeft(QUIZ_TIME_LIMIT);
-    setIsProcessing(false);
-    setIsQuizActive(true);
-    setLoading(true);
-    setNetworkError(false);
-    setIsLevelComplete(false);
-    setLevelPointsEarned(0);
-    setMaxDisplayQuestions(20);
+useEffect(() => {
+  const status = {
+    editable: questions.length > 0 &&
+      isQuizActive &&
+      !showExplanation &&
+      !isProcessing &&
+      isScreenFocused,
+    questions: questions.length,
+    isQuizActive,
+    showExplanation,
+    isProcessing,
+    isScreenFocused,
+  };
+  console.log("🧪 Input Editable State Check:", status);
+}, [
+  questions.length,
+  isQuizActive,
+  showExplanation,
+  isProcessing,
+  isScreenFocused,
+]);
 
-    // Reset questions array
-    setQuestions([]);
-
-    // Reset accumulated score ONLY if this is a selected level (fresh start)
-    if (params.isSelectedLevel === "true") {
-      setAccumulatedScore(0);
-      console.log("🆕 Fresh start - Reset accumulated score to 0");
-    }
-
-    // Reset animation values
-    questionTransition.setValue(1);
-    timerAnimation.setValue(1);
-
-    // Clear input focus
-    if (inputRef.current) {
-      inputRef.current.blur();
-    }
-  }, [
-    cleanupQuiz,
-    questionTransition,
-    timerAnimation,
-    params.isSelectedLevel,
-    currentLevel,
-  ]);
 
   // 4. Enhanced loadQuestions function with better cache management
-  const loadQuestions = useCallback(async () => {
-    try {
-      console.log(`📚 Loading questions for level ${currentLevel}`);
-      setNetworkError(false);
-      setLoading(true);
-      setQuestions([]); // Clear existing questions first
+const loadQuestions = useCallback(async () => {
 
-      // Reset animation at the start of loading
-      questionTransition.setValue(1);
 
-      const cacheKey = `quiz-level-${currentLevel}-v2`; // Add version to cache key
+  try {
+    console.log(`📚 Loading questions for level ${currentLevel}`);
+    setLoading(true);
+    setNetworkError(false);
+    setQuestions([]);
+    setIsProcessing(false);
+    questionTransition.setValue(1);
+  //    SoundManager.playSoundWithFade("levelSoundEffect", {volume: 1,
+  // },);
 
-      // For selected levels, always clear cache and load fresh
-      if (params.isSelectedLevel === "true") {
-        await AsyncStorage.removeItem(cacheKey);
-        console.log(`🗑️ Cleared cache for selected level ${currentLevel}`);
-      }
+    const cacheKey = `quiz-level-${currentLevel}-v2`;
 
-      // Try to load from cache first (only if not selected level)
-      if (params.isSelectedLevel !== "true") {
-        try {
-          const cachedQuestions = await AsyncStorage.getItem(cacheKey);
-          if (cachedQuestions) {
-            const parsedQuestions = JSON.parse(cachedQuestions);
-            if (parsedQuestions && parsedQuestions.length > 0) {
-              console.log(
-                `💾 Loaded ${parsedQuestions.length} questions from cache for level ${currentLevel}`
-              );
-              setQuestions(parsedQuestions);
-              setMaxDisplayQuestions(parsedQuestions.length);
-              setLoading(false);
-              return;
-            }
-          }
-        } catch (cacheError) {
-          console.log("Cache error, loading from Firebase:", cacheError);
+    if (params.isSelectedLevel === "true") {
+      await AsyncStorage.removeItem(cacheKey);
+      console.log(`🗑️ Cleared cache for level ${currentLevel}`);
+      
+    } else {
+      const cached = await AsyncStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          console.log(`💾 Loaded ${parsed.length} from cache`);
+          setQuestions(parsed);
+          setMaxDisplayQuestions(parsed.length);
+          setIsQuizActive(true);
+          setQuizReady(true);
+          setInputReady(true);
+          
+          return;
         }
       }
-
-      // Load from Firebase
-      console.log(
-        `🔄 Loading questions from Firebase for level ${currentLevel}`
-      );
-      const quizzesRef = ref(database, "quizzes");
-      const snapshot = await get(quizzesRef);
-
-      if (!snapshot.exists()) {
-        throw new Error("No quizzes found in database");
-      }
-
-      let maxDisplayQuestions = 20; // Default value
-      const levelQuizzes = [];
-
-      // First pass: Find maxDisplayQuestions value and collect questions
-      snapshot.forEach((childSnapshot) => {
-        const quiz = childSnapshot.val();
-        if (quiz.level === currentLevel) {
-          if (quiz.maxDisplayQuestions) {
-            maxDisplayQuestions = Math.max(
-              1,
-              Number.parseInt(quiz.maxDisplayQuestions)
-            );
-          }
-
-          if (quiz.questions && Array.isArray(quiz.questions)) {
-            quiz.questions.forEach((q, index) => {
-              levelQuizzes.push({
-                id: q.id || `${childSnapshot.key}-${index}`,
-                questionText: q.questionText,
-                correctAnswer: q.correctAnswer.toString(),
-                explanation: q.explanation || "",
-                point: currentLevel,
-                timeLimit: QUIZ_TIME_LIMIT,
-              });
-            });
-          }
-        }
-      });
-
-      if (levelQuizzes.length === 0) {
-        throw new Error(`No questions found for level ${currentLevel}`);
-      }
-
-      console.log(
-        `📊 Found ${levelQuizzes.length} total questions for level ${currentLevel}`
-      );
-      console.log(`📊 Max display questions: ${maxDisplayQuestions}`);
-
-      // Apply maxDisplayQuestions with proper randomization
-      const questionCount = Math.min(maxDisplayQuestions, levelQuizzes.length);
-
-      // Fisher-Yates shuffle algorithm - FIXED
-      const shuffledQuestions = [...levelQuizzes];
-      for (let i = shuffledQuestions.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffledQuestions[i], shuffledQuestions[j]] = [
-          shuffledQuestions[j],
-          shuffledQuestions[i],
-        ];
-      }
-
-      const selectedQuestions = shuffledQuestions.slice(0, questionCount);
-
-      console.log(
-        `✅ Selected ${selectedQuestions.length} questions for level ${currentLevel}`
-      );
-
-      // Debug: Log first few questions
-      selectedQuestions.slice(0, 3).forEach((q, i) => {
-        console.log(`Q${i + 1}: ${q.questionText} = ${q.correctAnswer}`);
-      });
-
-      setQuestions(selectedQuestions);
-      setMaxDisplayQuestions(questionCount);
-
-      // Cache the questions with timestamp
-      const cacheData = {
-        questions: selectedQuestions,
-        timestamp: Date.now(),
-        level: currentLevel,
-      };
-      await AsyncStorage.setItem(cacheKey, JSON.stringify(selectedQuestions));
-    } catch (error) {
-      console.error("❌ Error loading questions:", error);
-      setNetworkError(true);
-      Alert.alert(
-        "Error Loading Questions",
-        `Failed to load questions for level ${currentLevel}. Please check your connection and try again.`,
-        [
-          { text: "Retry", onPress: loadQuestions },
-          { text: "Go Back", onPress: () => router.back() },
-        ]
-      );
-    } finally {
-      setLoading(false);
     }
-  }, [currentLevel, questionTransition, params.isSelectedLevel]);
 
+    const snapshot = await get(ref(database, "quizzes"));
+    if (!snapshot.exists()) throw new Error("No quizzes found");
+
+    let maxDisplay = 5;
+    const levelQuizzes = [];
+
+    snapshot.forEach((child) => {
+      const quiz = child.val();
+      if (quiz.level === currentLevel && Array.isArray(quiz.questions)) {
+        if (quiz.maxDisplayQuestions)
+          maxDisplay = Math.max(1, parseInt(quiz.maxDisplayQuestions));
+        quiz.questions.forEach((q, idx) => {
+          levelQuizzes.push({
+            id: q.id || `${child.key}-${idx}`,
+            questionText: q.questionText,
+            correctAnswer: q.correctAnswer.toString(),
+            explanation: q.explanation || "",
+            point: currentLevel,
+            timeLimit: QUIZ_TIME_LIMIT,
+          });
+        });
+      }
+    });
+
+    if (levelQuizzes.length === 0)
+      throw new Error(`No questions for level ${currentLevel}`);
+
+    const shuffled = levelQuizzes.sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, maxDisplay);
+
+    console.log(`✅ Selected ${selected.length} questions`);
+    await AsyncStorage.setItem(cacheKey, JSON.stringify(selected));
+
+    setQuestions(selected);
+    setMaxDisplayQuestions(selected.length);
+    setIsQuizActive(true);
+    setQuizReady(true);
+  } catch (err) {
+    console.error("❌ Failed loading questions:", err);
+    setNetworkError(true);
+    Alert.alert("Error", "Failed to load questions. Retry?", [
+      { text: "Retry", onPress: loadQuestions },
+      { text: "Back", onPress: () => router.back() },
+    ]);
+  } finally {
+    setLoading(false);
+  }
+}, [currentLevel, params.isSelectedLevel]);
+const handleQuizInit = useCallback(async () => {
+  console.log(`🎯 Focus effect triggered for level ${currentLevel}`);
+  setIsScreenFocused(true);
+
+  const startTime =
+    params.isSelectedLevel === "true" || !params.gameStartTime
+      ? Date.now()
+      : Number(params.gameStartTime);
+
+  console.log(
+    `${params.isSelectedLevel === "true" ? "🎮 NEW GAME" : "🔄 CONTINUING"} - ${new Date(startTime).toLocaleTimeString()}`
+  );
+
+  setGameStartTime(startTime);
+  gameStartTimeRef.current = startTime;
+  gameInitializedRef.current = true;
+
+  resetQuizState();
+  if (params.isSelectedLevel === "true") await clearAllQuizCache();
+  await loadQuestions();
+}, [
+  resetQuizState,
+  loadQuestions,
+  currentLevel,
+  params.isSelectedLevel,
+  params.gameStartTime,
+]);
+
+useFocusEffect(
+  useCallback(() => {
+    handleQuizInit();
+
+    return () => {
+      console.log(`🚪 Cleanup for level ${currentLevel}`);
+      setIsScreenFocused(true);
+      cleanupQuiz();
+    };
+  }, [handleQuizInit, currentLevel])
+);
+useFocusEffect(
+  useCallback(() => {
+    handleQuizInit();
+
+    return () => {
+      console.log(`🚪 Cleanup for level ${currentLevel}`);
+      setIsScreenFocused(false);
+      cleanupQuiz();
+    };
+  }, [handleQuizInit, currentLevel, cleanupQuiz])
+);
+ const startTimer = useCallback(() => {
+      if (!isQuizActive || !isScreenFocused || isProcessing || showExplanation) {
+        return;
+      }
+  
+      // Always clear existing timer first
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+  
+      setTimeLeft(QUIZ_TIME_LIMIT);
+      timerAnimation.setValue(1);
+  
+      Animated.timing(timerAnimation, {
+        toValue: 0,
+        duration: QUIZ_TIME_LIMIT * 1000,
+        easing: Easing.linear,
+        useNativeDriver: false,
+      }).start();
+  
+      timerRef.current = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            if (timerRef.current) {
+              clearInterval(timerRef.current);
+              timerRef.current = null;
+            }
+            // Only call handleTimeUp if not already showing explanation
+            if (!showExplanation) {
+              handleTimeUp();
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }, [isQuizActive, isScreenFocused, isProcessing, showExplanation]);
+  useEffect(() => {
+  if (
+    quizReady &&
+    !loading &&
+    questions.length > 0 &&
+    isQuizActive &&
+    !showExplanation &&
+    isScreenFocused &&
+    !isProcessing
+  ) {
+    console.log("🚀 Starting timer after quiz ready");
+    startTimer();
+
+    setQuizReady(false); // prevent re-runs
+  }
+}, [
+  quizReady,
+  loading,
+  questions,
+  isQuizActive,
+  showExplanation,
+  isScreenFocused,
+  isProcessing,
+  startTimer,
+]);
   useEffect(() => {
     // Only use accumulated score when coming from a previous level in same session
     const accScore =
@@ -437,7 +508,6 @@ export default function QuizScreen() {
     currentLevel,
     params.isSelectedLevel,
   ]);
-
   // Handle app state changes
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
@@ -569,6 +639,7 @@ export default function QuizScreen() {
         setUsername(data.username || "player");
         setFullname(data.fullName || "Player");
         setAvatar(data.avatar || 0);
+        SoundManager.playSoundWithFade("victorySoundEffect", {volume: 1})
       }
 
       // Also load high score
@@ -698,6 +769,7 @@ export default function QuizScreen() {
 
         // Check if next level exists
         const nextLevel = currentLevel + 1;
+        SoundManager.playSoundWithFade("clappingSoundEffect")
         const quizzesRef = ref(database, "quizzes");
         const quizSnapshot = await get(quizzesRef);
 
@@ -769,6 +841,7 @@ export default function QuizScreen() {
               isSelectedLevel: "false",
               accumulatedScore: newAccumulatedScore.toString(),
               gameStartTime: startTimeToPass.toString(),
+              reload: Date.now().toString(),
             },
           });
         } else {
@@ -897,25 +970,25 @@ export default function QuizScreen() {
 
   const handleSubmitAnswer = useCallback(
     async (isCorrect: boolean) => {
-      if (isProcessing || !isQuizActive || !isScreenFocused) return;
+      if (isProcessing || !isQuizActive || !isScreenFocused || currentQuestionIndex >= questions.length) return;
 
       const currentQ = questions[currentQuestionIndex];
+      await SoundManager.playSound("rightAnswerSoundEffect");
       if (!currentQ) return;
 
       console.log(
-        `🎯 Submitting answer for question ${currentQuestionIndex + 1}/${
-          questions.length
+        `🎯 Submitting answer for question ${currentQuestionIndex + 1}/${questions.length
         }`
       );
       console.log(`✅ Is correct: ${isCorrect}`);
 
       setIsProcessing(true);
-      stopTimer();
+      startTimer();
 
       const pointsPerQuestion = currentLevel;
 
       if (isCorrect) {
-        await SoundManager.playSound("rightAnswerSoundEffect");
+        
         await Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success
         );
@@ -936,8 +1009,7 @@ export default function QuizScreen() {
         // Check if this is the last question
         const isLastQuestion = currentQuestionIndex >= questions.length - 1;
         console.log(
-          `🏁 Is last question: ${isLastQuestion} (${
-            currentQuestionIndex + 1
+          `🏁 Is last question: ${isLastQuestion} (${currentQuestionIndex + 1
           }/${questions.length})`
         );
 
@@ -965,20 +1037,25 @@ export default function QuizScreen() {
               duration: 200,
               useNativeDriver: true,
             }).start(() => {
-              // Move to next question
-              setCurrentQuestionIndex((prev) => prev + 1);
-              setUserAnswer("");
-              setTimeLeft(QUIZ_TIME_LIMIT);
+              // ✅ Prevent index overflow
+              if (currentQuestionIndex < questions.length - 1) {
+                setCurrentQuestionIndex((prev) => prev + 1);
+                setUserAnswer("");
+                setTimeLeft(QUIZ_TIME_LIMIT);
 
-              // Reset animation
-              questionTransition.setValue(1);
+                // Reset animation
+                questionTransition.setValue(1);
 
-              // Focus input
-              setTimeout(() => {
-                inputRef.current?.focus();
-              }, 100);
+                // Focus input
+                setTimeout(() => {
+                  inputRef.current?.focus();
+                }, 100);
+              } else {
+                console.log("🚫 No more questions left. ");
+              }
             });
-          }, 500); // Small delay to show success
+          }, 500);
+          // Small delay to show success
         }
       } else {
         // Wrong answer - end game
@@ -1108,46 +1185,6 @@ export default function QuizScreen() {
     },
     [accumulatedScore, currentLevel, gameStartTime, updateHighScore]
   );
-
-  const startTimer = useCallback(() => {
-    if (!isQuizActive || !isScreenFocused || isProcessing || showExplanation) {
-      return;
-    }
-
-    // Always clear existing timer first
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
-    setTimeLeft(QUIZ_TIME_LIMIT);
-    timerAnimation.setValue(1);
-
-    Animated.timing(timerAnimation, {
-      toValue: 0,
-      duration: QUIZ_TIME_LIMIT * 1000,
-      easing: Easing.linear,
-      useNativeDriver: false,
-    }).start();
-
-    timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
-          }
-          // Only call handleTimeUp if not already showing explanation
-          if (!showExplanation) {
-            handleTimeUp();
-          }
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }, [isQuizActive, isScreenFocused, isProcessing, showExplanation]);
-
   const handleTimeUp = useCallback(async () => {
     if (!isQuizActive || isProcessing || !isScreenFocused || showExplanation)
       return;
@@ -1185,14 +1222,13 @@ export default function QuizScreen() {
     updateScoreInDatabase,
     handleGameEnd,
   ]);
-
   useEffect(() => {
     if (initialLoadComplete && level) {
       // Only reset when level actually changes after initial load
       resetQuizState();
       loadQuestions();
     }
-  }, [level, initialLoadComplete, resetQuizState, loadQuestions]);
+  }, [level, params.reload, initialLoadComplete, resetQuizState, loadQuestions]);
 
   // Add this new effect to track initial load
   useEffect(() => {
@@ -1200,6 +1236,8 @@ export default function QuizScreen() {
       setInitialLoadComplete(true);
     }
   }, [loading, initialLoadComplete]);
+
+ 
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -1217,35 +1255,34 @@ export default function QuizScreen() {
   }, [loadUserData, loadQuestions, cleanupQuiz]); // Add dependencies
 
   useEffect(() => {
-    if (
-      !loading &&
-      questions.length > 0 &&
-      isQuizActive &&
-      !showExplanation &&
-      isScreenFocused &&
-      !isProcessing
-    ) {
-      // Add small delay to ensure state is settled
-      const timer = setTimeout(() => {
-        startTimer();
-      }, 100);
-
-      return () => clearTimeout(timer);
-    }
-  }, [
-    currentQuestionIndex, // This is the key dependency
-    loading,
-    isQuizActive,
-    showExplanation,
-    isScreenFocused,
-    isProcessing,
-    startTimer,
-    // Remove questions.length and other complex dependencies
-  ]);
+  if (
+    quizReady &&
+    !loading &&
+    isQuizActive &&
+    isScreenFocused &&
+    questions.length > 0 &&
+    !showExplanation &&
+    !isProcessing
+  ) {
+    console.log("🚀 Starting timer after quiz ready");
+    startTimer();
+    inputRef.current?.focus(); // 🔥 Focus input
+    setQuizReady(false);
+  }
+}, [
+  quizReady,
+  loading,
+  isQuizActive,
+  isScreenFocused,
+  questions.length,
+  showExplanation,
+  isProcessing,
+  startTimer,
+]);
 
   // Focus input when question changes
   useEffect(() => {
-    if (!showExplanation && questions.length > 0 && isScreenFocused) {
+    if (!showExplanation && isScreenFocused && questions.length > 0) {
       const timer = setTimeout(() => {
         inputRef.current?.focus();
       }, 100);
@@ -1331,7 +1368,12 @@ export default function QuizScreen() {
     currentQuestionIndex,
     handleSubmitAnswer,
   ]);
+useEffect(()=>{
+  return()=>{
+    SoundManager.forceStopSound('levelSoundEffect');
 
+  }
+})
   // Handle quit quiz
   const handleQuitQuiz = () => {
     Alert.alert(
@@ -1343,6 +1385,7 @@ export default function QuizScreen() {
           text: "Quit",
           style: "destructive",
           onPress: () => {
+            SoundManager.forceStopSound('levelSoundEffect');
             cleanupQuiz();
             resetQuizState();
             router.push("/user/home");
@@ -1400,7 +1443,6 @@ export default function QuizScreen() {
     if (percentage > 0.3) return "#F59E0B";
     return "#EF4444";
   };
-
   // Render loading state
   if (loading) {
     return (
@@ -1416,7 +1458,6 @@ export default function QuizScreen() {
       </View>
     );
   }
-
   // Render network error
   if (networkError) {
     return (
@@ -1436,13 +1477,19 @@ export default function QuizScreen() {
       </View>
     );
   }
-
   const renderQuestion = () => {
     if (!questions[currentQuestionIndex]) {
       return <Text className="text-primary text-xl">Loading question...</Text>;
     }
 
     const question = questions[currentQuestionIndex];
+    const inputReady =
+  questions.length > 0 &&
+  isQuizActive &&
+  !showExplanation &&
+  !isProcessing &&
+  isScreenFocused;
+
 
     return (
       <Animated.View
@@ -1460,9 +1507,8 @@ export default function QuizScreen() {
         <View className="p-10">
           <TextInput
             ref={inputRef}
-            className={`bg-custom-gray p-4 rounded-xl text-xl text-center border ${
-              isAnswerWrong ? "border-red-500" : "border-gray-100"
-            } ${isProcessing ? "opacity-50" : ""}`}
+            className={`bg-custom-gray p-4 rounded-xl text-xl text-center border ${isAnswerWrong ? "border-red-500" : "border-gray-100"
+              } ${isProcessing ? "opacity-50" : ""}`}
             value={userAnswer}
             onChangeText={handleInputChange}
             onSubmitEditing={handleManualSubmit} // Add this line
@@ -1472,12 +1518,10 @@ export default function QuizScreen() {
             autoFocus={true}
             returnKeyType="done" // Add this line
             editable={
-              !showExplanation &&
-              !isProcessing &&
-              isQuizActive &&
-              isScreenFocused
+              inputReady
             }
           />
+          
         </View>
 
         {isProcessing && (
@@ -1486,8 +1530,7 @@ export default function QuizScreen() {
       </Animated.View>
     );
   };
-
-  // Render explanation
+ // Render explanation
   const renderExplanation = () => {
     if (!showExplanation || !questions[currentQuestionIndex]) return null;
 
@@ -1522,7 +1565,6 @@ export default function QuizScreen() {
       </View>
     );
   };
-
   return (
     <>
       {/* HEADER HERE */}
@@ -1609,3 +1651,4 @@ export default function QuizScreen() {
     </>
   );
 }
+

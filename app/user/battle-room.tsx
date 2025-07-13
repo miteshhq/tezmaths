@@ -34,9 +34,17 @@ interface Room {
   currentQuestion?: number;
 }
 
+
+
 export default function BattleRoom() {
   const router = useRouter();
   const { roomId, isHost } = useLocalSearchParams();
+  useEffect(() => {
+  if (!roomId) {
+    Alert.alert("Error", "Room not found.");
+    router.replace("/user/home");
+  }
+}, [roomId]);
 
   const [room, setRoom] = useState(null);
   const [loading, setLoading] = useState(true);

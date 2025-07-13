@@ -756,50 +756,38 @@ export default function HomeScreen() {
         </Modal>
 
         {/* Streak Popup Modal */}
-        <Modal visible={showStreakPopup} transparent animationType="fade">
-          <View className="flex-1 justify-center items-center bg-black/60">
-            <View className="bg-white rounded-2xl p-6 mx-8 items-center">
-              {streakPopupMessage ? (
-                // Streak completion popup
-                <>
-                  <Text className="text-4xl mb-4">🔥</Text>
-                  <Text className="text-2xl font-bold text-center mb-2 text-black">
-                    {streakPopupMessage}
-                  </Text>
-                  <Text className="text-gray-600 text-center mb-4">
-                    Keep it up! Come back tomorrow to maintain your streak.
-                  </Text>
-                  <TouchableOpacity
-                    className="bg-black rounded-full px-6 py-3"
-                    onPress={() => {
-                      setShowStreakPopup(false);
-                      setStreakPopupMessage(""); // Clear message
-                    }}
-                  >
-                    <Text className="text-white font-bold">Awesome!</Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                // Streak rules popup (when manually opened)
-                <>
-                  <Text className="text-3xl font-bold text-center mb-2">
-                    Streak Rules 🔥
-                  </Text>
-                  <Text className="text-black text-xl font-semibold text-center">
-                    If you don't play the quiz for two consecutive days, your
-                    streak will reset to 0.
-                  </Text>
-                  <TouchableOpacity
-                    className="bg-black rounded-full px-6 py-3 mt-4"
-                    onPress={() => setShowStreakPopup(false)}
-                  >
-                    <Text className="text-white font-bold">Got it!</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          </View>
-        </Modal>
+
+<Modal
+  visible={showExitDialog}
+  transparent
+  animationType="fade"
+  onRequestClose={handleResumeApp}
+>
+  <View className="flex-1 justify-center items-center bg-black/50">
+    <View className="bg-white rounded-2xl p-6 w-4/5">
+      <Text className="text-lg font-bold text-center mb-4">
+        Do you want to quit the app?
+      </Text>
+
+      <View className="flex-row justify-between gap-4 mt-4">
+        <TouchableOpacity
+          onPress={handleResumeApp}
+          className="flex-1 py-3 bg-gray-200 rounded-xl"
+        >
+          <Text className="text-center font-bold text-black">Resume</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={handleExitApp}
+          className="flex-1 py-3 bg-red-500 rounded-xl"
+        >
+          <Text className="text-center font-bold text-white">Quit</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </View>
+</Modal>
+
       </ScrollView>
     </View>
   );

@@ -1,6 +1,6 @@
 // app/user/leaderboard.tsx
 import { FontAwesome } from "@expo/vector-icons";
-import { get, limitToLast, orderByChild, query, ref } from "firebase/database";
+import { get, limitToLast, orderByChild, query, ref, update } from "firebase/database";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,

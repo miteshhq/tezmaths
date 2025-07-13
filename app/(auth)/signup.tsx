@@ -217,7 +217,7 @@ export default function SignUpScreen() {
   const navigateToLogin = useCallback(() => router.push("/login"), [router]);
 
   // Combine error messages from the hook and local state
-  const displayError = errorMessage;
+  const displayError = errorMessage || error;
 
   return (
     <SafeAreaView className="flex-1 bg-white">

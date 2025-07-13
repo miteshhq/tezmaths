@@ -16,6 +16,8 @@ import {
   BackHandler,
 } from "react-native";
 import { battleManager } from "../../utils/battleManager";
+import { Share } from "react-native";
+
 
 type Player = {
   name: string;
@@ -222,6 +224,7 @@ export default function MultiplayerModeSelection() {
   };
 
   const handleCreateRoom = async () => {
+    
     setCreatingRoom(true);
     try {
       const { roomId: newRoomId, roomCode: newRoomCode } =
@@ -229,6 +232,10 @@ export default function MultiplayerModeSelection() {
 
       setRoomCode(newRoomCode);
       setRoomId(newRoomId);
+      Clipboard.setStringAsync(newRoomCode);
+    Alert.alert("Copied", "Room code copied to clipboard!")
+      console.log("✅ Room created with code:", newRoomCode, "and id:", newRoomId);
+
 
       // Set the creator as ready by default for regular rooms
       await battleManager.toggleReady(newRoomId);
@@ -253,10 +260,20 @@ export default function MultiplayerModeSelection() {
     }
   };
 
-  const copyRoomCode = async () => {
-    await Clipboard.setStringAsync(roomCode);
-    Alert.alert("Copied!", "Room code copied to clipboard");
-  };
+//   const shareRoomDetails = async () => {
+    
+//   try {
+//     const message = `🎮 Join my TezMaths Battle Room!\n\n🆔 Room ID: ${newRoomId}\n🔑 Room Code: ${newRoomCode}\n\nOpen the app and enter the code to join. Let's battle it out! 🚀`;
+
+//     await Share.share({
+//       message,
+//     });
+//   } catch (error) {
+//     console.error("Failed to share room details:", error);
+//     Alert.alert("Error", "Could not share room details.");
+//   }
+// };
+
 
   const startBattleRoom = async () => {
     if (Object.keys(playersInRoom).length < 2) {
@@ -304,18 +321,23 @@ export default function MultiplayerModeSelection() {
   }, [roomId]);
 
   const handleRandomMatch = async () => {
-    setSearchingRandom(true);
-    try {
-      const { roomId, isHost } = await battleManager.findRandomMatch();
-      router.push(
-        `/user/battle-room?roomId=${roomId}&isHost=${isHost ? "true" : "false"}`
-      );
-    } catch (error) {
-      console.error("Random match error:", error);
-      setSearchingRandom(false);
-      Alert.alert("Matchmaking Failed", error.message);
-    }
-  };
+  setSearchingRandom(true);
+  try {
+    const { roomId, isHost } = await battleManager.findRandomMatch();
+
+    // Optional: wait briefly to ensure Firebase sets everything up
+    await new Promise((res) => setTimeout(res, 500));
+
+    router.push(
+      `/user/battle-room?roomId=${roomId}&isHost=${isHost ? "true" : "false"}`
+    );
+  } catch (error) {
+    console.error("Random match error:", error);
+    setSearchingRandom(false);
+    Alert.alert("Matchmaking Failed", error.message || "Room not found");
+  }
+};
+
 
   const cancelRandomSearch = useCallback(async () => {
     setSearchingRandom(false);
@@ -586,7 +608,10 @@ export default function MultiplayerModeSelection() {
                         <Text className="text-custom-purple font-bold">
                           Cancel
                         </Text>
+                        
                       </TouchableOpacity>
+                      
+                      
                     </View>
                   ) : (
                     <View className="flex flex-col gap-3">
@@ -624,11 +649,11 @@ export default function MultiplayerModeSelection() {
                       <View className="flex-row gap-2">
                         <TouchableOpacity
                           className="flex-1"
-                          onPress={copyRoomCode}
+                          onPress={handleCreateRoom}
                         >
                           <View className="py-3 bg-purple-200 rounded-lg">
                             <Text className="text-custom-purple font-bold text-center">
-                              Copy Code
+                              Share
                             </Text>
                           </View>
                         </TouchableOpacity>
@@ -662,9 +687,11 @@ export default function MultiplayerModeSelection() {
                         </Text>
                       </TouchableOpacity>
                     </View>
-                  )}
+                  )
+                  }
                 </View>
               )}
+              
             </View>
           </View>
         </View>
