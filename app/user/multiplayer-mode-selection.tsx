@@ -223,8 +223,18 @@ export default function MultiplayerModeSelection() {
     }
   };
 
+  const shareRoomDetails = async (roomId: string, roomCode: string) => {
+  try {
+    const message = `🎮 Join my TezMaths Battle Room!\n\n🆔 Room ID: ${roomId}\n🔑 Room Code: ${roomCode}\n\nOpen the app and enter the code to join. Let's battle it out! 🚀`;
+
+    await Share.share({ message });
+  } catch (error) {
+    console.error("Failed to share room details:", error);
+    Alert.alert("Error", "Could not share room details.");
+  }
+};
+
   const handleCreateRoom = async () => {
-    
     setCreatingRoom(true);
     try {
       const { roomId: newRoomId, roomCode: newRoomCode } =
@@ -232,12 +242,10 @@ export default function MultiplayerModeSelection() {
 
       setRoomCode(newRoomCode);
       setRoomId(newRoomId);
-      Clipboard.setStringAsync(newRoomCode);
-    Alert.alert("Copied", "Room code copied to clipboard!")
+
       console.log("✅ Room created with code:", newRoomCode, "and id:", newRoomId);
 
-
-      // Set the creator as ready by default for regular rooms
+      // Set the creator as ready by default
       await battleManager.toggleReady(newRoomId);
 
       roomListenerRef.current = battleManager.listenToRoom(
@@ -253,6 +261,10 @@ export default function MultiplayerModeSelection() {
           }
         }
       );
+
+      // ✅ Instead of copying to clipboard, share room details
+      await shareRoomDetails(newRoomId, newRoomCode);
+
     } catch (error) {
       Alert.alert("Error", error.message);
     } finally {
@@ -260,19 +272,8 @@ export default function MultiplayerModeSelection() {
     }
   };
 
-//   const shareRoomDetails = async () => {
-    
-//   try {
-//     const message = `🎮 Join my TezMaths Battle Room!\n\n🆔 Room ID: ${newRoomId}\n🔑 Room Code: ${newRoomCode}\n\nOpen the app and enter the code to join. Let's battle it out! 🚀`;
+  
 
-//     await Share.share({
-//       message,
-//     });
-//   } catch (error) {
-//     console.error("Failed to share room details:", error);
-//     Alert.alert("Error", "Could not share room details.");
-//   }
-// };
 
 
   const startBattleRoom = async () => {
@@ -321,22 +322,22 @@ export default function MultiplayerModeSelection() {
   }, [roomId]);
 
   const handleRandomMatch = async () => {
-  setSearchingRandom(true);
-  try {
-    const { roomId, isHost } = await battleManager.findRandomMatch();
+    setSearchingRandom(true);
+    try {
+      const { roomId, isHost } = await battleManager.findRandomMatch();
 
-    // Optional: wait briefly to ensure Firebase sets everything up
-    await new Promise((res) => setTimeout(res, 500));
+      // Optional: wait briefly to ensure Firebase sets everything up
+      await new Promise((res) => setTimeout(res, 500));
 
-    router.push(
-      `/user/battle-room?roomId=${roomId}&isHost=${isHost ? "true" : "false"}`
-    );
-  } catch (error) {
-    console.error("Random match error:", error);
-    setSearchingRandom(false);
-    Alert.alert("Matchmaking Failed", error.message || "Room not found");
-  }
-};
+      router.push(
+        `/user/battle-room?roomId=${roomId}&isHost=${isHost ? "true" : "false"}`
+      );
+    } catch (error) {
+      console.error("Random match error:", error);
+      setSearchingRandom(false);
+      Alert.alert("Matchmaking Failed", error.message || "Room not found");
+    }
+  };
 
 
   const cancelRandomSearch = useCallback(async () => {
@@ -605,13 +606,8 @@ export default function MultiplayerModeSelection() {
                         className="px-4 py-3 bg-gray-200 rounded-lg"
                         onPress={handleCancelCreateRoom}
                       >
-                        <Text className="text-custom-purple font-bold">
-                          Cancel
-                        </Text>
-                        
+                        <Text className="text-custom-purple font-bold">Cancel</Text>
                       </TouchableOpacity>
-                      
-                      
                     </View>
                   ) : (
                     <View className="flex flex-col gap-3">
@@ -623,8 +619,7 @@ export default function MultiplayerModeSelection() {
                           {roomCode}
                         </Text>
                         <Text className="text-center text-custom-purple text-xs mt-2">
-                          Players: {Object.keys(playersInRoom).length}/
-                          {MAX_PLAYERS}
+                          Players: {Object.keys(playersInRoom).length}/{MAX_PLAYERS}
                         </Text>
                       </View>
 
@@ -633,40 +628,27 @@ export default function MultiplayerModeSelection() {
                           <Text className="text-center text-custom-purple font-bold text-sm mb-2">
                             Players Joined:
                           </Text>
-                          {Object.entries(playersInRoom).map(
-                            ([playerId, player]) => (
-                              <Text
-                                key={playerId}
-                                className="text-center text-custom-purple text-sm"
-                              >
-                                • {player.name}
-                              </Text>
-                            )
-                          )}
+                          {Object.entries(playersInRoom).map(([playerId, player]) => (
+                            <Text
+                              key={playerId}
+                              className="text-center text-custom-purple text-sm"
+                            >
+                              • {player.name}
+                            </Text>
+                          ))}
                         </View>
                       )}
 
                       <View className="flex-row gap-2">
-                        <TouchableOpacity
-                          className="flex-1"
-                          onPress={handleCreateRoom}
-                        >
+                        <TouchableOpacity className="flex-1" onPress={() => shareRoomDetails(roomId, roomCode)}>
                           <View className="py-3 bg-purple-200 rounded-lg">
-                            <Text className="text-custom-purple font-bold text-center">
-                              Share
-                            </Text>
+                            <Text className="text-custom-purple font-bold text-center">Share</Text>
                           </View>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                          className="flex-1"
-                          onPress={startBattleRoom}
-                        >
+                        <TouchableOpacity className="flex-1" onPress={startBattleRoom}>
                           <ImageBackground
                             source={require("../../assets/gradient.jpg")}
-                            style={{
-                              borderRadius: 8,
-                              overflow: "hidden",
-                            }}
+                            style={{ borderRadius: 8, overflow: "hidden" }}
                             imageStyle={{ borderRadius: 12 }}
                           >
                             <View className="py-3">
@@ -682,16 +664,14 @@ export default function MultiplayerModeSelection() {
                         className="py-2 bg-light-orange rounded-lg"
                         onPress={cancelRoomCreation}
                       >
-                        <Text className="text-red-600 font-bold text-center">
-                          Cancel Room
-                        </Text>
+                        <Text className="text-red-600 font-bold text-center">Cancel Room</Text>
                       </TouchableOpacity>
                     </View>
-                  )
-                  }
+                  )}
+
                 </View>
               )}
-              
+
             </View>
           </View>
         </View>
