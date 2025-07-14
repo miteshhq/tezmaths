@@ -1,14 +1,26 @@
 import { useFocusEffect, useRouter, useSegments } from "expo-router";
+import React from "react";
+
 import { useCallback, useEffect, useRef } from "react";
 import {
   Alert,
   BackHandler,
   Dimensions,
-  StyleSheet
+  StyleSheet,
+  View,
 } from "react-native";
 import { auth } from "../../firebase/firebaseConfig";
+import {Tabs} from "expo-router"
+import { Ionicons } from "@expo/vector-icons";
 
 const tabRoutes = ["home", "learn", "leaderboard", "profile"];
+
+const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
+  home: "home-outline",
+  learn: "book-outline",
+  leaderboard: "trophy-outline",
+  profile: "person-outline",
+};
 const { width } = Dimensions.get("window");
 const ACTIVE_COLOR = "#F97316";
 
@@ -93,32 +105,74 @@ export default function TabsLayout() {
 
     return () => backHandler.remove();
   }, [segments, router]);
+return (
+<Tabs
+  screenOptions={{
+    headerShown: false,
+    tabBarActiveTintColor: ACTIVE_COLOR,
+    tabBarShowLabel: false,
+    tabBarItemStyle: styles.tabBarItem, // 👈 Add spacing here
+  }}
+>
+  {tabRoutes.map((name) => (
+    <Tabs.Screen
+      key={name}
+      name={name}
+      options={{
+        tabBarIcon: ({ color, size, focused }) => (
+          <View
+            style={[
+              styles.tabIconWrapper,
+              focused && styles.tabIconFocused,
+            ]}
+          >
+            <Ionicons
+              name={iconMap[name]}
+              size={focused ? size + 2 : size}
+              color={focused ? ACTIVE_COLOR : color}
+            />
+          </View>
+        ),
+      }}
+    />
+  ))}
+</Tabs>
 
-  return null; // Replace with your Tab Navigator if needed
+
+
+  );
+
+    
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#FFF2CC" },
-  header: {
-    height: 60,
-    backgroundColor: ACTIVE_COLOR,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-  },
-  headerText: {
-    fontFamily: "Poppins-Bold",
-    fontSize: 20,
-    color: "#000",
-  },
-  notificationIcon: { width: 24, height: 24, resizeMode: "contain" },
   tabBar: {
-    backgroundColor: "#fff",
-    borderColor: "#3b3b3b",
-    flexDirection: "row",
+    height: 70,
+    paddingBottom: 10,
+    paddingHorizontal: 12,
+    borderTopColor: "#ddd",
+    borderTopWidth: 1,
+    backgroundColor: "#ffffff",
+  },
+  tabBarItem: {
+    flex: 1,
+    marginHorizontal: 50, // spacing between items
+    justifyContent: "center",
     alignItems: "center",
-    height: 60,
-    paddingTop: 10,
+    
+  },
+  iconWrapper: {
+    padding: 10,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconFocused: {
+    backgroundColor: "#FFF7ED",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
   },
 });
