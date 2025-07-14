@@ -1,27 +1,24 @@
-import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
-import { useFocusEffect } from "@react-navigation/native";
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Image,
   ImageBackground,
+  Keyboard,
   ScrollView,
+  Share,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  Keyboard,
-  BackHandler,
 } from "react-native";
 import { battleManager } from "../../utils/battleManager";
-import { Share } from "react-native";
 
-import { fetchLast5BattleResults } from '../../utils/saveBattleResult'
-import BattleScoreBoard from "../../components/battlescoreBoard";
 import type { BattleEntry } from "../../components/battlescoreBoard";
-import { useBattleRoomCleanup } from "../../hooks/useBattleRoomCleanup";
+import BattleScoreBoard from "../../components/battlescoreBoard";
+import { fetchLast5BattleResults } from '../../utils/saveBattleResult';
 
 
 
@@ -93,8 +90,7 @@ const resetRoomStates = () => {
   setPlayersInRoom({});
 };
 
-// ✅ Use custom cleanup hook
-useBattleRoomCleanup(resetRoomStates, roomListenerRef);
+
 
 
   // Enhanced cleanup function
@@ -125,41 +121,41 @@ useBattleRoomCleanup(resetRoomStates, roomListenerRef);
   }, [roomId]);
 
   // MAIN RESET EFFECT - This runs every time screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      console.log("MultiplayerModeSelection screen focused - resetting states");
+  // useFocusEffect(
+  //   useCallback(() => {
+  //     console.log("MultiplayerModeSelection screen focused - resetting states");
 
-      // Reset all states immediately when screen comes into focus
-      resetAllStates();
+  //     // Reset all states immediately when screen comes into focus
+  //     resetAllStates();
 
-      // Perform cleanup of any ongoing operations
-      const cleanup = async () => {
-        try {
-          // Cancel any ongoing matchmaking
-          await battleManager.cancelMatchmaking();
+  //     // Perform cleanup of any ongoing operations
+  //     const cleanup = async () => {
+  //       try {
+  //         // Cancel any ongoing matchmaking
+  //         await battleManager.cancelMatchmaking();
 
-          // If there's any room listener, remove it
-          if (roomListenerRef.current) {
-            roomListenerRef.current();
-            roomListenerRef.current = null;
-          }
-        } catch (error) {
-          console.error("Initial cleanup error:", error);
-        }
-      };
+  //         // If there's any room listener, remove it
+  //         if (roomListenerRef.current) {
+  //           roomListenerRef.current();
+  //           roomListenerRef.current = null;
+  //         }
+  //       } catch (error) {
+  //         console.error("Initial cleanup error:", error);
+  //       }
+  //     };
 
-      cleanup();
+  //     cleanup();
 
-      // Dismiss keyboard if open
-      Keyboard.dismiss();
+  //     // Dismiss keyboard if open
+  //     Keyboard.dismiss();
 
-      // Return cleanup function for when screen loses focus
-      return () => {
-        console.log("MultiplayerModeSelection screen unfocused - cleaning up");
-        performCleanup();
-      };
-    }, [resetAllStates, performCleanup])
-  );
+  //     // Return cleanup function for when screen loses focus
+  //     return () => {
+  //       console.log("MultiplayerModeSelection screen unfocused - cleaning up");
+  //       performCleanup();
+  //     };
+  //   }, [resetAllStates, performCleanup])
+  // );
 
   // Handle hardware back button
   useEffect(() => {
@@ -265,48 +261,52 @@ useBattleRoomCleanup(resetRoomStates, roomListenerRef);
     }
   };
 
-  const handleCreateRoom = async () => {
-    setCreatingRoom(true);
-    try {
-      const { roomId: newRoomId, roomCode: newRoomCode } =
-        await battleManager.createRoom(roomName.trim(), MAX_PLAYERS);
+const handleCreateRoom = async () => {
+  // Cleanup any previous listener
+  if (roomListenerRef.current) {
+    roomListenerRef.current(); // unsubscribe
+    roomListenerRef.current = null;
+  }
 
-      setRoomCode(newRoomCode);
-      setRoomId(newRoomId);
+  setCreatingRoom(true);
+  try {
+    const { roomId: newRoomId, roomCode: newRoomCode } =
+      await battleManager.createRoom(roomName.trim(), MAX_PLAYERS);
 
-      console.log("✅ Room created with code:", newRoomCode, "and id:", newRoomId);
+    setRoomCode(newRoomCode);
+    setRoomId(newRoomId);
 
-      // Set the creator as ready by default
-      await battleManager.toggleReady(newRoomId);
+    console.log("✅ Room created with code:", newRoomCode, "and id:", newRoomId);
 
-      roomListenerRef.current = battleManager.listenToRoom(
-        newRoomId,
-        (roomData) => {
-          if (roomData && roomData.status !== "finished") {
-            setPlayersInRoom(roomData.players || {});
-            if (
-              Object.keys(roomData.players || {}).length >= roomData.maxPlayers
-            ) {
-              startBattleRoom();
-            }
+    // Mark the host as ready
+    await battleManager.toggleReady(newRoomId);
+
+    // Start listening to room updates
+    roomListenerRef.current = battleManager.listenToRoom(
+      newRoomId,
+      (roomData) => {
+        if (roomData && roomData.status !== "finished") {
+          setPlayersInRoom(roomData.players || {});
+
+          // Host starts the battle immediately
+          const isHost = roomData.hostId === auth.currentUser?.uid;
+
+          if (isHost && Object.keys(roomData.players || {}).length >= 1) {
+            startBattleRoom(); // trigger battle screen
           }
         }
-      );
+      }
+    );
 
-      // ✅ Instead of copying to clipboard, share room details
-      await shareRoomDetails(newRoomId, newRoomCode);
+    // Optional: Share room info
+    await shareRoomDetails(newRoomId, newRoomCode);
 
-    } catch (error) {
-      Alert.alert("Error", error.message);
-    } finally {
-      setCreatingRoom(false);
-    }
-  };
-
-
-
-
-
+  } catch (error) {
+    Alert.alert("Error", error.message);
+  } finally {
+    setCreatingRoom(false);
+  }
+};
   const startBattleRoom = async () => {
     if (Object.keys(playersInRoom).length < 2) {
       Alert.alert("Need More Players", "Wait for at least 2 players to join");
@@ -495,7 +495,7 @@ useBattleRoomCleanup(resetRoomStates, roomListenerRef);
               ) : (
                 <View className="flex flex-col items-center gap-3">
                   <ActivityIndicator size="large" color="#76184F" />
-                  <Text className="text-custom-purple font-bold">
+                  <Text className="text-black font-bold">
                     Searching for opponent...
                   </Text>
                   <TouchableOpacity
@@ -538,9 +538,9 @@ useBattleRoomCleanup(resetRoomStates, roomListenerRef);
               ) : (
                 <View className="w-full flex flex-col gap-3">
                   <TextInput
-                    className="border-2 border-custom-purple rounded-lg px-4 py-3 text-center text-lg font-bold text-custom-purple"
+                    className="border-2 border-custom-purple rounded-lg px-4 py-3 text-center text-lg font-bold text-black"
                     placeholder="Enter Quiz Code"
-                    placeholderTextColor="#76184F"
+                    placeholderTextColor="black"
                     value={quizCode}
                     onChangeText={setQuizCode}
                     maxLength={8}
@@ -627,9 +627,9 @@ useBattleRoomCleanup(resetRoomStates, roomListenerRef);
               ) : (
               <View className="w-full flex flex-col gap-3">
                 <TextInput
-                  className="border-2 border-custom-purple rounded-lg px-4 py-3 text-center text-lg text-custom-purple"
+                  className="border-2 border-custom-purple rounded-lg px-4 py-3 text-center text-lg text-black"
                   placeholder="Enter Room Name"
-                  placeholderTextColor="#76184F"
+                  placeholderTextColor="black"
                   value={roomName}
                   onChangeText={setRoomName}
                   maxLength={20}
@@ -674,13 +674,13 @@ useBattleRoomCleanup(resetRoomStates, roomListenerRef);
                 ) : (
                   <View className="flex flex-col gap-3">
                     <View className="bg-light-orange rounded-lg p-4">
-                      <Text className="text-center text-custom-purple font-bold text-sm">
+                      <Text className="text-center text-black font-bold text-sm">
                         Room Code
                       </Text>
-                      <Text className="text-center text-custom-purple font-black text-2xl">
+                      <Text className="text-center text-black font-black text-2xl">
                         {roomCode}
                       </Text>
-                      <Text className="text-center text-custom-purple text-xs mt-2">
+                      <Text className="text-center text-black text-xs mt-2">
                         Players: {Object.keys(playersInRoom).length}/{MAX_PLAYERS}
                       </Text>
                     </View>

@@ -1,25 +1,23 @@
-import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system"; // Add this import
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  ScrollView,
-  Modal,
-  StyleSheet,
-  ActivityIndicator,
 } from "react-native";
-import ViewShot from "react-native-view-shot";
 import Share from 'react-native-share';
-import * as Sharing from "expo-sharing"; // Add this import
-import * as FileSystem from "expo-file-system"; // Add this import
+import ViewShot from "react-native-view-shot";
 import SoundManager from "../../components/soundManager";
 // Import logo as a module declaration instead of direct import
 const logo = require("../../assets/branding/tezmaths-full-logo.png");
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import {generateShareUrl} from '../../utils/generateUrl'
 
 
 const shareConfig = {
@@ -425,7 +423,7 @@ export default function ResultsScreen() {
             style= {styles.optionButton}
             onPress={shareImageAndText}
             disabled= {isSharing}>
-              <Text style= {styles.optionText}>Share Link</Text>
+              <Text style= {styles.optionText}>Share Image + Link</Text>
             </TouchableOpacity>
             
 

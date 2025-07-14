@@ -1,57 +1,55 @@
-import { FontAwesome } from "@expo/vector-icons";
-import { Tabs, useRouter, useSegments, useFocusEffect } from "expo-router";
-import React, { useEffect, useRef, useCallback } from "react";
+import { useFocusEffect, useRouter, useSegments } from "expo-router";
+import { useCallback, useEffect, useRef } from "react";
 import {
-  Dimensions,
-  StyleSheet,
-  TouchableOpacity,
-  View,
+  Alert,
   BackHandler,
-  Pressable,
+  Dimensions,
+  StyleSheet
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../firebase/firebaseConfig";
 
+const tabRoutes = ["home", "learn", "leaderboard", "profile"];
 const { width } = Dimensions.get("window");
 const ACTIVE_COLOR = "#F97316";
 
 export default function TabsLayout() {
   const router = useRouter();
   const segments = useSegments();
-  const tabHistory = useRef(["home"]);
-  const isFirstMount = useRef(true);
 
   const user = auth.currentUser;
-  //   if (!user) {
-  //     router.replace("/login");
-  //     return null;
-  //   }
 
-  // Clear navigation stack when first entering tabs
+  const tabHistory = useRef<string[]>(["home"]);
+  const isFirstMount = useRef(true);
+
+  // Prevent infinite loop by only navigating to home if not already there
   useFocusEffect(
     useCallback(() => {
+      const currentRoute = segments[segments.length - 1];
+
       if (isFirstMount.current) {
         isFirstMount.current = false;
-        // Clear any previous navigation history to prevent going back to results
-        if (router.canGoBack()) {
-          router.dismissAll();
+
+        if (router.canGoBack?.()) {
+          router.dismissAll?.();
         }
-        // Ensure we start at home
-        router.replace("/user/home");
+
+        if (currentRoute !== "home") {
+          router.replace("/user/home");
+        }
       }
-    }, [router])
+    }, [segments, router])
   );
 
-  // Track tab navigation for proper back button behavior
+  // Track tab navigation history
   useEffect(() => {
     const currentRoute = segments[segments.length - 1];
-    const tabRoutes = ["home", "learn", "leaderboard", "profile"];
 
     if (tabRoutes.includes(currentRoute)) {
       const lastRoute = tabHistory.current[tabHistory.current.length - 1];
       if (currentRoute !== lastRoute) {
         tabHistory.current.push(currentRoute);
-        // Keep history manageable (max 10 entries)
+
+        // Keep history max length = 10
         if (tabHistory.current.length > 10) {
           tabHistory.current = tabHistory.current.slice(-10);
         }
@@ -59,31 +57,32 @@ export default function TabsLayout() {
     }
   }, [segments]);
 
-  // Handle back button with proper tab history
+  // Handle Android back button behavior
   useEffect(() => {
     const backAction = () => {
       const currentRoute = segments[segments.length - 1];
-      const tabRoutes = ["home", "learn", "leaderboard", "profile"];
 
       if (tabRoutes.includes(currentRoute)) {
-        // If we have tab history to go back to
-        if (tabHistory.current.length > 1) {
-          // Remove current route
-          tabHistory.current.pop();
-          // Get previous route
-          const previousRoute =
-            tabHistory.current[tabHistory.current.length - 1];
-          // Navigate to previous tab
-          router.push(`/user/${previousRoute}` as any);
-          return true;
-        } else {
-          // No history, exit app
-          BackHandler.exitApp();
+        if (currentRoute === "home" && tabHistory.current.length <= 1) {
+          Alert.alert("Exit App", "Are you sure you want to quit?", [
+            { text: "Cancel", style: "cancel" },
+            { text: "Quit", onPress: () => BackHandler.exitApp() },
+          ]);
           return true;
         }
+
+        if (tabHistory.current.length > 1) {
+          tabHistory.current.pop();
+          const previousRoute =
+            tabHistory.current[tabHistory.current.length - 1];
+
+          router.push(`/user/${previousRoute}` as any);
+          return true;
+        }
+
+        return false;
       }
 
-      // For non-tab screens, allow default back behavior
       return false;
     };
 
@@ -95,85 +94,7 @@ export default function TabsLayout() {
     return () => backHandler.remove();
   }, [segments, router]);
 
-  return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
-      <View style={styles.root}>
-        <Tabs
-          screenOptions={{
-            headerShown: false,
-            tabBarShowLabel: false,
-            tabBarActiveTintColor: ACTIVE_COLOR,
-            tabBarInactiveTintColor: "#aaaaaa",
-            tabBarStyle: styles.tabBar,
-            tabBarItemStyle: { width: "100%", height: "100%" },
-            tabBarButton: (props: any) => {
-              const { onPress, children, ...rest } = props;
-              return (
-                <Pressable
-                  android_ripple={{ color: "#F97316" }}
-                  onPress={onPress}
-                  {...rest}
-                >
-                  {children}
-                </Pressable>
-              );
-            },
-          }}
-          initialRouteName="home"
-        >
-          <Tabs.Screen name="battle-results" options={{ href: null }} />
-          <Tabs.Screen name="battle-room" options={{ href: null }} />
-          <Tabs.Screen name="battle-screen" options={{ href: null }} />
-          <Tabs.Screen name="matching-screen" options={{ href: null }} />
-          <Tabs.Screen
-            name="multiplayer-mode-selection"
-            options={{ href: null }}
-          />
-          <Tabs.Screen name="level-select" options={{ href: null }} />
-          <Tabs.Screen name="results" options={{ href: null }} />
-          <Tabs.Screen name="edit-profile" options={{ href: null }} />
-          <Tabs.Screen name="achievements" options={{ href: null }} />
-          <Tabs.Screen name="quiz-screen" options={{ href: null }} />
-          <Tabs.Screen
-            name="home"
-            options={{
-              title: "Home",
-              tabBarIcon: ({ color, size }) => (
-                <FontAwesome name="home" size={size} color={color} />
-              ),
-            }}
-          />
-          <Tabs.Screen
-            name="learn"
-            options={{
-              title: "Learn",
-              tabBarIcon: ({ color, size }) => (
-                <FontAwesome name="book" size={size} color={color} />
-              ),
-            }}
-          />
-          <Tabs.Screen
-            name="leaderboard"
-            options={{
-              title: "Leaderboard",
-              tabBarIcon: ({ color, size }) => (
-                <FontAwesome name="trophy" size={size} color={color} />
-              ),
-            }}
-          />
-          <Tabs.Screen
-            name="profile"
-            options={{
-              title: "Profile",
-              tabBarIcon: ({ color, size }) => (
-                <FontAwesome name="user" size={size} color={color} />
-              ),
-            }}
-          />
-        </Tabs>
-      </View>
-    </SafeAreaView>
-  );
+  return null; // Replace with your Tab Navigator if needed
 }
 
 const styles = StyleSheet.create({

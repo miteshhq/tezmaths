@@ -1,25 +1,24 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { onValue, ref } from "firebase/database";
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
   Image,
   ImageBackground,
   ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import Svg, { Circle } from "react-native-svg";
+import SoundManager from "../../components/soundManager";
 import { auth, database } from "../../firebase/firebaseConfig";
 import { battleManager } from "../../utils/battleManager";
-import SoundManager from "../../components/soundManager";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Audio } from "expo-av";
+
 
 
  
@@ -163,7 +162,6 @@ export default function BattleScreen() {
   const timerAnimation = useRef(new Animated.Value(1)).current;
   const userId = auth.currentUser?.uid;
   const submitTimeoutRef = useRef<number | null>(null);
-  const timerRef = useRef<number | null>(null);
   const timeExpiryHandled = useRef(false);
   const [userData, setUserData] = useState({ avatar: 0 });
   const [networkError, setNetworkError] = useState(false);
@@ -178,7 +176,7 @@ export default function BattleScreen() {
   const [battleStartTime, setBattleStartTime] = useState<number>(0);
   const battleStartTimeRef = useRef<number>(0);
   const isFirstQuestionRef = useRef(true);
-
+const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
 
   useEffect(() => {

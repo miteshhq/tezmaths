@@ -1,4 +1,6 @@
-import { Audio } from "expo-av";
+// import { Audio } from "expo-av";
+import { Sound } from 'expo-audio/sound';
+
 
 // Define a type for the play options
 interface PlayOptions {

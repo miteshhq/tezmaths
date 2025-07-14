@@ -14,21 +14,17 @@ import {
   ImageBackground,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
-  ScrollView,
-  ActivityIndicator,
-  StyleSheet,
-  
+  View
 } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import SoundManager from "../../components/soundManager";
 
 import { auth, database } from "../../firebase/firebaseConfig";
 import { updateUserStreak } from "../../utils/streakManager";
-import { reload } from "firebase/auth";
 
 // Configuration
 const QUIZ_TIME_LIMIT = 15;
@@ -234,6 +230,12 @@ const resetQuizState = useCallback(() => {
   console.log(`🔄 Resetting quiz state for level ${currentLevel}`);
   cleanupQuiz();
 
+  // Clear active timer
+  if (timerRef.current) {
+    clearInterval(timerRef.current);
+    timerRef.current = null;
+  }
+
   setCurrentQuestionIndex(0);
   setUserAnswer("");
   setQuizScore(0);
@@ -249,7 +251,7 @@ const resetQuizState = useCallback(() => {
   setIsLevelComplete(false);
   setLevelPointsEarned(0);
   setQuestions([]);
-  setMaxDisplayQuestions(20);
+  setMaxDisplayQuestions(0); // Will be updated after fetching
   timerAnimation.setValue(1);
   questionTransition.setValue(1);
   inputRef.current?.blur();
@@ -258,9 +260,9 @@ const resetQuizState = useCallback(() => {
   if (params.isSelectedLevel === "true") {
     setAccumulatedScore(0);
     console.log("🆕 Fresh start - Reset accumulated score to 0");
-   
   }
-}, [cleanupQuiz, currentLevel, params.isSelectedLevel])
+}, [cleanupQuiz, currentLevel, params.isSelectedLevel]);
+
 
 useEffect(() => {
   const status = {
@@ -355,6 +357,7 @@ const loadQuestions = useCallback(async () => {
     console.log(`✅ Selected ${selected.length} questions`);
     await AsyncStorage.setItem(cacheKey, JSON.stringify(selected));
 
+  
     setQuestions(selected);
     setMaxDisplayQuestions(selected.length);
     setIsQuizActive(true);
@@ -373,6 +376,7 @@ const loadQuestions = useCallback(async () => {
 const handleQuizInit = useCallback(async () => {
   console.log(`🎯 Focus effect triggered for level ${currentLevel}`);
   setIsScreenFocused(true);
+  setCurrentQuestionIndex(0)
 
   const startTime =
     params.isSelectedLevel === "true" || !params.gameStartTime

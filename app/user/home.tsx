@@ -1,13 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { get, onValue, ref, set } from "firebase/database";
+import { get, onValue, ref } from "firebase/database";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Animated,
   AppState,
+  AppStateStatus,
   BackHandler,
   Image,
   ImageBackground,
@@ -16,8 +17,7 @@ import {
   ScrollView,
   Text,
   TouchableOpacity,
-  View,
-  AppStateStatus,
+  View
 } from "react-native";
 import SoundManager from "../../components/soundManager";
 import { auth, database } from "../../firebase/firebaseConfig";
@@ -55,6 +55,8 @@ interface AppData {
 }
 
 export default function HomeScreen() {
+   const backHandlerRef = useRef<ReturnType<typeof BackHandler.addEventListener> | null>(null);
+
   const LEVEL_STORAGE_KEY = "highestLevelReached";
   const USER_DATA_KEY = "userData";
   const APP_DATA_KEY = "appData";
@@ -95,7 +97,6 @@ export default function HomeScreen() {
   // App state tracking
   const appStateRef = useRef(AppState.currentState);
   const backgroundTimeRef = useRef<number | null>(null);
-  const backHandlerRef = useRef<any>(null);
 
   // Load cached data for immediate UI update
   const loadCachedData = async () => {
@@ -118,6 +119,8 @@ export default function HomeScreen() {
       // console.error("Error loading cached data:", error);
     }
   };
+
+ 
 
   // Fetch user data from Firebase
   const fetchUserData = async (userId: string) => {
@@ -326,35 +329,35 @@ export default function HomeScreen() {
   };
 
   // Back handler setup - FIXED VERSION
-  useFocusEffect(
-    useCallback(() => {
-      const onBackPress = () => {
-        // Only show exit confirmation if we're not already showing it
-        if (!showExitDialog) {
-          showExitConfirmation();
-        }
-        return true; // Always prevent default back behavior
-      };
-
-      // Remove any existing back handler
-      if (backHandlerRef.current) {
-        backHandlerRef.current.remove();
-      }
-
-      // Add new back handler
-      backHandlerRef.current = BackHandler.addEventListener(
-        "hardwareBackPress",
-        onBackPress
+useFocusEffect(
+  useCallback(() => {
+    const onBackPress = () => {
+      Alert.alert(
+        "Exit App",
+        "Are you sure you want to quit?",
+        [
+          { text: "Resume", style: "cancel" },
+          { text: "Quit", onPress: () => BackHandler.exitApp() },
+        ],
+        { cancelable: true }
       );
+      return true; // prevent default back action
+    };
 
-      return () => {
-        if (backHandlerRef.current) {
-          backHandlerRef.current.remove();
-          backHandlerRef.current = null;
-        }
-      };
-    }, [showExitDialog]) // Add showExitDialog as dependency
-  );
+    // Clean up previous listener
+    backHandlerRef.current?.remove?.();
+
+    // Add new listener
+    backHandlerRef.current = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+
+    // Cleanup on unmount or unfocus
+    return () => {
+      backHandlerRef.current?.remove?.();
+      backHandlerRef.current = null;
+    };
+  }, [])
+);
+
 
   // Enhanced App state change handler - FIXED VERSION
   useEffect(() => {
@@ -393,23 +396,6 @@ export default function HomeScreen() {
 
     return () => subscription.remove();
   }, [loadAllData]);
-
-  // Alternative approach: Use useEffect for back handler (more reliable)
-  useEffect(() => {
-    const onBackPress = () => {
-      if (!showExitDialog) {
-        showExitConfirmation();
-      }
-      return true;
-    };
-
-    const backHandler = BackHandler.addEventListener(
-      "hardwareBackPress",
-      onBackPress
-    );
-
-    return () => backHandler.remove();
-  }, [showExitDialog]);
 
   useEffect(() => {
     SoundManager.unloadAll();
@@ -497,6 +483,8 @@ export default function HomeScreen() {
     await checkStreakDecay();
   }, []);
 
+  
+
   useFocusEffect(
     useCallback(() => {
       loadAllData();
@@ -559,7 +547,7 @@ export default function HomeScreen() {
       }, 500);
     }
   }, [params.quizCompleted, checkAndUpdateStreak]);
-
+  
   // Show loading screen if initial load
   if (loading) {
     return (

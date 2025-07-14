@@ -1,0 +1,9 @@
+node_modules
+.expo
+android/.gradle
+android/build
+*.log
+*.lock
+*.tar.gz
+.github
+.vscode
