@@ -29,7 +29,7 @@ export default function TabsLayout() {
   const isFirstMount = useRef(true);
 
   // Prevent infinite loop by only navigating to home if not already there
-  useFocusEffect(
+   useFocusEffect(
     useCallback(() => {
       const currentRoute = segments[segments.length - 1];
 
@@ -42,21 +42,23 @@ export default function TabsLayout() {
 
         if (currentRoute !== "home") {
           router.replace("/user/home");
+        } else {
+          tabHistory.current = ["home"];
         }
       }
     }, [segments, router])
   );
 
-  // Track tab navigation history
+  // Track visited tabs
   useEffect(() => {
     const currentRoute = segments[segments.length - 1];
 
     if (tabRoutes.includes(currentRoute)) {
-      const lastRoute = tabHistory.current[tabHistory.current.length - 1];
-      if (currentRoute !== lastRoute) {
+      const last = tabHistory.current[tabHistory.current.length - 1];
+      if (currentRoute !== last) {
         tabHistory.current.push(currentRoute);
 
-        // Keep history max length = 10
+        // Keep history max 10 items
         if (tabHistory.current.length > 10) {
           tabHistory.current = tabHistory.current.slice(-10);
         }
@@ -64,41 +66,33 @@ export default function TabsLayout() {
     }
   }, [segments]);
 
-  // Handle Android back button behavior
+  // Handle Android Back Button
   useEffect(() => {
     const backAction = () => {
       const currentRoute = segments[segments.length - 1];
 
-      if (tabRoutes.includes(currentRoute)) {
-        if (currentRoute === "home" && tabHistory.current.length <= 1) {
-          Alert.alert("Exit App", "Are you sure you want to quit?", [
-            { text: "Cancel", style: "cancel" },
-            { text: "Quit", onPress: () => BackHandler.exitApp() },
-          ]);
-          return true;
-        }
+      // On home, show exit alert
+      if (currentRoute === "home" || tabHistory.current.length <= 1) {
+        Alert.alert("Exit App", "Are you sure you want to quit?", [
+          { text: "Cancel", style: "cancel" },
+          { text: "Quit", onPress: () => BackHandler.exitApp() },
+        ]);
+        return true;
+      }
 
-        if (tabHistory.current.length > 1) {
-          tabHistory.current.pop();
-          const previousRoute =
-            tabHistory.current[tabHistory.current.length - 1];
-
-          router.push(`/user/${previousRoute}` as any);
-          return true;
-        }
-
-        return false;
+      // Pop tab history and navigate
+      if (tabHistory.current.length > 1) {
+        tabHistory.current.pop();
+        const previousRoute = tabHistory.current[tabHistory.current.length - 1];
+        router.replace(`/user/${previousRoute}` as any);
+        return true;
       }
 
       return false;
     };
 
-    const backHandler = BackHandler.addEventListener(
-      "hardwareBackPress",
-      backAction
-    );
-
-    return () => backHandler.remove();
+    const handler = BackHandler.addEventListener("hardwareBackPress", backAction);
+    return () => handler.remove();
   }, [segments, router]);
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
