@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
     borderWidth: 1,
-    borderColor: "#8B5CF6",
+    borderColor: "#F05A2A",
   },
   videoHeader: {
     flexDirection: "row",
@@ -373,7 +373,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   videoTitle: {
-    color: "#8B5CF6",
+    color: "#76184F",
     fontSize: 24,
     fontWeight: "900",
     textAlign: "center",
