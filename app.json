@@ -1,64 +1,64 @@
 {
-  "expo": {
-    "name": "TezMaths",
-    "slug": "tezmaths",
-    "version": "1.0.1",
-    "orientation": "portrait",
-    "icon": "./assets/branding/main-logo.png",
-    "scheme": "tezmaths",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.tezmathsteam.tezmaths",
-      "googleServicesFile": "./GoogleService-Info.plist",
-      "buildNumber": "2"
-    },
-    "googleSignIn": {
-      "androidClientId": "YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com",
-      "iosClientId": "YOUR_IOS_CLIENT_ID.apps.googleusercontent.com",
-      "expoClientId": "YOUR_EXPO_GO_CLIENT_ID.apps.googleusercontent.com",
-      "webClientId": "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com"
-    },
-    "android": {
-      "jsEngine": "jsc",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/branding/main-logo.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true,
-      "package": "com.tezmathsteam.tezmaths",
-      "googleServicesFile": "./google-services.json",
-      "versionCode": 2
-    },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/branding/main-logo.png"
-    },
-    "plugins": [
-      "expo-router",
-      "expo-dev-client",
-      "@react-native-google-signin/google-signin",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/branding/main-logo.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+    "expo": {
+        "name": "TezMaths",
+        "slug": "tezmaths",
+        "version": "1.0.1",
+        "orientation": "portrait",
+        "icon": "./assets/branding/main-logo.png",
+        "scheme": "tezmaths",
+        "userInterfaceStyle": "automatic",
+        "newArchEnabled": true,
+        "ios": {
+            "supportsTablet": true,
+            "bundleIdentifier": "com.tezmathsteam.tezmaths",
+            "googleServicesFile": "./GoogleService-Info.plist",
+            "buildNumber": "2"
+        },
+        "googleSignIn": {
+            "androidClientId": "YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com",
+            "iosClientId": "YOUR_IOS_CLIENT_ID.apps.googleusercontent.com",
+            "expoClientId": "YOUR_EXPO_GO_CLIENT_ID.apps.googleusercontent.com",
+            "webClientId": "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com"
+        },
+        "android": {
+            "jsEngine": "jsc",
+            "adaptiveIcon": {
+                "foregroundImage": "./assets/branding/main-logo.png",
+                "backgroundColor": "#ffffff"
+            },
+            "edgeToEdgeEnabled": true,
+            "package": "com.tezmathsteam.tezmaths",
+            "googleServicesFile": "./google-services.json",
+            "versionCode": 2
+        },
+        "web": {
+            "bundler": "metro",
+            "output": "static",
+            "favicon": "./assets/branding/main-logo.png"
+        },
+        "plugins": [
+            "expo-router",
+            "expo-dev-client",
+            "@react-native-google-signin/google-signin",
+            [
+                "expo-splash-screen",
+                {
+                    "image": "./assets/branding/main-logo.png",
+                    "imageWidth": 200,
+                    "resizeMode": "contain",
+                    "backgroundColor": "#ffffff"
+                }
+            ],
+            "expo-audio"
+        ],
+        "experiments": {
+            "typedRoutes": true
+        },
+        "extra": {
+            "router": {},
+            "eas": {
+                "projectId": "d0bb7500-b2e0-4a13-b556-4ff0cffde6d1"
+            }
         }
-      ],
-      "expo-audio"
-    ],
-    "experiments": {
-      "typedRoutes": true
-    },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "d0bb7500-b2e0-4a13-b556-4ff0cffde6d1"
-      }
     }
-  }
 }
