@@ -2,16 +2,11 @@ import { useFocusEffect, useRouter, useSegments } from "expo-router";
 import React from "react";
 
 import { useCallback, useEffect, useRef } from "react";
-import {
-  Alert,
-  BackHandler,
-  Dimensions,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Alert, BackHandler, Dimensions, StyleSheet, View } from "react-native";
 import { auth } from "../../firebase/firebaseConfig";
-import {Tabs} from "expo-router"
+import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const tabRoutes = ["home", "learn", "leaderboard", "profile"];
 
@@ -105,69 +100,74 @@ export default function TabsLayout() {
 
     return () => backHandler.remove();
   }, [segments, router]);
-return (
-<Tabs
-  screenOptions={{
-    headerShown: false,
-    tabBarActiveTintColor: ACTIVE_COLOR,
-    tabBarShowLabel: false,
-    tabBarItemStyle: styles.tabBarItem, // 👈 Add spacing here
-  }}
->
-  {tabRoutes.map((name) => (
-    <Tabs.Screen
-      key={name}
-      name={name}
-      options={{
-        tabBarIcon: ({ color, size, focused }) => (
-          <View
-            style={[
-              styles.tabIconWrapper,
-              focused && styles.tabIconFocused,
-            ]}
-          >
-            <Ionicons
-              name={iconMap[name]}
-              size={focused ? size + 2 : size}
-              color={focused ? ACTIVE_COLOR : color}
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
+      <View style={styles.root}>
+        <Tabs
+          screenOptions={{
+            headerShown: false,
+            tabBarShowLabel: false,
+            tabBarActiveTintColor: ACTIVE_COLOR,
+            tabBarInactiveTintColor: "#aaaaaa", // Add this
+            tabBarStyle: styles.tabBar, // Add this
+            tabBarItemStyle: { width: "100%", height: "100%" }, // Update this
+          }}
+          initialRouteName="home" // Add this
+        >
+          {tabRoutes.map((name) => (
+            <Tabs.Screen
+              key={name}
+              name={name}
+              options={{
+                tabBarIcon: ({ color, size, focused }) => (
+                  <View
+                    style={[
+                      styles.tabIconWrapper,
+                      focused && styles.tabIconFocused,
+                    ]}
+                  >
+                    <Ionicons
+                      name={iconMap[name]}
+                      size={focused ? size + 2 : size}
+                      color={focused ? ACTIVE_COLOR : color}
+                    />
+                  </View>
+                ),
+              }}
             />
-          </View>
-        ),
-      }}
-    />
-  ))}
-</Tabs>
-
-
-
+          ))}
+        </Tabs>
+      </View>
+    </SafeAreaView>
   );
-
-    
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "#FFF2CC" }, // Add this
   tabBar: {
-    height: 70,
-    paddingBottom: 10,
-    paddingHorizontal: 12,
-    borderTopColor: "#ddd",
-    borderTopWidth: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#fff",
+    borderColor: "#3b3b3b",
+    flexDirection: "row",
+    alignItems: "center",
+    height: 60, // Change from 70 to 60
+    paddingTop: 10,
+    // Remove the other properties that were in new version
   },
   tabBarItem: {
-    flex: 1,
-    marginHorizontal: 50, // spacing between items
+    width: "100%", // Change from flex: 1
+    height: "100%", // Add this
+    // Remove marginHorizontal: 50
     justifyContent: "center",
     alignItems: "center",
-    
   },
-  iconWrapper: {
+  // Keep your existing tabIconWrapper and tabIconFocused styles
+  tabIconWrapper: {
     padding: 10,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
-  iconFocused: {
+  tabIconFocused: {
     backgroundColor: "#FFF7ED",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
