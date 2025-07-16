@@ -1,64 +1,37 @@
-import { useFocusEffect, useRouter, useSegments } from "expo-router";
-import React from "react";
-
-import { useCallback, useEffect, useRef } from "react";
-import { Alert, BackHandler, Dimensions, StyleSheet, View } from "react-native";
-import { auth } from "../../firebase/firebaseConfig";
-import { Tabs } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { FontAwesome } from "@expo/vector-icons";
+import { Tabs, useRouter, useSegments } from "expo-router";
+import React, { useEffect, useRef } from "react";
+import {
+  Dimensions,
+  StyleSheet,
+  BackHandler,
+  Alert,
+  Pressable,
+  StatusBar,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { auth } from "../../firebase/firebaseConfig";
 
-const tabRoutes = ["home", "learn", "leaderboard", "profile"];
-
-const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
-  home: "home-outline",
-  learn: "book-outline",
-  leaderboard: "trophy-outline",
-  profile: "person-outline",
-};
 const { width } = Dimensions.get("window");
 const ACTIVE_COLOR = "#F97316";
 
 export default function TabsLayout() {
   const router = useRouter();
   const segments = useSegments();
+  const tabHistory = useRef<string[]>(["home"]);
 
   const user = auth.currentUser;
 
-  const tabHistory = useRef<string[]>(["home"]);
-  const isFirstMount = useRef(true);
-
-  // Prevent infinite loop by only navigating to home if not already there
-   useFocusEffect(
-    useCallback(() => {
-      const currentRoute = segments[segments.length - 1];
-
-      if (isFirstMount.current) {
-        isFirstMount.current = false;
-
-        if (router.canGoBack?.()) {
-          router.dismissAll?.();
-        }
-
-        if (currentRoute !== "home") {
-          router.replace("/user/home");
-        } else {
-          tabHistory.current = ["home"];
-        }
-      }
-    }, [segments, router])
-  );
-
-  // Track visited tabs
+  // Track tab navigation for proper back button behavior
   useEffect(() => {
     const currentRoute = segments[segments.length - 1];
+    const tabRoutes = ["home", "learn", "leaderboard", "profile"];
 
     if (tabRoutes.includes(currentRoute)) {
-      const last = tabHistory.current[tabHistory.current.length - 1];
-      if (currentRoute !== last) {
+      const lastRoute = tabHistory.current[tabHistory.current.length - 1];
+      if (currentRoute !== lastRoute) {
         tabHistory.current.push(currentRoute);
-
-        // Keep history max 10 items
+        // Keep history manageable (max 10 entries)
         if (tabHistory.current.length > 10) {
           tabHistory.current = tabHistory.current.slice(-10);
         }
@@ -66,107 +39,170 @@ export default function TabsLayout() {
     }
   }, [segments]);
 
-  // Handle Android Back Button
+  // Handle back button with proper tab history
   useEffect(() => {
     const backAction = () => {
       const currentRoute = segments[segments.length - 1];
+      const tabRoutes = ["home", "learn", "leaderboard", "profile"];
 
-      // On home, show exit alert
-      if (currentRoute === "home" || tabHistory.current.length <= 1) {
-        Alert.alert("Exit App", "Are you sure you want to quit?", [
-          { text: "Cancel", style: "cancel" },
-          { text: "Quit", onPress: () => BackHandler.exitApp() },
-        ]);
-        return true;
+      if (tabRoutes.includes(currentRoute)) {
+        // On home tab or no history, show exit alert
+        if (currentRoute === "home" || tabHistory.current.length <= 1) {
+          Alert.alert("Exit App", "Are you sure you want to quit?", [
+            { text: "Cancel", style: "cancel" },
+            { text: "Quit", onPress: () => BackHandler.exitApp() },
+          ]);
+          return true;
+        }
+
+        // If we have tab history to go back to
+        if (tabHistory.current.length > 1) {
+          // Remove current route
+          tabHistory.current.pop();
+          // Get previous route
+          const previousRoute =
+            tabHistory.current[tabHistory.current.length - 1];
+          // Navigate to previous tab
+          router.push(`/user/${previousRoute}` as any);
+          return true;
+        }
       }
 
-      // Pop tab history and navigate
-      if (tabHistory.current.length > 1) {
-        tabHistory.current.pop();
-        const previousRoute = tabHistory.current[tabHistory.current.length - 1];
-        router.replace(`/user/${previousRoute}` as any);
-        return true;
-      }
-
+      // For non-tab screens, allow default back behavior
       return false;
     };
 
-    const handler = BackHandler.addEventListener("hardwareBackPress", backAction);
-    return () => handler.remove();
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      backAction
+    );
+
+    return () => backHandler.remove();
   }, [segments, router]);
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
-      <View style={styles.root}>
-        <Tabs
-          screenOptions={{
-            headerShown: false,
-            tabBarShowLabel: false,
-            tabBarActiveTintColor: ACTIVE_COLOR,
-            tabBarInactiveTintColor: "#aaaaaa", // Add this
-            tabBarStyle: styles.tabBar, // Add this
-            tabBarItemStyle: { width: "100%", height: "100%" }, // Update this
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarShowLabel: false,
+          tabBarActiveTintColor: ACTIVE_COLOR,
+          tabBarInactiveTintColor: "#aaaaaa",
+          tabBarStyle: styles.tabBar,
+          tabBarItemStyle: styles.tabBarItem,
+          tabBarButton: (props: any) => {
+            const { onPress, children, ...rest } = props;
+            return (
+              <Pressable
+                android_ripple={{ color: "#F97316" }}
+                onPress={onPress}
+                style={styles.tabButton}
+                {...rest}
+              >
+                {children}
+              </Pressable>
+            );
+          },
+        }}
+        initialRouteName="home"
+      >
+        {/* Hidden screens - not shown in tab bar */}
+        <Tabs.Screen name="battle-results" options={{ href: null }} />
+        <Tabs.Screen name="battle-room" options={{ href: null }} />
+        <Tabs.Screen name="battle-screen" options={{ href: null }} />
+        <Tabs.Screen name="matching-screen" options={{ href: null }} />
+        <Tabs.Screen
+          name="multiplayer-mode-selection"
+          options={{ href: null }}
+        />
+        <Tabs.Screen name="level-select" options={{ href: null }} />
+        <Tabs.Screen name="results" options={{ href: null }} />
+        <Tabs.Screen name="edit-profile" options={{ href: null }} />
+        <Tabs.Screen name="achievements" options={{ href: null }} />
+        <Tabs.Screen name="quiz-screen" options={{ href: null }} />
+
+        {/* Visible tab screens */}
+        <Tabs.Screen
+          name="home"
+          options={{
+            title: "Home",
+            tabBarIcon: ({ color, size, focused }) => (
+              <FontAwesome
+                name="home"
+                size={focused ? size + 2 : size}
+                color={focused ? ACTIVE_COLOR : color}
+              />
+            ),
           }}
-          initialRouteName="home" // Add this
-        >
-          {tabRoutes.map((name) => (
-            <Tabs.Screen
-              key={name}
-              name={name}
-              options={{
-                tabBarIcon: ({ color, size, focused }) => (
-                  <View
-                    style={[
-                      styles.tabIconWrapper,
-                      focused && styles.tabIconFocused,
-                    ]}
-                  >
-                    <Ionicons
-                      name={iconMap[name]}
-                      size={focused ? size + 2 : size}
-                      color={focused ? ACTIVE_COLOR : color}
-                    />
-                  </View>
-                ),
-              }}
-            />
-          ))}
-        </Tabs>
-      </View>
+        />
+        <Tabs.Screen
+          name="learn"
+          options={{
+            title: "Learn",
+            tabBarIcon: ({ color, size, focused }) => (
+              <FontAwesome
+                name="book"
+                size={focused ? size + 2 : size}
+                color={focused ? ACTIVE_COLOR : color}
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="leaderboard"
+          options={{
+            title: "Leaderboard",
+            tabBarIcon: ({ color, size, focused }) => (
+              <FontAwesome
+                name="trophy"
+                size={focused ? size + 2 : size}
+                color={focused ? ACTIVE_COLOR : color}
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: "Profile",
+            tabBarIcon: ({ color, size, focused }) => (
+              <FontAwesome
+                name="user"
+                size={focused ? size + 2 : size}
+                color={focused ? ACTIVE_COLOR : color}
+              />
+            ),
+          }}
+        />
+      </Tabs>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#FFF2CC" }, // Add this
+  container: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+  },
   tabBar: {
     backgroundColor: "#fff",
-    borderColor: "#3b3b3b",
-    flexDirection: "row",
-    alignItems: "center",
-    height: 60, // Change from 70 to 60
+    borderTopWidth: 1,
+    borderTopColor: "#e0e0e0",
+    height: 70,
     paddingTop: 10,
-    // Remove the other properties that were in new version
+    paddingBottom: 10,
   },
   tabBarItem: {
-    width: "100%", // Change from flex: 1
-    height: "100%", // Add this
-    // Remove marginHorizontal: 50
     justifyContent: "center",
     alignItems: "center",
   },
-  // Keep your existing tabIconWrapper and tabIconFocused styles
-  tabIconWrapper: {
-    padding: 10,
-    borderRadius: 16,
-    alignItems: "center",
+  tabButton: {
+    flex: 1,
     justifyContent: "center",
-  },
-  tabIconFocused: {
-    backgroundColor: "#FFF7ED",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 4,
+    alignItems: "center",
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginHorizontal: 4,
   },
 });

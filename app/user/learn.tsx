@@ -227,16 +227,16 @@ export default function LearnScreen() {
           {/* HEADER HERE */}
           <ImageBackground
             source={require("../../assets/gradient.jpg")}
-            style={styles.headerBackground}
+            style={{ overflow: "hidden", marginTop: 20 }}
           >
-            <View style={styles.headerContent}>
-              <View style={styles.headerTitleContainer}>
+            <View className="px-4 py-4">
+              <View className="flex-row justify-center items-center gap-2">
                 <Image
                   source={require("../../assets/icons/learn.png")}
-                  style={styles.headerIcon}
+                  style={{ width: 24, height: 24 }}
                   tintColor="#FF6B35"
                 />
-                <Text style={styles.headerTitle}>Learning</Text>
+                <Text className="text-white text-3xl font-black">Learning</Text>
               </View>
             </View>
           </ImageBackground>

@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import "@react-native-google-signin/google-signin";
+// import "@react-native-google-signin/google-signin";
 import { useRouter } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { useEffect, useState } from "react";
@@ -13,6 +13,7 @@ import {
   View,
   StatusBar,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 const welcomeImage = require("../assets/branding/png-logo.png");
 import { auth } from "../firebase/firebaseConfig";
 
@@ -23,24 +24,29 @@ export default function WelcomeScreen() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const tokenResult = await user.getIdTokenResult();
-        const isAdmin = tokenResult.claims.admin === true;
-        if (isAdmin) {
-          router.replace("/admin/dashboard");
-          return;
-        }
-        const lastLogin = await AsyncStorage.getItem("lastLogin");
-        if (lastLogin) {
-          const lastLoginDate = new Date(parseInt(lastLogin, 10));
-          const now = new Date();
-          if (now.getTime() - lastLoginDate.getTime() < SESSION_DURATION) {
-            router.replace("/user/home");
+      try {
+        if (user) {
+          const tokenResult = await user.getIdTokenResult();
+          const isAdmin = tokenResult.claims.admin === true;
+          if (isAdmin) {
+            router.replace("/admin/dashboard");
             return;
           }
+          const lastLogin = await AsyncStorage.getItem("lastLogin");
+          if (lastLogin) {
+            const lastLoginDate = new Date(parseInt(lastLogin, 10));
+            const now = new Date();
+            if (now.getTime() - lastLoginDate.getTime() < SESSION_DURATION) {
+              router.replace("/user/home");
+              return;
+            }
+          }
         }
+      } catch (error) {
+        console.error("Auth error:", error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
@@ -48,42 +54,92 @@ export default function WelcomeScreen() {
 
   if (loading) {
     return (
-      <View>
+      <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#F97316" />
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View className="flex-1 justify-center items-center bg-custom-gray px-5 pb-10">
+    <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      <Image source={welcomeImage} style={styles.image} />
+      <View style={styles.content}>
+        <Image source={welcomeImage} style={styles.image} />
 
-      <Text className="text-3xl text-black font-semibold text-center mb-2">
-        Hey! Welcome
-      </Text>
+        <Text style={styles.title}>Hey! Welcome</Text>
 
-      <Text className="text-base text-gray-600 text-center mb-12 px-8 leading-6">
-        Challenge your mind with fun facts and tough questions.
-      </Text>
+        <Text style={styles.subtitle}>
+          Challenge your mind with fun facts and tough questions.
+        </Text>
 
-      <TouchableOpacity
-        className="bg-primary py-4 px-12 rounded-full w-3/4 items-center shadow-sm"
-        onPress={() => router.push("/signup")}
-      >
-        <Text className="text-white text-lg font-semibold">Get Started</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => router.push("/signup")}
+        >
+          <Text style={styles.buttonText}>Get Started</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const { width, height } = Dimensions.get("window");
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+  },
+  content: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+  },
   image: {
     width: width * 0.5,
     height: width * 0.5,
     resizeMode: "contain",
     marginBottom: height * 0.09,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 8,
+    color: "#000000",
+  },
+  subtitle: {
+    fontSize: 16,
+    textAlign: "center",
+    marginBottom: 48,
+    paddingHorizontal: 32,
+    lineHeight: 24,
+    color: "#666666",
+  },
+  button: {
+    backgroundColor: "#F97316",
+    paddingVertical: 16,
+    paddingHorizontal: 48,
+    borderRadius: 25,
+    width: "75%",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  buttonText: {
+    color: "#ffffff",
+    fontSize: 18,
+    fontWeight: "600",
   },
 });
