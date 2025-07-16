@@ -3,6 +3,9 @@ import { useRouter } from "expo-router";
 import {
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
+  GoogleAuthProvider,
+  signOut,
+  signInWithPopup
 } from "firebase/auth";
 import { get, ref } from "firebase/database";
 import React, { useCallback, useEffect, useState } from "react";
@@ -21,6 +24,7 @@ import {
 import { auth, database } from "../../firebase/firebaseConfig";
 import { useSimpleGoogleSignIn } from "../../utils/useGoogleSignIn";
 
+
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LEVEL_STORAGE_KEY = "highestLevelReached";
 
@@ -30,116 +34,25 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isResettingPassword, setIsResettingPassword] = useState(false);
-
   const [focusField, setFocusField] = useState(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-  const { signInWithGoogle, isLoading, error, isReady } =
-    useSimpleGoogleSignIn();
+  const { signInWithGoogle, isLoading, isReady } = useSimpleGoogleSignIn();
 
   useEffect(() => {
-    const keyboardShowListener = Keyboard.addListener(
-      "keyboardDidShow",
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
+    const keyboardShowListener = Keyboard.addListener("keyboardDidShow", (e) =>
+      setKeyboardHeight(e.endCoordinates.height)
     );
-    const keyboardHideListener = Keyboard.addListener("keyboardDidHide", () => {
-      setKeyboardHeight(0);
-    });
+    const keyboardHideListener = Keyboard.addListener("keyboardDidHide", () =>
+      setKeyboardHeight(0)
+    );
 
     return () => {
-      keyboardShowListener?.remove();
-      keyboardHideListener?.remove();
+      // router.push("/user/home")
+      keyboardShowListener.remove();
+      keyboardHideListener.remove();
     };
   }, []);
-
-  const handleGoogleSignIn = useCallback(async () => {
-    try {
-      setErrorMessage(""); // Clear any previous errors
-      //   console.log("Starting Google Sign-In from login screen...");
-
-      const result = await signInWithGoogle();
-
-      // if (!result) {
-        
-      //   // Sign-in was cancelled or failed, error is already set by the hook
-      //   return;
-      // }
-
-      const { user, isNewUser } = result;
-
-      // console.log("Google Sign-In completed:", {
-      //   uid: user.uid,
-      //   email: user.email,
-      //   isNewUser,
-      // });
-
-      if (isNewUser) {
-        // console.log("New user detected, redirecting to register...");
-        router.push({
-          pathname: "/register",
-          params: {
-            email: user.email,
-            isGoogleUser: "true",
-            displayName: user.displayName || "",
-          },
-        });
-      } else {
-        // Check if user data is complete
-        // console.log("Existing user, checking profile completion...");
-        const userRef = ref(database, `users/${user.uid}`);
-        const snapshot = await get(userRef);
-
-        if (!snapshot.exists()) {
-          //   console.log(
-          //     "User data not found in database, redirecting to register..."
-          //   );
-          router.push({
-            pathname: "/register",
-            params: {
-              email: user.email,
-              isGoogleUser: "true",
-              displayName: user.displayName || "",
-            },
-          });
-          return;
-        }
-
-        const userData = snapshot.val();
-        // console.log("User data found:", {
-        //   hasData: !!userData,
-        //   isNewUser: userData.isnewuser,
-        // });
-
-        if (userData.isnewuser === true) {
-          //   console.log("User profile incomplete, redirecting to register...");
-          router.push({
-            pathname: "/register",
-            params: {
-              email: user.email,
-              isGoogleUser: "true",
-              displayName: user.displayName || "",
-            },
-          });
-        } else {
-          //   console.log("User profile complete, redirecting to home...");
-          await handleUserRedirect(user, userData);
-        }
-      }
-    } catch (error) {
-      // console.error("Google Sign-In failed in login screen:", error);
-
-      // Set a user-friendly error message
-      let errorMsg = "Google sign-in failed. Please try again.";
-
-      if (error.message) {
-        errorMsg = error.message;
-      }
-
-      setErrorMessage(errorMsg);
-    }
-  }, [signInWithGoogle, router]);
 
   const isValidEmail = useCallback(
     (email: string) => EMAIL_REGEX.test(email),
@@ -148,7 +61,8 @@ export default function LoginScreen() {
 
   const handleUserRedirect = useCallback(
     async (user, userData) => {
-      if (userData.isnewuser === true || userData.isnewuser === undefined) {
+       console.log("➡️ Redirecting user:", user.email);
+      if (userData?.isnewuser === true || userData?.isnewuser === undefined) {
         router.push("/register");
         return;
       }
@@ -160,53 +74,11 @@ export default function LoginScreen() {
         );
       }
 
-      const now = new Date().getTime().toString();
-      await AsyncStorage.setItem("lastLogin", now);
-      router.push("/user/home");
+      await AsyncStorage.setItem("lastLogin", Date.now().toString());
+      router.replace("/user/home");
     },
     [router]
   );
-
-  const handleForgotPassword = useCallback(async () => {
-    if (!email || !isValidEmail(email)) {
-      Alert.alert("Invalid Email", "Please enter a valid email address first.");
-      return;
-    }
-
-    try {
-      setIsResettingPassword(true);
-      setErrorMessage("");
-
-      await sendPasswordResetEmail(auth, email);
-
-      Alert.alert(
-        "Password Reset Email Sent",
-        `We've sent a password reset link to ${email}. Please check your email and follow the instructions to reset your password.`,
-        [{ text: "OK" }]
-      );
-    } catch (error) {
-      // console.error("Password reset failed:", error);
-
-      let errorMsg = "Failed to send password reset email. Please try again.";
-
-      switch (error.code) {
-        case "auth/user-not-found":
-          errorMsg = "No account found with this email address.";
-          break;
-        case "auth/invalid-email":
-          errorMsg = "Please enter a valid email address.";
-          break;
-        case "auth/too-many-requests":
-          errorMsg = "Too many requests. Please try again later.";
-          break;
-      }
-
-      setErrorMessage(errorMsg);
-      Alert.alert("Error", errorMsg);
-    } finally {
-      setIsResettingPassword(false);
-    }
-  }, [email, isValidEmail]);
 
   const handleLogin = useCallback(async () => {
     setErrorMessage("");
@@ -219,6 +91,7 @@ export default function LoginScreen() {
       setErrorMessage("Password cannot be empty.");
       return;
     }
+    
 
     try {
       const userCredential = await signInWithEmailAndPassword(
@@ -228,62 +101,115 @@ export default function LoginScreen() {
       );
       const user = userCredential.user;
 
-      // console.log("User logged in successfully:", user.email);
-
-      // Check admin status using the token
       const tokenResult = await user.getIdTokenResult();
       const isAdmin = tokenResult.claims.admin === true;
 
       if (isAdmin) {
-        // console.log("Admin login detected");
         router.push("/admin/dashboard");
         return;
       }
 
-      router.prefetch("/user/home");
-      const userId = user.uid;
-      const userRef = ref(database, `users/${userId}`);
+      const userRef = ref(database, `users/${user.uid}`);
       const snapshot = await get(userRef);
 
       if (!snapshot.exists()) {
-        // console.log("User data not found, redirecting to register.");
-        router.push({ pathname: "/register", params: { email: email } });
+        router.push({ pathname: "/register", params: { email } });
         return;
       }
 
       const userData = snapshot.val();
       await handleUserRedirect(user, userData);
     } catch (error) {
-      // console.error("Login failed:", error);
-
       let errorMsg = "Login failed. Please check your credentials.";
-
       switch (error.code) {
         case "auth/user-not-found":
           errorMsg = "No account found with this email address.";
           break;
         case "auth/wrong-password":
-          errorMsg = "Incorrect password. Please try again.";
+          errorMsg = "Incorrect password.";
           break;
         case "auth/invalid-email":
-          errorMsg = "Please enter a valid email address.";
+          errorMsg = "Invalid email address.";
           break;
         case "auth/user-disabled":
-          errorMsg = "This account has been disabled.";
+          errorMsg = "Account disabled.";
           break;
         case "auth/too-many-requests":
-          errorMsg = "Too many failed attempts. Please try again later.";
+          errorMsg = "Too many attempts. Try again later.";
           break;
       }
-
       setErrorMessage(errorMsg);
     }
-  }, [email, password, isValidEmail, handleUserRedirect, router]);
+  }, [email, password, isValidEmail, router, handleUserRedirect]);
+
+  const handleForgotPassword = useCallback(async () => {
+    if (!email || !isValidEmail(email)) {
+      Alert.alert("Invalid Email", "Please enter a valid email address.");
+      return;
+    }
+
+    try {
+      setIsResettingPassword(true);
+      setErrorMessage("");
+      await sendPasswordResetEmail(auth, email);
+      Alert.alert(
+        "Password Reset Email Sent",
+        `We've sent a password reset link to ${email}.`
+      );
+    } catch (error) {
+      let errorMsg = "Failed to send password reset email.";
+      switch (error.code) {
+        case "auth/user-not-found":
+          errorMsg = "No account found with this email.";
+          break;
+        case "auth/invalid-email":
+          errorMsg = "Invalid email address.";
+          break;
+        case "auth/too-many-requests":
+          errorMsg = "Too many requests. Try again later.";
+          break;
+      }
+      setErrorMessage(errorMsg);
+    } finally {
+      setIsResettingPassword(false);
+    }
+  }, [email, isValidEmail]);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    try {
+      setErrorMessage("");
+      const result = await signInWithGoogle();
+
+      if (!result || !result.user) {
+        setErrorMessage("Google sign-in failed.");
+        return;
+      }
+
+      const { user, isNewUser } = result;
+
+      const userRef = ref(database, `users/${user.uid}`);
+      const snapshot = await get(userRef);
+
+      const userData = snapshot.exists() ? snapshot.val() : null;
+
+      if (isNewUser || !userData || userData.isnewuser) {
+        router.push({
+          pathname: "/register",
+          params: {
+            email: user.email,
+            isGoogleUser: "true",
+            displayName: user.displayName || "",
+          },
+        });
+      } else {
+        await handleUserRedirect(user, userData);
+      }
+    } catch (error) {
+      setErrorMessage(error?.message || "Google sign-in failed.");
+    }
+  }, [signInWithGoogle, router, handleUserRedirect]);
 
   const navigateToSignup = useCallback(() => router.push("/signup"), [router]);
-
-  // Combine error messages from the hook and local state
-  const displayError = errorMessage;
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -293,9 +219,7 @@ export default function LoginScreen() {
           justifyContent: "center",
           alignItems: "center",
           paddingHorizontal: 20,
-          paddingVertical: 40,
-          backgroundColor: "white",
-          paddingBottom: keyboardHeight > 0 ? keyboardHeight - 30 : 30,
+          paddingBottom: keyboardHeight > 0 ? keyboardHeight : 30,
         }}
         keyboardShouldPersistTaps="handled"
       >
@@ -305,7 +229,7 @@ export default function LoginScreen() {
         </Text>
 
         <TextInput
-          className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
+          className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base ${
             focusField === "email" ? "border-2 border-primary" : ""
           }`}
           onFocus={() => setFocusField("email")}
@@ -317,12 +241,10 @@ export default function LoginScreen() {
           keyboardType="email-address"
           autoCapitalize="none"
           autoCorrect={false}
-          returnKeyType="next"
-          blurOnSubmit={false}
         />
 
         <TextInput
-          className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base font-['Poppins-Regular'] ${
+          className={`bg-gray-100 text-black py-4 px-5 rounded-xl mb-4 w-full text-base ${
             focusField === "password" ? "border-2 border-primary" : ""
           }`}
           onFocus={() => setFocusField("password")}
@@ -336,30 +258,28 @@ export default function LoginScreen() {
           onSubmitEditing={handleLogin}
         />
 
-        {displayError ? (
-          <Text className="text-red-500 text-sm text-center font-['Poppins-Regular'] mb-2">
-            {displayError}
+        {errorMessage && (
+          <Text className="text-red-500 text-sm text-center mb-2">
+            {errorMessage}
           </Text>
-        ) : null}
+        )}
 
         <TouchableOpacity
-          className="bg-primary py-3 px-20 rounded-2xl items-center justify-center mt-5 mb-4"
+          className="bg-primary py-3 px-20 rounded-2xl mt-5 mb-4"
           onPress={handleLogin}
-          activeOpacity={0.8}
         >
-          <Text className="text-white text-xl font-bold font-['Poppins-SemiBold'] text-center">
+          <Text className="text-white text-xl font-bold text-center">
             Log in
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          className="flex items-center justify-center mb-8"
+          className="mb-8"
           onPress={handleForgotPassword}
-          activeOpacity={0.7}
           disabled={isResettingPassword}
         >
           <Text
-            className={`text-base font-regular font-['Poppins-SemiBold'] text-center ${
+            className={`text-base text-center ${
               isResettingPassword ? "text-purple-400" : "text-custom-purple"
             }`}
           >
@@ -370,36 +290,28 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <View className="flex-row mb-5 items-center">
-          <Text className="text-black text-base font-bold font-['Poppins-Regular']">
+          <Text className="text-black text-base font-bold">
             Don't have an account?
           </Text>
-          <TouchableOpacity onPress={navigateToSignup} activeOpacity={0.7}>
-            <Text className="text-primary text-base font-['Poppins-SemiBold'] font-bold">
-              {" "}
-              Sign Up
-            </Text>
+          <TouchableOpacity onPress={navigateToSignup}>
+            <Text className="text-primary text-base font-bold"> Sign Up</Text>
           </TouchableOpacity>
         </View>
 
-        <Text className="text-black text-sm font-black font-['Poppins-Regular'] mb-4 text-center">
-          OR
-        </Text>
+        <Text className="text-black text-sm font-black mb-4 text-center">OR</Text>
 
         <TouchableOpacity
-          className="bg-white border border-black py-2 px-8 rounded-full items-center justify-center"
-          style={{
-            opacity: !isReady || isLoading ? 0.5 : 1,
-          }}
-          activeOpacity={0.8}
+          className="bg-white border border-black py-2 px-8 rounded-full"
+          style={{ opacity: !isReady || isLoading ? 0.5 : 1 }}
           onPress={handleGoogleSignIn}
           disabled={!isReady || isLoading}
         >
-          <View className="flex flex-row items-center gap-2">
+          <View className="flex-row items-center gap-2">
             <Image
               source={require("../../assets/icons/google.png")}
               style={{ width: 18, height: 18 }}
             />
-            <Text className="text-black text-lg font-bold font-['Poppins-Regular']">
+            <Text className="text-black text-lg font-bold">
               {isLoading ? "Signing in..." : "Sign in with Google"}
             </Text>
           </View>

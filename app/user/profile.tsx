@@ -79,7 +79,6 @@ export default function ProfileScreen() {
     try {
       const usersRef = query(
         ref(database, "users"),
-        orderByChild("highScore"),
         limitToLast(1000)
       );
       const snapshot = await get(usersRef);

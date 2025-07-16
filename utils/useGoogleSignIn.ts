@@ -3,6 +3,9 @@ import { makeRedirectUri, useAuthRequest, ResponseType } from 'expo-auth-session
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { auth, database } from '../firebase/firebaseConfig';
 import { ref, get, set } from 'firebase/database';
+import Constants from 'expo-constants';
+
+const isExpo = Constants.AppOwnership === 'expo';
 
 const CLIENT_ID = '235143806197-1k7eq1jcq6gc5h6th0opmvtm03gqt7gs.apps.googleusercontent.com';
 
@@ -11,7 +14,10 @@ export const useSimpleGoogleSignIn = () => {
   const [error, setError] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
 
-const redirectUri = makeRedirectUri();
+const redirectUri = makeRedirectUri(
+  {
+    native: '/user/profile',}
+);
 
 
   const [request, response, promptAsync] = useAuthRequest(
