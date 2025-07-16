@@ -37,18 +37,20 @@
             "favicon": "./assets/branding/main-logo.png"
         },
         "plugins": [
-  "expo-router",
-  "expo-dev-client",
-  [
-    "expo-splash-screen",
-    {
-      "image": "./assets/branding/main-logo.png",
-      "imageWidth": 200,
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    }
-  ]
-],
+            "expo-router",
+            "expo-dev-client",
+            "@react-native-google-signin/google-signin",
+            [
+                "expo-splash-screen",
+                {
+                    "image": "./assets/branding/main-logo.png",
+                    "imageWidth": 200,
+                    "resizeMode": "contain",
+                    "backgroundColor": "#ffffff"
+                }
+            ],
+            "expo-audio"
+        ],
         "experiments": {
             "typedRoutes": true
         },
