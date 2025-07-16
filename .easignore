@@ -1,5 +1,7 @@
 node_modules
 .expo
+android
+ios
 android/.gradle
 android/build
 *.log

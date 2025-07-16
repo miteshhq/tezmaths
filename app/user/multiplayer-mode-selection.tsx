@@ -19,6 +19,7 @@ import { battleManager } from "../../utils/battleManager";
 import type { BattleEntry } from "../../components/battlescoreBoard";
 import BattleScoreBoard from "../../components/battlescoreBoard";
 import { fetchLast5BattleResults } from '../../utils/saveBattleResult';
+import {auth} from '../../firebase/firebaseConfig'
 
 
 
