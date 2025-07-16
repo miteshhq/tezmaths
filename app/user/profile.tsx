@@ -1,6 +1,5 @@
 // app/user/profile.tsx
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
@@ -295,67 +294,46 @@ export default function ProfileScreen() {
     router.push("/user/edit-profile");
   };
 
-  const handleLogout = async () => {
-    const LEVEL_STORAGE_KEY = "highestLevelReached";
+ const handleLogout = async () => {
+  const LEVEL_STORAGE_KEY = "highestLevelReached";
 
-    await SoundManager.stopSound("levelSoundEffect");
-    await SoundManager.stopSound("clappingSoundEffect");
-    await SoundManager.stopSound("victorySoundEffect");
-    await SoundManager.stopSound("failSoundEffect");
+  // Stop all sounds
+  await SoundManager.stopSound("levelSoundEffect");
+  await SoundManager.stopSound("clappingSoundEffect");
+  await SoundManager.stopSound("victorySoundEffect");
+  await SoundManager.stopSound("failSoundEffect");
 
-    try {
-      const userId = auth.currentUser?.uid;
+  try {
+    const userId = auth.currentUser?.uid;
 
-      if (userId) {
-        const userRef = ref(database, `users/${userId}`);
-        const storedLevel = await AsyncStorage.getItem(LEVEL_STORAGE_KEY);
-        const highestCompletedLevel = Number(storedLevel) || 0;
+    if (userId) {
+      const userRef = ref(database, `users/${userId}`);
+      const storedLevel = await AsyncStorage.getItem(LEVEL_STORAGE_KEY);
+      const highestCompletedLevel = Number(storedLevel) || 0;
 
-        await update(userRef, {
-          highestCompletedLevelCompleted: highestCompletedLevel,
-        });
-      }
-
-      try {
-        await GoogleSignin.revokeAccess();
-        await GoogleSignin.signOut();
-      } catch (error1) {
-        try {
-          await GoogleSignin.signOut();
-        } catch (error2) {
-          try {
-            const userInfo = await GoogleSignin.getCurrentUser();
-            const accessToken = userInfo?.idToken;
-
-            if (accessToken) {
-              await GoogleSignin.clearCachedAccessToken(accessToken);
-            }
-          } catch (error3) {
-            // All Google logout methods failed, continue anyway
-          }
-        }
-      }
-
-      await signOut(auth);
-      await AsyncStorage.clear();
-
-      try {
-        await AsyncStorage.removeItem("@google_signin_user");
-        await AsyncStorage.removeItem("google_signin_account");
-      } catch (storageError) {
-        // Ignore storage clearing errors
-      }
-
-      router.push("/login");
-    } catch (error: any) {
-      try {
-        await AsyncStorage.clear();
-        router.push("/login");
-      } catch (fallbackError) {
-        // Fallback failed
-      }
+      await update(userRef, {
+        highestCompletedLevelCompleted: highestCompletedLevel,
+      });
     }
-  };
+
+    // Firebase logout
+    await signOut(auth);
+
+    // Clear async storage
+    await AsyncStorage.removeItem("userData");
+    await AsyncStorage.removeItem(LEVEL_STORAGE_KEY);
+    await AsyncStorage.removeItem("@google_signin_user");
+    await AsyncStorage.removeItem("google_signin_account");
+    await AsyncStorage.clear();
+
+    router.replace("/login");
+  } catch (error) {
+    console.error("[PROFILE] Logout failed:", error);
+    // As a fallback, try redirect anyway
+    router.replace("/login");
+  }
+};
+
 
   if (loading) {
     return (

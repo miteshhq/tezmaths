@@ -61,10 +61,11 @@ export default function LoginScreen() {
 
       const result = await signInWithGoogle();
 
-      if (!result) {
-        // Sign-in was cancelled or failed, error is already set by the hook
-        return;
-      }
+      // if (!result) {
+        
+      //   // Sign-in was cancelled or failed, error is already set by the hook
+      //   return;
+      // }
 
       const { user, isNewUser } = result;
 

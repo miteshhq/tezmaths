@@ -8,30 +8,35 @@ import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const tabRoutes = ["home", "learn", "leaderboard", "profile"];
 
-const iconMap: Record<string, keyof typeof Ionicons.glyphMap> = {
+
+// Define tab routes as a union type for safety
+type TabRoute = "home" | "learn" | "leaderboard" | "profile";
+
+const tabRoutes: TabRoute[] = ["home", "learn", "leaderboard", "profile"];
+
+const iconMap: Record<TabRoute, keyof typeof Ionicons.glyphMap> = {
   home: "home-outline",
   learn: "book-outline",
   leaderboard: "trophy-outline",
   profile: "person-outline",
 };
+
 const { width } = Dimensions.get("window");
 const ACTIVE_COLOR = "#F97316";
 
 export default function TabsLayout() {
   const router = useRouter();
   const segments = useSegments();
-
   const user = auth.currentUser;
 
-  const tabHistory = useRef<string[]>(["home"]);
+  const tabHistory = useRef<TabRoute[]>(["home"]);
   const isFirstMount = useRef(true);
 
-  // Prevent infinite loop by only navigating to home if not already there
-   useFocusEffect(
+  // On initial mount, route to /user/home
+  useFocusEffect(
     useCallback(() => {
-      const currentRoute = segments[segments.length - 1];
+      const currentRoute = segments[segments.length - 1] as TabRoute;
 
       if (isFirstMount.current) {
         isFirstMount.current = false;
@@ -39,8 +44,7 @@ export default function TabsLayout() {
         if (router.canGoBack?.()) {
           router.dismissAll?.();
         }
-
-        if (currentRoute !== "home") {
+        if (currentRoute && currentRoute !== "home") {
           router.replace("/user/home");
         } else {
           tabHistory.current = ["home"];
@@ -48,17 +52,16 @@ export default function TabsLayout() {
       }
     }, [segments, router])
   );
-
   // Track visited tabs
   useEffect(() => {
-    const currentRoute = segments[segments.length - 1];
+    const currentRoute = segments[segments.length - 1] as TabRoute;
 
-    if (tabRoutes.includes(currentRoute)) {
+    if (currentRoute && tabRoutes.includes(currentRoute)) {
       const last = tabHistory.current[tabHistory.current.length - 1];
       if (currentRoute !== last) {
         tabHistory.current.push(currentRoute);
 
-        // Keep history max 10 items
+        // Limit history to last 10
         if (tabHistory.current.length > 10) {
           tabHistory.current = tabHistory.current.slice(-10);
         }
@@ -69,9 +72,8 @@ export default function TabsLayout() {
   // Handle Android Back Button
   useEffect(() => {
     const backAction = () => {
-      const currentRoute = segments[segments.length - 1];
+      const currentRoute = segments[segments.length - 1] as TabRoute | undefined;
 
-      // On home, show exit alert
       if (currentRoute === "home" || tabHistory.current.length <= 1) {
         Alert.alert("Exit App", "Are you sure you want to quit?", [
           { text: "Cancel", style: "cancel" },
@@ -79,12 +81,13 @@ export default function TabsLayout() {
         ]);
         return true;
       }
-
-      // Pop tab history and navigate
+      // Navigate back in tab history
       if (tabHistory.current.length > 1) {
         tabHistory.current.pop();
         const previousRoute = tabHistory.current[tabHistory.current.length - 1];
-        router.replace(`/user/${previousRoute}` as any);
+
+        // Fully resolved, statically known path — type-safe
+        router.replace(`/user/${previousRoute}`);
         return true;
       }
 
@@ -94,6 +97,8 @@ export default function TabsLayout() {
     const handler = BackHandler.addEventListener("hardwareBackPress", backAction);
     return () => handler.remove();
   }, [segments, router]);
+
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
       <View style={styles.root}>
@@ -102,14 +107,15 @@ export default function TabsLayout() {
             headerShown: false,
             tabBarShowLabel: false,
             tabBarActiveTintColor: ACTIVE_COLOR,
-            tabBarInactiveTintColor: "#aaaaaa", // Add this
-            tabBarStyle: styles.tabBar, // Add this
-            tabBarItemStyle: { width: "100%", height: "100%" }, // Update this
+            tabBarInactiveTintColor: "#aaaaaa",
+            tabBarStyle: styles.tabBar, 
+            tabBarItemStyle: { width: "100%", height: "100%" },
           }}
-          initialRouteName="home" // Add this
+          initialRouteName="home"
         >
           {tabRoutes.map((name) => (
             <Tabs.Screen
+            
               key={name}
               name={name}
               options={{
@@ -124,6 +130,7 @@ export default function TabsLayout() {
                       name={iconMap[name]}
                       size={focused ? size + 2 : size}
                       color={focused ? ACTIVE_COLOR : color}
+
                     />
                   </View>
                 ),
@@ -135,7 +142,6 @@ export default function TabsLayout() {
     </SafeAreaView>
   );
 }
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#FFF2CC" }, // Add this
   tabBar: {
@@ -156,10 +162,11 @@ const styles = StyleSheet.create({
   },
   // Keep your existing tabIconWrapper and tabIconFocused styles
   tabIconWrapper: {
-    padding: 10,
+    // padding: 10,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+   
   },
   tabIconFocused: {
     backgroundColor: "#FFF7ED",

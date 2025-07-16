@@ -12,12 +12,15 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Platform,
+  Share
 } from "react-native";
-import Share from 'react-native-share';
+import * as Sharing from 'expo-sharing';
 import ViewShot from "react-native-view-shot";
 import SoundManager from "../../components/soundManager";
 // Import logo as a module declaration instead of direct import
 const logo = require("../../assets/branding/tezmaths-full-logo.png");
+
 
 
 const shareConfig = {
@@ -207,8 +210,9 @@ export default function ResultsScreen() {
 
   
   // const ShareComponent: React.FC = () => {
- const shareImageAndText = async () => {
+const shareImageAndText = async () => {
   setIsSharing(true);
+
   try {
     // Capture the image from ViewShot
     if (!viewShotRef.current) throw new Error("ViewShot ref not available");
@@ -219,14 +223,28 @@ export default function ResultsScreen() {
     const newUri = `${FileSystem.documentDirectory}tezmaths_result_${timestamp}.jpg`;
     await FileSystem.copyAsync({ from: uri, to: newUri });
 
-    const shareOptions = {
-      title: "Check this out!",
-      message: getShareMessage(),
-      url: newUri, // ✅ Share the captured image URI
-      type: "image/jpeg",
-    };
+    const message = getShareMessage();
 
-    await Share.open(shareOptions);
+    if (Platform.OS === 'android') {
+      // Share image + text together on Android
+      await Share.share({
+        title: "Check this out!",
+        message: message,
+        url: newUri,
+      });
+    } else if (await Sharing.isAvailableAsync()) {
+      // On iOS, share image first
+      await Sharing.shareAsync(newUri, {
+        dialogTitle: "Share your result!",
+        mimeType: "image/jpeg",
+      });
+
+      // Then optionally share text separately
+      await Share.share({ message });
+    } else {
+      Alert.alert("Sharing not available on this device");
+    }
+
   } catch (error: any) {
     Alert.alert("Sharing failed", error.message || "Something went wrong.");
     console.error("Share error:", error);

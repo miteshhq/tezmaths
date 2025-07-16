@@ -12,7 +12,6 @@ import {
   RefreshControl,
 } from "react-native";
 import { database, auth } from "../../firebase/firebaseConfig";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Define interfaces for type safety
 interface FirebaseUser {
