@@ -1,6 +1,5 @@
 import { Audio } from "expo-av";
 
-
 // Define a type for the play options
 interface PlayOptions {
   isLooping?: boolean;
@@ -186,29 +185,28 @@ const SoundManager = {
     }
   },
 
- async nukeSounds() {
-  try {
-    for (const key of Object.keys(this.soundObjects) as SoundKey[]) {
-      const sound = this.soundObjects[key];
-      if (sound) {
-        const s = sound as Audio.Sound;
-        try {
-          await s.setIsLoopingAsync(false);
-          await s.stopAsync();
-          await s.unloadAsync();
-        } catch (error) {
-          // Optional: log error
+  async nukeSounds() {
+    try {
+      for (const key of Object.keys(this.soundObjects) as SoundKey[]) {
+        const sound = this.soundObjects[key];
+        if (sound) {
+          const s = sound as Audio.Sound;
+          try {
+            await s.setIsLoopingAsync(false);
+            await s.stopAsync();
+            await s.unloadAsync();
+          } catch (error) {
+            // Optional: log error
+          }
         }
       }
+
+      this.soundObjects = {} as Record<SoundKey, Audio.Sound | undefined>;
+      return true;
+    } catch (error) {
+      return false;
     }
-
-    this.soundObjects = {} as Record<SoundKey, Audio.Sound | undefined>;
-    return true;
-  } catch (error) {
-    return false;
-  }
-},
-
+  },
 
   async stopAllSounds() {
     try {

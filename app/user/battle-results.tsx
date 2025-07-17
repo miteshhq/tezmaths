@@ -5,17 +5,14 @@ import {
   TouchableOpacity,
   Image,
   ScrollView,
-  Share,
   Alert,
-  Modal,
-  StyleSheet,
   ActivityIndicator,
   BackHandler,
-  Platform
 } from "react-native";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
-import ViewShot, { captureRef } from "react-native-view-shot";
-import * as Sharing from "expo-sharing";
+import ViewShot from "react-native-view-shot";
+import Share from "react-native-share";
+
 import * as FileSystem from "expo-file-system";
 import SoundManager from "../../components/soundManager";
 const logo = require("../../assets/branding/tezmaths-full-logo.png");
@@ -460,76 +457,35 @@ export default function BattleResultsScreen() {
     return shareMessage;
   };
 
-  const captureImage = async () => {
-    try {
-      const uri = await captureRef(viewShotRef, {
-        format: "png",
-        quality: 0.9,
-        result: "tmpfile",
-      });
-
-      if (!uri) {
-        throw new Error("Failed to capture image");
-      }
-
-      const timestamp = Date.now();
-      const newUri = `${FileSystem.documentDirectory}tezmaths_battle_result_${timestamp}.png`;
-      await FileSystem.copyAsync({ from: uri, to: newUri });
-      return newUri;
-    } catch (error) {
-      console.error("Error capturing image:", error);
-      throw error;
-    }
-  };
-
-  // const shareImageOnly = async () => {
-  //   setIsSharing(true);
-  //   try {
-  //     const newUri = await captureImage();
-  //     if (await Sharing.isAvailableAsync()) {
-  //       await Sharing.shareAsync(newUri);
-  //     } else {
-  //       await Share.share({ url: newUri });
-  //     }
-  //   } catch (error) {
-  //     console.error("Error sharing image:", error);
-  //     Alert.alert("Error", "Couldn't share image. Please try again.");
-  //   } finally {
-  //     setIsSharing(false);
-  //     setPopupVisible(false);
-  //   }
-  // };
-
-  // const shareTextOnly = async () => {
-  //   setIsSharing(true);
-  //   try {
-  //     const shareMessage = getShareMessage();
-  //     await Share.share({ message: shareMessage });
-  //   } catch (error) {
-  //     console.error("Error sharing text:", error);
-  //     Alert.alert("Error", "Couldn't share text. Please try again.");
-  //   } finally {
-  //     setIsSharing(false);
-  //     setPopupVisible(false);
-  //   }
-  // };
-
-//  const ShareComponent: React.FC = () => {
   const shareImageAndText = async () => {
+    setIsSharing(true);
     try {
+      // Capture the image from ViewShot
+      if (!viewShotRef.current) throw new Error("ViewShot ref not available");
+      const uri = await viewShotRef.current.capture();
+
+      // Save image to file system
+      const timestamp = Date.now();
+      const newUri = `${FileSystem.documentDirectory}tezmaths_battle_result_${timestamp}.jpg`;
+      await FileSystem.copyAsync({ from: uri, to: newUri });
+
+      // Use react-native-share for proper image + text sharing
       const shareOptions = {
-        title: 'Check this out!',
-        message: 'Here is an image and some text.',
-        url: 'file:///path-to-your-image.jpg', // Replace with actual file URI
-        type: 'image/jpeg',
+        title: "Check this out!",
+        message: getShareMessage(),
+        url: newUri, // Share the captured image URI
+        type: "image/jpeg",
       };
 
-      await Share.share(shareOptions);
+      await Share.open(shareOptions);
     } catch (error: any) {
-      Alert.alert('Sharing failed', error.message);
+      Alert.alert("Sharing failed", error.message || "Something went wrong.");
+      console.error("Share error:", error);
+    } finally {
+      setIsSharing(false);
+      setPopupVisible(false); // Close popup after sharing
     }
   };
-
 
   // **FIXED: Always show results, never show loading indefinitely**
   if (!battleData.isValid) {
@@ -549,7 +505,6 @@ export default function BattleResultsScreen() {
       showsVerticalScrollIndicator={false}
     >
       <View className="flex-1 bg-white justify-center items-center p-4">
-        {/* Shareable Card */}
         <ViewShot
           ref={viewShotRef}
           options={{
@@ -660,18 +615,22 @@ export default function BattleResultsScreen() {
 
           <TouchableOpacity
             className="py-3 px-6 border border-black rounded-full flex-1 ml-1"
-            onPress={handleShare}
+            onPress={shareImageAndText} // Change this from handleShare to shareImageAndText
             disabled={isSharing}
             activeOpacity={0.7}
           >
-            <View className="flex-row items-center justify-center gap-2">
-              <Text className="font-black text-2xl">Share</Text>
-              <Image
-                source={require("../../assets/icons/share.png")}
-                style={{ width: 20, height: 20 }}
-                tintColor="#FF6B35"
-              />
-            </View>
+            {isSharing ? (
+              <ActivityIndicator color="#FF6B35" />
+            ) : (
+              <View className="flex-row items-center justify-center gap-2">
+                <Text className="font-black text-2xl">Share</Text>
+                <Image
+                  source={require("../../assets/icons/share.png")}
+                  style={{ width: 20, height: 20 }}
+                  tintColor="#FF6B35"
+                />
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -679,100 +638,6 @@ export default function BattleResultsScreen() {
           TezMaths - Sharpen Your Speed
         </Text>
       </View>
-
-      {/* Share Options Modal */}
-      <Modal
-        visible={isPopupVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setPopupVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Share Your Battle Results</Text>
-
-            {/* <TouchableOpacity
-              style={styles.optionButton}
-              onPress={shareImageOnly}
-              disabled={isSharing}
-            >
-              <Text style={styles.optionText}>Share Image</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.optionButton}
-              onPress={shareTextOnly}
-              disabled={isSharing}
-            >
-              <Text style={styles.optionText}>Share Text</Text>
-            </TouchableOpacity> */}
-
-             <TouchableOpacity
-              style={styles.optionButton}
-              onPress={shareImageAndText}
-              disabled={isSharing}
-            >
-              <Text style={styles.optionText}>Share image + Text</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setPopupVisible(false)}
-              disabled={isSharing}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  modalContent: {
-    width: "80%",
-    backgroundColor: "white",
-    borderRadius: 20,
-    padding: 20,
-    alignItems: "center",
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 20,
-    color: "#333",
-  },
-  optionButton: {
-    width: "100%",
-    padding: 15,
-    marginVertical: 5,
-    backgroundColor: "#FF6B35",
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  optionText: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  cancelButton: {
-    width: "100%",
-    padding: 15,
-    marginTop: 10,
-    backgroundColor: "#e0e0e0",
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  cancelText: {
-    color: "#333",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-});

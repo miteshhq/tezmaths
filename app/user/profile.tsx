@@ -77,10 +77,7 @@ export default function ProfileScreen() {
 
   const fetchUserRank = async () => {
     try {
-      const usersRef = query(
-        ref(database, "users"),
-        limitToLast(1000)
-      );
+      const usersRef = query(ref(database, "users"), limitToLast(1000));
       const snapshot = await get(usersRef);
 
       if (snapshot.exists()) {
@@ -293,46 +290,45 @@ export default function ProfileScreen() {
     router.push("/user/edit-profile");
   };
 
- const handleLogout = async () => {
-  const LEVEL_STORAGE_KEY = "highestLevelReached";
+  const handleLogout = async () => {
+    const LEVEL_STORAGE_KEY = "highestLevelReached";
 
-  // Stop all sounds
-  await SoundManager.stopSound("levelSoundEffect");
-  await SoundManager.stopSound("clappingSoundEffect");
-  await SoundManager.stopSound("victorySoundEffect");
-  await SoundManager.stopSound("failSoundEffect");
+    // Stop all sounds
+    await SoundManager.stopSound("levelSoundEffect");
+    await SoundManager.stopSound("clappingSoundEffect");
+    await SoundManager.stopSound("victorySoundEffect");
+    await SoundManager.stopSound("failSoundEffect");
 
-  try {
-    const userId = auth.currentUser?.uid;
+    try {
+      const userId = auth.currentUser?.uid;
 
-    if (userId) {
-      const userRef = ref(database, `users/${userId}`);
-      const storedLevel = await AsyncStorage.getItem(LEVEL_STORAGE_KEY);
-      const highestCompletedLevel = Number(storedLevel) || 0;
+      if (userId) {
+        const userRef = ref(database, `users/${userId}`);
+        const storedLevel = await AsyncStorage.getItem(LEVEL_STORAGE_KEY);
+        const highestCompletedLevel = Number(storedLevel) || 0;
 
-      await update(userRef, {
-        highestCompletedLevelCompleted: highestCompletedLevel,
-      });
+        await update(userRef, {
+          highestCompletedLevelCompleted: highestCompletedLevel,
+        });
+      }
+
+      // Firebase logout
+      await signOut(auth);
+
+      // Clear async storage
+      await AsyncStorage.removeItem("userData");
+      await AsyncStorage.removeItem(LEVEL_STORAGE_KEY);
+      await AsyncStorage.removeItem("@google_signin_user");
+      await AsyncStorage.removeItem("google_signin_account");
+      await AsyncStorage.clear();
+
+      router.replace("/login");
+    } catch (error) {
+      console.error("[PROFILE] Logout failed:", error);
+      // As a fallback, try redirect anyway
+      router.replace("/login");
     }
-
-    // Firebase logout
-    await signOut(auth);
-
-    // Clear async storage
-    await AsyncStorage.removeItem("userData");
-    await AsyncStorage.removeItem(LEVEL_STORAGE_KEY);
-    await AsyncStorage.removeItem("@google_signin_user");
-    await AsyncStorage.removeItem("google_signin_account");
-    await AsyncStorage.clear();
-
-    router.replace("/login");
-  } catch (error) {
-    console.error("[PROFILE] Logout failed:", error);
-    // As a fallback, try redirect anyway
-    router.replace("/login");
-  }
-};
-
+  };
 
   if (loading) {
     return (
@@ -394,19 +390,21 @@ export default function ProfileScreen() {
                       </TouchableOpacity>
                     </View>
 
-                    <Text className="text-gray-600 text-lg">
-                      @{userData.username}
-                    </Text>
+                    <View className="flex justify-between flex-row gap-1 max-w-64 mt-2">
+                      <Text className="text-gray-600 text-lg">
+                        @{userData.username}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={handleLogout}
+                        className="bg-primary px-2 py-1 rounded-lg"
+                      >
+                        <Text className="text-white font-semibold text-xs">
+                          LOG OUT
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
-                <TouchableOpacity
-                  onPress={handleLogout}
-                  className="bg-primary px-4 py-2 rounded-lg"
-                >
-                  <Text className="text-white font-semibold text-sm">
-                    LOG OUT
-                  </Text>
-                </TouchableOpacity>
               </View>
             </View>
           </View>

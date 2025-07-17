@@ -1,25 +1,20 @@
-// Updated version with fixed sharing logic
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as FileSystem from "expo-file-system"; // Add this import
+import * as FileSystem from "expo-file-system";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Image,
-  Modal,
   ScrollView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  Platform,
-  Share,
 } from "react-native";
-import * as Sharing from "expo-sharing";
+import Share from "react-native-share"; // Use react-native-share instead of React Native's Share
 import ViewShot from "react-native-view-shot";
 import SoundManager from "../../components/soundManager";
+
 // Import logo as a module declaration instead of direct import
 const logo = require("../../assets/branding/tezmaths-full-logo.png");
 
@@ -37,14 +32,12 @@ const shareConfig = {
 export default function ResultsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  // Fix useRef with proper type annotations
   const cardRef = useRef<View>(null);
   const viewShotRef = useRef<ViewShot>(null);
   const [userData, setUserData] = useState({ username: "player" });
-
   const [isSharing, setIsSharing] = useState(false);
 
-  // Fix parameter parsing by ensuring they're strings
+  // Parameter parsing (same as original)
   const totalGameTimeMs =
     Number.parseInt(
       Array.isArray(params.totalGameTime)
@@ -117,7 +110,7 @@ export default function ResultsScreen() {
             await SoundManager.playSound("failSoundEffect");
           }
         } catch (error) {
-          //   console.error("Error playing result sound:", error);
+          // console.error("Error playing result sound:", error);
         }
       };
       playResultSound();
@@ -204,10 +197,9 @@ export default function ResultsScreen() {
     }
   };
 
-  // Alternative robust sharing solution
+  // Fixed image + text sharing logic from the original version
   const shareImageAndText = async () => {
     setIsSharing(true);
-
     try {
       // Capture the image from ViewShot
       if (!viewShotRef.current) throw new Error("ViewShot ref not available");
@@ -215,99 +207,24 @@ export default function ResultsScreen() {
 
       // Save image to file system
       const timestamp = Date.now();
-      const fileName = `tezmaths_result_${timestamp}.jpg`;
-      const newUri = `${FileSystem.documentDirectory}${fileName}`;
+      const newUri = `${FileSystem.documentDirectory}tezmaths_result_${timestamp}.jpg`;
       await FileSystem.copyAsync({ from: uri, to: newUri });
 
-      // Verify file exists
-      const fileInfo = await FileSystem.getInfoAsync(newUri);
-      if (!fileInfo.exists) {
-        throw new Error("Failed to save image file");
-      }
+      // Use react-native-share for proper image + text sharing
+      const shareOptions = {
+        title: "Check this out!",
+        message: getShareMessage(),
+        url: newUri, // Share the captured image URI
+        type: "image/jpeg",
+      };
 
-      const message = getShareMessage();
-
-      if (Platform.OS === "android") {
-        // Android: Use content:// URI for better compatibility
-        const contentUri = `content://com.android.externalstorage.documents/document/primary:${fileName}`;
-
-        // Try multiple sharing approaches
-        const shareOptions = [
-          {
-            title: "My TezMaths Score!",
-            message: message,
-            url: `file://${newUri}`,
-            type: "image/jpeg",
-          },
-          {
-            title: "My TezMaths Score!",
-            message: message,
-            url: newUri,
-            type: "image/jpeg",
-          },
-          {
-            title: "My TezMaths Score!",
-            message: `${message}\n\nImage: ${newUri}`,
-            type: "text/plain",
-          },
-        ];
-
-        // Try each option until one works
-        for (const option of shareOptions) {
-          try {
-            await Share.share(option);
-            break; // If successful, exit loop
-          } catch (err) {
-            // console.log("Share option failed:", err);
-            continue; // Try next option
-          }
-        }
-      } else {
-        // iOS: Use expo-sharing for better image handling
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(newUri, {
-            dialogTitle: "Share your TezMaths result!",
-            mimeType: "image/jpeg",
-          });
-        } else {
-          // Fallback for iOS
-          await Share.share({
-            title: "My TezMaths Score!",
-            message: message,
-            url: newUri,
-          });
-        }
-      }
+      await Share.open(shareOptions);
     } catch (error: any) {
-      // Don't show error if user cancelled
-      if (
-        error.message &&
-        !error.message.includes("cancel") &&
-        !error.message.includes("dismissed")
-      ) {
-        Alert.alert(
-          "Sharing failed",
-          `Error: ${error.message}\nTrying text-only share...`
-        );
-
-        // Fallback to text-only sharing
-        try {
-          await Share.share({
-            title: "My TezMaths Score!",
-            message: getShareMessage(),
-          });
-        } catch (fallbackError) {
-          console.error("Fallback share also failed:", fallbackError);
-        }
-      }
+      Alert.alert("Sharing failed", error.message || "Something went wrong.");
       console.error("Share error:", error);
     } finally {
       setIsSharing(false);
     }
-  };
-
-  const handleShare = () => {
-    shareImageAndText();
   };
 
   return (
@@ -329,15 +246,14 @@ export default function ResultsScreen() {
             result: "tmpfile",
             snapshotContentContainer: false,
           }}
-          style={{ backgroundColor: "white" }} // Ensure white background
+          style={{ backgroundColor: "white" }}
         >
           <View
             ref={cardRef}
             collapsable={false}
             className="bg-custom-gray border-4 border-white p-4 rounded-3xl shadow-xl w-full"
             style={{
-              // Add explicit styling to ensure proper rendering in screenshot
-              backgroundColor: "#f5f5f5", // or whatever your custom-gray color is
+              backgroundColor: "#f5f5f5",
             }}
           >
             <View className="items-center mb-6">
@@ -406,7 +322,7 @@ export default function ResultsScreen() {
 
           <TouchableOpacity
             className="py-3 px-6 flex-1 ml-1 border border-black rounded-full"
-            onPress={handleShare}
+            onPress={shareImageAndText}
             disabled={isSharing}
           >
             {isSharing ? (
@@ -432,51 +348,3 @@ export default function ResultsScreen() {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  modalContent: {
-    width: "80%",
-    backgroundColor: "white",
-    borderRadius: 20,
-    padding: 20,
-    alignItems: "center",
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 20,
-    color: "#333",
-  },
-  optionButton: {
-    width: "100%",
-    padding: 15,
-    marginVertical: 5,
-    backgroundColor: "#FF6B35",
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  optionText: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  cancelButton: {
-    width: "100%",
-    padding: 15,
-    marginTop: 10,
-    backgroundColor: "#e0e0e0",
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  cancelText: {
-    color: "#333",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-});
