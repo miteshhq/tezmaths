@@ -16,6 +16,7 @@ import {
 } from "firebase/database";
 import { auth, database } from "../firebase/firebaseConfig";
 import { updateUserStreak } from './streakManager';
+import {endBattleDueToHostExit} from './handlehostExit';
 
 export class BattleManager {
     constructor() {
@@ -208,6 +209,7 @@ export class BattleManager {
     }
 
     async clearAllRooms() {
+        await endBattleDueToHostExit();
         try {
             const roomsRef = ref(database, "rooms");
             const snapshot = await get(roomsRef);
@@ -310,13 +312,22 @@ export class BattleManager {
 
 
 
-    async cleanupMatchmakingRoom(roomId) {
-        try {
-            await remove(ref(database, `matchmaking/${roomId}`));
-        } catch (error) {
-            console.error("Cleanup error:", error);
-        }
+ async cleanupMatchmakingRoom(roomId) {
+  try {
+    const roomRef = ref(database, `rooms/${roomId}`);
+    const snapshot = await get(roomRef);
+    const room = snapshot.val();
+
+    if (room?.matchmakingRoom && room.status === "finished") {
+      await remove(roomRef);
+      console.log(`Room ${roomId} cleaned up.`);
+    } else {
+      console.log(`Room ${roomId} not eligible for cleanup.`);
     }
+  } catch (error) {
+    console.error("Cleanup error:", error);
+  }
+}
 
     async cleanupStaleMatchmaking(userId) {
         const matchmakingRef = ref(database, "matchmaking");
@@ -461,6 +472,7 @@ export class BattleManager {
     }
 
     async cancelMatchmaking() {
+        await endBattleDueToHostExit();
         try {
             const user = await this.waitForAuth();
             const userId = user.uid;
