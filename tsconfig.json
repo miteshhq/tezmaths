@@ -4,17 +4,17 @@
     "jsx": "react",
     "strict": false,
     "paths": {
-      "@/*": [
-        "./*"
-      ]
-    }
+      "@/*": ["./*"]
+    },
+    "skipLibCheck": true
   },
   "include": [
-        "**/*.ts",
-        "**/*.tsx",
-        ".expo/types/**/*.ts",
-        "expo-env.d.ts",
-        "nativewind-env.d.ts",
-        "utils/useGoogleSignIn.ts"
-, "utils/generateUrl.js"    ]
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts",
+    "nativewind-env.d.ts",
+    "utils/useGoogleSignIn.ts",
+    "utils/generateUrl.js"
+, "index.js"  ]
 }

@@ -210,81 +210,81 @@ export default function ResultsScreen() {
 
   
   // const ShareComponent: React.FC = () => {
-const shareImageAndText = async () => {
-  setIsSharing(true);
+// const shareImageAndText = async () => {
+//   setIsSharing(true);
 
-  try {
-    // Capture the image from ViewShot
-    if (!viewShotRef.current) throw new Error("ViewShot ref not available");
-    const uri = await viewShotRef.current.capture();
+//   try {
+//     // Capture the image from ViewShot
+//     if (!viewShotRef.current) throw new Error("ViewShot ref not available");
+//     const uri = await viewShotRef.current.capture();
 
-    // Save image to file system
-    const timestamp = Date.now();
-    const newUri = `${FileSystem.documentDirectory}tezmaths_result_${timestamp}.jpg`;
-    await FileSystem.copyAsync({ from: uri, to: newUri });
+//     // Save image to file system
+//     const timestamp = Date.now();
+//     const newUri = `${FileSystem.documentDirectory}tezmaths_result_${timestamp}.jpg`;
+//     await FileSystem.copyAsync({ from: uri, to: newUri });
 
-    const message = getShareMessage();
+//     const message = getShareMessage();
 
-    if (Platform.OS === 'android') {
-      // Share image + text together on Android
-      await Share.share({
-        title: "Check this out!",
-        message: message,
-        url: newUri,
-      });
-    } else if (await Sharing.isAvailableAsync()) {
-      // On iOS, share image first
-      await Sharing.shareAsync(newUri, {
-        dialogTitle: "Share your result!",
-        mimeType: "image/jpeg",
-      });
+//     if (Platform.OS === 'android') {
+//       // Share image + text together on Android
+//       await Share.share({
+//         title: "Check this out!",
+//         message: message,
+//         url: newUri,
+//       });
+//     } else if (await Sharing.isAvailableAsync()) {
+//       // On iOS, share image first
+//       await Sharing.shareAsync(newUri, {
+//         dialogTitle: "Share your result!",
+//         mimeType: "image/jpeg",
+//       });
 
-      // Then optionally share text separately
-      await Share.share({ message });
-    } else {
-      Alert.alert("Sharing not available on this device");
+//       // Then optionally share text separately
+//       await Share.share({ message });
+//     } else {
+//       Alert.alert("Sharing not available on this device");
+//     }
+
+//   } catch (error: any) {
+//     Alert.alert("Sharing failed", error.message || "Something went wrong.");
+//     console.error("Share error:", error);
+//   } finally {
+//     setIsSharing(false);
+//     setPopupVisible(false);
+//   }
+// };
+
+  const shareImage = async () => {
+    setIsSharing(true);
+    try {
+      const newUri = await captureImage();
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(newUri);
+      } else {
+        await Share.share({ url: newUri });
+      }
+    } catch (error) {
+      console.error("Error sharing image:", error);
+      Alert.alert("Error", "Couldn't share image. Please try again.");
+    } finally {
+      setIsSharing(false);
+      setPopupVisible(false);
     }
+  };
 
-  } catch (error: any) {
-    Alert.alert("Sharing failed", error.message || "Something went wrong.");
-    console.error("Share error:", error);
-  } finally {
-    setIsSharing(false);
-    setPopupVisible(false);
-  }
-};
-
-  // const shareImageOnly = async () => {
-  //   setIsSharing(true);
-  //   try {
-  //     const newUri = await captureImage();
-  //     if (await Sharing.isAvailableAsync()) {
-  //       await Sharing.shareAsync(newUri);
-  //     } else {
-  //       await Share.share({ url: newUri });
-  //     }
-  //   } catch (error) {
-  //     console.error("Error sharing image:", error);
-  //     Alert.alert("Error", "Couldn't share image. Please try again.");
-  //   } finally {
-  //     setIsSharing(false);
-  //     setPopupVisible(false);
-  //   }
-  // };
-
-  // // Share only the text
-  // const shareTextOnly = async () => {
-  //   setIsSharing(true);
-  //   try {
-  //     const shareMessage = getShareMessage();
-  //     await Share.share({ message: shareMessage });
-  //   } catch (error) {
-  //     console.error("Error sharing text:", error);
-  //   } finally {
-  //     setIsSharing(false);
-  //     setPopupVisible(false);
-  //   }
-  // };
+  // Share only the text
+  const shareText = async () => {
+    setIsSharing(true);
+    try {
+      const shareMessage = getShareMessage();
+      await Share.share({ message: shareMessage });
+    } catch (error) {
+      console.error("Error sharing text:", error);
+    } finally {
+      setIsSharing(false);
+      setPopupVisible(false);
+    }
+  };
 
   const captureImage = async () => {
     // Add null check for viewShotRef
@@ -439,9 +439,15 @@ const shareImageAndText = async () => {
             <Text style={styles.modalTitle}>Share Your Results</Text>
             <TouchableOpacity
             style= {styles.optionButton}
-            onPress={shareImageAndText}
+            onPress={shareImage}
             disabled= {isSharing}>
-              <Text style= {styles.optionText}>Share Image + Link</Text>
+              <Text style= {styles.optionText}>Share Image</Text>
+            </TouchableOpacity>
+             <TouchableOpacity
+            style= {styles.optionButton}
+            onPress={shareText}
+            disabled= {isSharing}>
+              <Text style= {styles.optionText}>Share Link</Text>
             </TouchableOpacity>
             
 

@@ -310,7 +310,7 @@ const handleCreateRoom = async () => {
 };
   const startBattleRoom = async () => {
     if (Object.keys(playersInRoom).length < 2) {
-      Alert.alert("Need More Players", "Wait for at least 2 players to join");
+      // Alert.alert("Need More Players", "Wait for at least 2 players to join");
       return;
     }
 

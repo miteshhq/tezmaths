@@ -21,7 +21,7 @@ import {
 } from "react-native";
 import SoundManager from "../../components/soundManager";
 import { auth, database } from "../../firebase/firebaseConfig";
-import { checkStreakDecay } from "../../utils/streakManager";
+import { updateUserStreak } from "../../utils/streakManager";
 
 // Define interfaces for type safety
 interface Quiz {
@@ -119,6 +119,9 @@ export default function HomeScreen() {
       // console.error("Error loading cached data:", error);
     }
   };
+
+
+
 
  
 
@@ -437,8 +440,10 @@ useFocusEffect(
   const params = useLocalSearchParams();
 
   const checkAndUpdateStreak = useCallback(async () => {
+
     const userId = auth.currentUser?.uid;
     if (!userId) return;
+    
 
     try {
       const showStreakPopupFlag = await AsyncStorage.getItem("showStreakPopup");
@@ -461,7 +466,7 @@ useFocusEffect(
         }
       } else {
         // App opened normally - check for streak decay
-        const decayResult = await checkStreakDecay();
+        const decayResult = await updateUserStreak();
         if (decayResult.decayed) {
           setUserStreak(0);
         } else {
@@ -480,7 +485,7 @@ useFocusEffect(
   }, [params.quizCompleted]);
 
   const checkStreakDecayOnFocus = useCallback(async () => {
-    await checkStreakDecay();
+    await updateUserStreak();
   }, []);
 
   
@@ -496,6 +501,9 @@ useFocusEffect(
       checkAndUpdateStreak();
     }, [loadAllData, checkStreakDecayOnFocus, checkAndUpdateStreak])
   );
+
+
+
 
   // Refresh handler
   const onRefresh = useCallback(async () => {
@@ -557,6 +565,31 @@ useFocusEffect(
       </View>
     );
   }
+{/* Streak Popup Modal */}
+<Modal
+  visible={showStreakPopup}
+  transparent
+  animationType="fade"
+  onRequestClose={() => setShowStreakPopup(false)}
+>
+  <View className="flex-1 justify-center items-center">
+    <View className=" rounded-2xl p-6 w-4/5 items-center">
+      <Text className="text-2xl font-bold text-center mb-4 text-orange-600">
+        Streak
+      </Text>
+      <Text className="text-lg text-center mb-6 text-custom-purple">
+        {streakPopupMessage}
+      </Text>
+      <TouchableOpacity
+        className="bg-primary rounded-full px-8 py-3"
+        onPress={() => setShowStreakPopup(false)}
+      >
+        <Text className="text-white font-bold text-center">Close</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+</Modal>
+
 
   return (
     <View className="flex-1 bg-white">

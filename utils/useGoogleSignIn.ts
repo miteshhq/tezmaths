@@ -4,20 +4,21 @@ import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { auth, database } from '../firebase/firebaseConfig';
 import { ref, get, set } from 'firebase/database';
 import Constants from 'expo-constants';
+import * as AuthSession from 'expo-auth-session';
 
 const isExpo = Constants.AppOwnership === 'expo';
 
-const CLIENT_ID = '235143806197-1k7eq1jcq6gc5h6th0opmvtm03gqt7gs.apps.googleusercontent.com';
+const CLIENT_ID = '111721116016866408083';
 
 export const useSimpleGoogleSignIn = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
 
-const redirectUri = makeRedirectUri(
-  {
-    native: '/user/profile',}
-);
+const redirectUri = AuthSession.makeRedirectUri({
+
+});
+
 
 
   const [request, response, promptAsync] = useAuthRequest(

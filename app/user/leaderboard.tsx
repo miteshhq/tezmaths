@@ -119,6 +119,63 @@ export default function LeaderboardScreen() {
   const [quizMasters, setQuizMasters] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+    const [userRank, setUserRank] = useState<number>(0);
+
+
+  const [currentUserData, setcurrentUserData] = useState<any>({
+      totalPoints: 0,
+      highScore: 0,
+      currentLevel: '--',
+    });
+
+      const fetchUserRank = async () => {
+        try {
+          const usersRef = query(
+            ref(database, "users"),
+            limitToLast(1000)
+          );
+          const snapshot = await get(usersRef);
+    
+          if (snapshot.exists()) {
+            const users = Object.entries(snapshot.val())
+              .map(([id, user]: [string, any]) => ({
+                id,
+                username: user.username || "Unknown",
+                highScore: user.highScore ?? 0,
+                email: user.email || "",
+              }))
+              .filter(
+                (user) =>
+                  user.email !== "tezmaths@admin.com" &&
+                  user.username.toLowerCase() !== "admin"
+              )
+              .sort((a, b) => b.highScore - a.highScore)
+              .map((user, index) => ({ ...user, rank: index + 1 }));
+    
+            const currentUser = users.find((user) => user.id === currentUserId);
+            if (currentUser) {
+              setUserRank(currentUser.rank);
+            } else {
+              setUserRank(0);
+            }
+          }
+        } catch (error) {
+          console.error("[PROFILE] Failed to fetch user rank:", error);
+          setUserRank(0);
+        }
+      };
+
+        useEffect(() => {
+          if (currentUserId && currentUserData.highScore !== undefined) {
+            const timeoutId = setTimeout(() => {
+              fetchUserRank();
+            }, 500);
+      
+            return () => clearTimeout(timeoutId);
+          }
+        }, [currentUserId, currentUserData.highScore]);
+
+    
 
   const fetchLeaderboard = async () => {
     try {
@@ -375,6 +432,36 @@ export default function LeaderboardScreen() {
           </View>
         </View>
       )}
+      {currentUserData && (
+  <View className="bg-primary/10 rounded-2xl mx-4 mt-4 mb-1 p-4 border-l-4 border-primary shadow-sm">
+    <View className="flex-row items-center justify-between">
+      <View>
+        <Text className="text-lg font-bold text-black">
+          {currentUserData.fullName} 👉
+(You)
+        </Text>
+        <Text className="text-gray-600 text-xl mt-1">
+          🏅Rank:
+          <Text className="font-semibold text-xl text-custom-purple"> #{userRank > 0 ? userRank : "—"}</Text>
+        </Text>
+        <Text className="text-gray-600 text-xl">
+          ⭐Points:
+         <Text className="text-xl font-black text-custom-purple">
+                           {currentUserData.totalPoints % 1 !== 0
+                    ? Math.round(currentUserData.totalPoints * 10) / 10
+                    : currentUserData.totalPoints || 0}
+                         </Text>
+        </Text>
+      </View>
+      <Image
+        source={require("../../assets/icons/ribbon-badge.png")}
+        style={{ width: 40, height: 40 }}
+        tintColor="#FF6B35"
+      />
+    </View>
+  </View>
+)}
+
     </View>
   );
 }
