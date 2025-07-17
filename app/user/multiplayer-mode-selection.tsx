@@ -277,7 +277,7 @@ const handleCreateRoom = async () => {
     setRoomCode(newRoomCode);
     setRoomId(newRoomId);
 
-    console.log("✅ Room created with code:", newRoomCode, "and id:", newRoomId);
+    // console.log("✅ Room created with code:", newRoomCode, "and id:", newRoomId);
 
     // Mark the host as ready
     await battleManager.toggleReady(newRoomId);

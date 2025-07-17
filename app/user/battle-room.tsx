@@ -34,17 +34,15 @@ interface Room {
   currentQuestion?: number;
 }
 
-
-
 export default function BattleRoom() {
   const router = useRouter();
   const { roomId, isHost } = useLocalSearchParams();
   useEffect(() => {
-  if (!roomId) {
-    Alert.alert("Error", "Room not found.");
-    router.replace("/user/home");
-  }
-}, [roomId]);
+    if (!roomId) {
+      Alert.alert("Error", "Room not found.");
+      router.replace("/user/home");
+    }
+  }, [roomId]);
 
   const [room, setRoom] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -145,7 +143,7 @@ export default function BattleRoom() {
         room.hostId === userId &&
         !battleStartAttempted
       ) {
-        console.log("Fallback: Starting battle manually");
+        // console.log("Fallback: Starting battle manually");
         handleStartBattle();
       }
     }, 10000); // 10 second fallback
@@ -172,7 +170,7 @@ export default function BattleRoom() {
     if (playerCount === 1) {
       timeoutRef.current = setTimeout(async () => {
         if (isMounted && Object.keys(room.players || {}).length < 2) {
-          console.log("Matchmaking timeout triggered");
+          //   console.log("Matchmaking timeout triggered");
 
           // Clean up the room entirely
           try {
@@ -228,7 +226,7 @@ export default function BattleRoom() {
       ).length;
 
       if (readyAndConnectedCount === 2 && room.hostId === userId) {
-        console.log("Starting battle immediately with 2 ready players...");
+        // console.log("Starting battle immediately with 2 ready players...");
         const startBattle = async () => {
           try {
             await battleManager.startBattle(roomId);
@@ -264,20 +262,20 @@ export default function BattleRoom() {
   useEffect(() => {
     if (battleStarting && room?.matchmakingRoom && battleStartAttempted) {
       const fallbackTimer = setTimeout(() => {
-        console.log("=== FALLBACK TIMER TRIGGERED ===");
-        console.log("Room status:", room?.status);
-        console.log("Has questions:", !!room?.questions);
-        console.log("Questions length:", room?.questions?.length);
+        // console.log("=== FALLBACK TIMER TRIGGERED ===");
+        // console.log("Room status:", room?.status);
+        // console.log("Has questions:", !!room?.questions);
+        // console.log("Questions length:", room?.questions?.length);
 
         if (
           room?.status === "playing" &&
           room?.questions &&
           room?.questions.length > 0
         ) {
-          console.log("Room is ready, forcing navigation...");
+          //   console.log("Room is ready, forcing navigation...");
           safeNavigate(`/user/battle-screen?roomId=${roomId}&question=0`);
         } else {
-          console.log("Battle failed to start properly, resetting...");
+          //   console.log("Battle failed to start properly, resetting...");
           setBattleStarting(false);
           setBattleStartAttempted(false);
           Alert.alert(
@@ -360,12 +358,12 @@ export default function BattleRoom() {
             battleManager.updatePlayerConnection(roomId, true);
           }
 
-          console.log("Room data updated:", {
-            status: roomData?.status,
-            playerCount: Object.keys(roomData?.players || {}).length,
-            hasQuestions: !!roomData?.questions,
-            isMatchmaking: roomData?.matchmakingRoom,
-          });
+          //   console.log("Room data updated:", {
+          //     status: roomData?.status,
+          //     playerCount: Object.keys(roomData?.players || {}).length,
+          //     hasQuestions: !!roomData?.questions,
+          //     isMatchmaking: roomData?.matchmakingRoom,
+          //   });
 
           if (!roomData) {
             Alert.alert("Room Closed", "The battle room has been closed", [
@@ -378,8 +376,8 @@ export default function BattleRoom() {
           }
 
           if (JSON.stringify(roomData) !== JSON.stringify(room)) {
-  setRoom(roomData);
-}
+            setRoom(roomData);
+          }
 
           setLoading(false);
 
@@ -391,13 +389,13 @@ export default function BattleRoom() {
             !navigationRef.current &&
             !isNavigating
           ) {
-            console.log("Battle is ready, navigating to battle screen");
-            console.log(
-              "Room status:",
-              roomData.status,
-              "Questions:",
-              roomData.questions.length
-            );
+            // console.log("Battle is ready, navigating to battle screen");
+            // console.log(
+            //   "Room status:",
+            //   roomData.status,
+            //   "Questions:",
+            //   roomData.questions.length
+            // );
             setBattleStarting(true);
 
             // Navigate immediately for matchmaking, small delay for regular rooms
@@ -405,7 +403,7 @@ export default function BattleRoom() {
 
             battleNavigationTimeoutRef.current = setTimeout(() => {
               if (isMounted && !navigationRef.current) {
-                console.log("Executing navigation to battle screen");
+                // console.log("Executing navigation to battle screen");
                 safeNavigate(
                   `/user/battle-screen?roomId=${roomId}&question=${
                     roomData.currentQuestion || 0
@@ -439,7 +437,7 @@ export default function BattleRoom() {
     if (isNavigating || battleStarting) return;
 
     try {
-      console.log("User triggered battle start");
+      //   console.log("User triggered battle start");
       setBattleStarting(true);
       setBattleStartAttempted(true);
       await battleManager.startBattle(roomId);

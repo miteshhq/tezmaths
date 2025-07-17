@@ -258,7 +258,7 @@ export default function ResultsScreen() {
             await Share.share(option);
             break; // If successful, exit loop
           } catch (err) {
-            console.log("Share option failed:", err);
+            // console.log("Share option failed:", err);
             continue; // Try next option
           }
         }

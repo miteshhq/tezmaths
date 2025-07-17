@@ -160,7 +160,7 @@ export default function QuizScreen() {
 
   // **CORE CLEANUP FUNCTION**
   const cleanupQuiz = useCallback(() => {
-    console.log("🧹 Cleaning up quiz resources");
+    // console.log("🧹 Cleaning up quiz resources");
 
     // Clear all timers
     if (timerRef.current) {
@@ -186,7 +186,7 @@ export default function QuizScreen() {
 
   // **RESET QUIZ STATE**
   const resetQuizState = useCallback(() => {
-    console.log(`🔄 Resetting quiz state for level ${currentLevel}`);
+    // console.log(`🔄 Resetting quiz state for level ${currentLevel}`);
 
     cleanupQuiz();
 
@@ -237,7 +237,7 @@ export default function QuizScreen() {
   // **LOAD QUESTIONS**
   const loadQuestions = useCallback(async () => {
     try {
-      console.log(`📚 Loading questions for level ${currentLevel}`);
+    //   console.log(`📚 Loading questions for level ${currentLevel}`);
       setLoading(true);
       setNetworkError(false);
 
@@ -251,7 +251,7 @@ export default function QuizScreen() {
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            console.log(`💾 Loaded ${parsed.length} questions from cache`);
+            // console.log(`💾 Loaded ${parsed.length} questions from cache`);
             setQuestions(parsed);
             setMaxDisplayQuestions(parsed.length);
             setLoading(false);
@@ -296,9 +296,9 @@ export default function QuizScreen() {
       const shuffled = levelQuizzes.sort(() => 0.5 - Math.random());
       const selected = shuffled.slice(0, maxDisplay);
 
-      console.log(
-        `✅ Selected ${selected.length} questions for level ${currentLevel}`
-      );
+    //   console.log(
+    //     `✅ Selected ${selected.length} questions for level ${currentLevel}`
+    //   );
 
       // Cache the questions
       await AsyncStorage.setItem(cacheKey, JSON.stringify(selected));
@@ -320,7 +320,7 @@ export default function QuizScreen() {
 
   // **TIMER MANAGEMENT**
   const startTimer = useCallback(() => {
-    console.log("⏰ Starting timer");
+    // console.log("⏰ Starting timer");
 
     // Clear any existing timer
     if (timerRef.current) {
@@ -357,7 +357,7 @@ export default function QuizScreen() {
   }, [timerAnimation]);
 
   const stopTimer = useCallback(() => {
-    console.log("⏹️ Stopping timer");
+    // console.log("⏹️ Stopping timer");
 
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -371,7 +371,7 @@ export default function QuizScreen() {
   const handleTimeUp = useCallback(async () => {
     if (!isQuizActive || isProcessing || showExplanation) return;
 
-    console.log("⏰ Time's up!");
+    // console.log("⏰ Time's up!");
 
     setIsProcessing(true);
     setIsTimeOut(true);
@@ -401,9 +401,9 @@ export default function QuizScreen() {
         return;
       }
 
-      console.log(
-        `🎯 Submitting answer: ${isCorrect ? "✅ Correct" : "❌ Wrong"}`
-      );
+    //   console.log(
+    //     `🎯 Submitting answer: ${isCorrect ? "✅ Correct" : "❌ Wrong"}`
+    //   );
 
       setIsProcessing(true);
       stopTimer();
@@ -423,11 +423,11 @@ export default function QuizScreen() {
 
         // Check if this is the last question
         if (currentQuestionIndex >= questions.length - 1) {
-          console.log(`🎉 Level ${currentLevel} completed!`);
+        //   console.log(`🎉 Level ${currentLevel} completed!`);
           handleLevelComplete(newQuizScore, newCorrectAnswers);
         } else {
           // Move to next question
-          console.log(`➡️ Moving to next question`);
+        //   console.log(`➡️ Moving to next question`);
           moveToNextQuestion();
         }
       } else {
@@ -462,7 +462,7 @@ export default function QuizScreen() {
 
   // **MOVE TO NEXT QUESTION**
   const moveToNextQuestion = useCallback(() => {
-    console.log("➡️ Moving to next question");
+    // console.log("➡️ Moving to next question");
 
     // Animate question transition
     Animated.timing(questionTransition, {
@@ -495,9 +495,9 @@ export default function QuizScreen() {
   // **HANDLE LEVEL COMPLETION**
   const handleLevelComplete = useCallback(
     async (levelScore: number, levelCorrectAnswers: number) => {
-      console.log(
-        `🎉 Level ${currentLevel} completed with score: ${levelScore}`
-      );
+    //   console.log(
+    //     `🎉 Level ${currentLevel} completed with score: ${levelScore}`
+    //   );
 
       try {
         // Update user data in Firebase
@@ -570,7 +570,7 @@ export default function QuizScreen() {
           currentLevel >= (userData.currentLevel || 1)
         ) {
           updates.currentLevel = nextLevel;
-          console.log(`🆙 Unlocking next level: ${nextLevel}`);
+        //   console.log(`🆙 Unlocking next level: ${nextLevel}`);
         }
 
         await update(userRef, updates);
@@ -636,7 +636,7 @@ export default function QuizScreen() {
       finalCorrectAnswers?: number,
       isGameComplete = false
     ) => {
-      console.log("🏁 Game ending");
+    //   console.log("🏁 Game ending");
 
       setIsQuizActive(false);
       cleanupQuiz();
@@ -672,9 +672,9 @@ export default function QuizScreen() {
             const userRef = ref(database, `users/${userId}`);
             await update(userRef, { highScore: totalScore });
             await AsyncStorage.setItem("highScore", totalScore.toString());
-            console.log(
-              `Updated highScore to ${totalScore} in database and AsyncStorage`
-            );
+            // console.log(
+            //   `Updated highScore to ${totalScore} in database and AsyncStorage`
+            // );
           } catch (error) {
             console.error("Error updating highScore:", error);
           }
@@ -787,7 +787,7 @@ export default function QuizScreen() {
 
   // **HANDLE QUIZ INITIALIZATION**
   const handleQuizInit = useCallback(async () => {
-    console.log(`🎯 Initializing quiz for level ${currentLevel}`);
+    // console.log(`🎯 Initializing quiz for level ${currentLevel}`);
 
     setIsScreenFocused(true);
 
@@ -827,7 +827,7 @@ export default function QuizScreen() {
       handleQuizInit();
 
       return () => {
-        console.log(`🚪 Cleanup for level ${currentLevel}`);
+        // console.log(`🚪 Cleanup for level ${currentLevel}`);
         setIsScreenFocused(false);
         cleanupQuiz();
       };
@@ -837,7 +837,7 @@ export default function QuizScreen() {
   // **START QUIZ WHEN READY**
   useEffect(() => {
     if (!loading && questions.length > 0 && !isQuizActive && !showExplanation) {
-      console.log("🚀 Starting quiz");
+    //   console.log("🚀 Starting quiz");
       setIsQuizActive(true);
 
       // Start timer after a short delay

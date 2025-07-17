@@ -16,18 +16,18 @@ async function createAdminAccount() {
     try {
       // First, try to get existing user
       userRecord = await admin.auth().getUserByEmail(adminEmail);
-      console.log('Admin user already exists with UID:', userRecord.uid);
+    //   console.log('Admin user already exists with UID:', userRecord.uid);
     } catch (error) {
       if (error.code === 'auth/user-not-found') {
         // User doesn't exist, create new one
-        console.log('Creating new admin user...');
+        // console.log('Creating new admin user...');
         userRecord = await admin.auth().createUser({
           email: adminEmail,
           password: adminPassword,
           emailVerified: true,
           disabled: false,
         });
-        console.log('Successfully created admin user with UID:', userRecord.uid);
+        // console.log('Successfully created admin user with UID:', userRecord.uid);
       } else {
         throw error;
       }
@@ -39,7 +39,7 @@ async function createAdminAccount() {
         admin: true,
         role: 'admin'
       });
-      console.log('Admin custom claims set successfully');
+    //   console.log('Admin custom claims set successfully');
     } catch (claimsError) {
       console.error('Error setting custom claims:', claimsError.message);
     }
@@ -65,20 +65,20 @@ async function createAdminAccount() {
       };
       
       await realtimeDb.ref('users').child(userRecord.uid).set(userData);
-      console.log('Admin user data stored in Realtime Database successfully');
+    //   console.log('Admin user data stored in Realtime Database successfully');
     } catch (realtimeError) {
       console.warn('Warning: Could not store data in Realtime Database:', realtimeError.message);
     }
     
     // Retrieve the user to verify everything worked
     const retrievedUser = await admin.auth().getUser(userRecord.uid);
-    console.log('\n=== ADMIN ACCOUNT DETAILS ===');
-    console.log('UID:', retrievedUser.uid);
-    console.log('Email:', retrievedUser.email);
-    console.log('Email Verified:', retrievedUser.emailVerified);
-    console.log('Custom Claims:', retrievedUser.customClaims);
-    console.log('Provider Data:', retrievedUser.providerData.map(p => p.providerId));
-    console.log('=============================\n');
+    // console.log('\n=== ADMIN ACCOUNT DETAILS ===');
+    // console.log('UID:', retrievedUser.uid);
+    // console.log('Email:', retrievedUser.email);
+    // console.log('Email Verified:', retrievedUser.emailVerified);
+    // console.log('Custom Claims:', retrievedUser.customClaims);
+    // console.log('Provider Data:', retrievedUser.providerData.map(p => p.providerId));
+    // console.log('=============================\n');
     
     return retrievedUser;
     
@@ -91,17 +91,17 @@ async function createAdminAccount() {
 // Run both functions
 async function setupUsers() {
   try {
-    console.log('🔧 Setting up admin account...');
+    // console.log('🔧 Setting up admin account...');
     const adminUser = await createAdminAccount();
     
-    console.log('✅ All accounts setup completed successfully!');
-    console.log('\n📋 LOGIN CREDENTIALS:');
-    console.log('======================');
-    console.log('👑 ADMIN ACCOUNT:');
-    console.log('Email: tezmaths@admin.com');
-    console.log('Password: admin@t32m392s');
-    console.log('UID:', adminUser.uid);
-    console.log('======================');
+    // console.log('✅ All accounts setup completed successfully!');
+    // console.log('\n📋 LOGIN CREDENTIALS:');
+    // console.log('======================');
+    // console.log('👑 ADMIN ACCOUNT:');
+    // console.log('Email: tezmaths@admin.com');
+    // console.log('Password: admin@t32m392s');
+    // console.log('UID:', adminUser.uid);
+    // console.log('======================');
     
   } catch (error) {
     console.error('❌ Failed to setup accounts:', error.message);

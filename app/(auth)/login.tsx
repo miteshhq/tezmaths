@@ -61,7 +61,7 @@ export default function LoginScreen() {
 
   const handleUserRedirect = useCallback(
     async (user, userData) => {
-       console.log("➡️ Redirecting user:", user.email);
+    //    console.log("➡️ Redirecting user:", user.email);
       if (userData?.isnewuser === true || userData?.isnewuser === undefined) {
         router.push("/register");
         return;

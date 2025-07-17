@@ -70,7 +70,7 @@ export default function LeaderboardScreen() {
         // Find current user
         const currentUser = users.find((user) => user.id === currentUserId);
 
-        console.log(currentUser);
+        // console.log(currentUser);
 
         // Create final leaderboard
         let finalLeaderboard = [...topUsers];

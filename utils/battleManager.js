@@ -219,7 +219,7 @@ export class BattleManager {
                 );
 
                 await Promise.all(deletePromises);
-                console.log(`Deleted ${deletePromises.length} rooms`);
+                // console.log(`Deleted ${deletePromises.length} rooms`);
                 return deletePromises.length;
             }
             return 0;
@@ -229,83 +229,83 @@ export class BattleManager {
         }
     }
 
-  async findRandomMatch(maxPlayers = 2) {
-  try {
-    const user = await this.waitForAuth();
-    const userId = user.uid;
+    async findRandomMatch(maxPlayers = 2) {
+        try {
+            const user = await this.waitForAuth();
+            const userId = user.uid;
 
-    const roomsSnapshot = await get(ref(database, "rooms"));
-    const rooms = roomsSnapshot.val() || {};
+            const roomsSnapshot = await get(ref(database, "rooms"));
+            const rooms = roomsSnapshot.val() || {};
 
-    const now = Date.now();
-    const halfMinuteAgo = now - 30 * 1000;
+            const now = Date.now();
+            const halfMinuteAgo = now - 30 * 1000;
 
-  const availableRooms = Object.entries(rooms).filter(([roomId, room]) => {
-  // 🧹 Clean up disconnected players (ghosts)
-  if (room.players) {
-    Object.entries(room.players).forEach(([playerId, player]) => {
-      if (!player.connected) {
-        delete room.players[playerId];
-      }
-    });
-  }
+            const availableRooms = Object.entries(rooms).filter(([roomId, room]) => {
+                // 🧹 Clean up disconnected players (ghosts)
+                if (room.players) {
+                    Object.entries(room.players).forEach(([playerId, player]) => {
+                        if (!player.connected) {
+                            delete room.players[playerId];
+                        }
+                    });
+                }
 
-  const isMatchmakingRoom = room.matchmakingRoom === true;
-  const isWaiting = room.status === "waiting";
-  const hasSpace =
-    room.players &&
-    Object.keys(room.players).length < (room.maxPlayers || 2);
-  const isRecent = (room.lastActivity || 0) > halfMinuteAgo;
-  const matchesMaxPlayers = room.maxPlayers === maxPlayers;
+                const isMatchmakingRoom = room.matchmakingRoom === true;
+                const isWaiting = room.status === "waiting";
+                const hasSpace =
+                    room.players &&
+                    Object.keys(room.players).length < (room.maxPlayers || 2);
+                const isRecent = (room.lastActivity || 0) > halfMinuteAgo;
+                const matchesMaxPlayers = room.maxPlayers === maxPlayers;
 
-  return (
-    isMatchmakingRoom &&
-    isWaiting &&
-    hasSpace &&
-    isRecent &&
-    matchesMaxPlayers
-  );
-});
+                return (
+                    isMatchmakingRoom &&
+                    isWaiting &&
+                    hasSpace &&
+                    isRecent &&
+                    matchesMaxPlayers
+                );
+            });
 
 
-    if (availableRooms.length > 0) {
-      // Sort by most recent activity
-      availableRooms.sort(
-        ([, a], [, b]) => (b.lastActivity || 0) - (a.lastActivity || 0)
-      );
+            if (availableRooms.length > 0) {
+                // Sort by most recent activity
+                availableRooms.sort(
+                    ([, a], [, b]) => (b.lastActivity || 0) - (a.lastActivity || 0)
+                );
 
-      const [roomId, roomData] = availableRooms[0];
+                const [roomId, roomData] = availableRooms[0];
 
-      // Mark activity before joining
-      await update(ref(database, `rooms/${roomId}`), {
-        lastActivity: now,
-      });
+                // Mark activity before joining
+                await update(ref(database, `rooms/${roomId}`), {
+                    lastActivity: now,
+                });
 
-      await this.joinRoom(roomData.code);
+                await this.joinRoom(roomData.code);
 
-      return {
-        roomId,
-        roomCode: roomData.code,
-        isHost: false,
-      };
-    } else {
-      // No available room, create a new matchmaking room
-      const newRoom = await this.createRoom("Quick Battle", maxPlayers);
-      await update(ref(database, `rooms/${newRoom.roomId}`), {
-        matchmakingRoom: true,
-        lastActivity: now,
-      });
+                return {
+                    roomId,
+                    roomCode: roomData.code,
+                    isHost: false,
+                };
+            } else {
+                // No available room, create a new matchmaking room
+                const newRoom = await this.createRoom("Quick Battle", maxPlayers);
+                await update(ref(database, `rooms/${newRoom.roomId}`), {
+                    matchmakingRoom: true,
+                    lastActivity: now,
+                });
 
-      return {
-        ...newRoom,
-        isHost: true,
-      };
+                return {
+                    ...newRoom,
+                    isHost: true,
+                };
+            }
+        } catch (error) {
+            console.error("Random match error:", error);
+            throw new Error("Failed to find or create match");
+        }
     }
-  } catch (error) {
-    console.error("Random match error:", error);
-    throw new Error("Failed to find or create match");
-  }
-}
 
 
 
@@ -335,12 +335,12 @@ export class BattleManager {
         const listener = onValue(roomRef, async (snapshot) => {
             const roomData = snapshot.val();
 
-            console.log(`Room ${roomId} update:`, {
-                status: roomData?.status,
-                players: roomData?.players ? Object.keys(roomData.players).length : 0,
-                hostId: roomData?.hostId,
-                currentUserId: this.userId
-            });
+            // console.log(`Room ${roomId} update:`, {
+            //     status: roomData?.status,
+            //     players: roomData?.players ? Object.keys(roomData.players).length : 0,
+            //     hostId: roomData?.hostId,
+            //     currentUserId: this.userId
+            // });
 
             if (roomData) {
                 // Auto-start only if current user is host
@@ -349,14 +349,14 @@ export class BattleManager {
                     Object.keys(roomData.players || {}).length === roomData.maxPlayers &&
                     roomData.hostId === this.userId) {
 
-                    console.log("Conditions met for auto-start");
+                    // console.log("Conditions met for auto-start");
 
                     // Add a delay to ensure both clients are ready
                     setTimeout(async () => {
                         try {
-                            console.log("=== STARTING BATTLE ===");
+                            // console.log("=== STARTING BATTLE ===");
                             await this.startBattle(roomId);
-                            console.log("=== BATTLE START SUCCESS ===");
+                            // console.log("=== BATTLE START SUCCESS ===");
                         } catch (error) {
                             console.error("=== BATTLE START FAILED ===", error);
                         }
@@ -382,7 +382,7 @@ export class BattleManager {
             const userData = await this.getUserData(userId);
             const avatar = userData?.avatar || 0;
 
-            console.log("Attempting to join room with code:", roomCode);
+            // console.log("Attempting to join room with code:", roomCode);
 
             const snapshot = await get(query(
                 ref(database, "rooms"),
@@ -397,7 +397,7 @@ export class BattleManager {
             const roomId = Object.keys(snapshot.val())[0];
             const roomData = snapshot.val()[roomId];
 
-            console.log("Found room:", roomId, "Status:", roomData.status);
+            // console.log("Found room:", roomId, "Status:", roomData.status);
 
             if (roomData.status === "playing" || roomData.status === "finished") {
                 throw new Error("Game already in progress");
@@ -524,7 +524,7 @@ export class BattleManager {
             const user = await this.waitForAuth();
             const userId = user.uid;
 
-            console.log(`Updating connection: ${connected} for ${userId} in ${roomId}`);
+            // console.log(`Updating connection: ${connected} for ${userId} in ${roomId}`);
 
             await update(ref(database, `rooms/${roomId}/players/${userId}`), {
                 connected,
@@ -542,7 +542,7 @@ export class BattleManager {
 
     async startQuestionTransition(roomId, duration = 3000) {
         try {
-            console.log("Starting question transition for room:", roomId);
+            // console.log("Starting question transition for room:", roomId);
             const now = Date.now();
             const nextQuestionStartTime = now + duration;
 
@@ -552,7 +552,7 @@ export class BattleManager {
                 lastActivity: serverTimestamp()
             });
 
-            console.log("Question transition started, next question at:", new Date(nextQuestionStartTime));
+            // console.log("Question transition started, next question at:", new Date(nextQuestionStartTime));
             return nextQuestionStartTime;
         } catch (error) {
             console.error("Start transition error:", error);
@@ -562,7 +562,7 @@ export class BattleManager {
 
 
     getFallbackQuestions(count = 25) {
-        console.log(`[BattleManager] Using ${count} fallback questions`);
+        // console.log(`[BattleManager] Using ${count} fallback questions`);
         return Array(count).fill().map((_, i) => ({
             question: `${i + 1} + ${i + 5}`,
             correctAnswer: `${(i + 1) + (i + 5)}`,
@@ -717,10 +717,10 @@ export class BattleManager {
 
     async startBattle(roomId) {
         try {
-            console.log("[startBattle] Starting battle for room:", roomId);
+            // console.log("[startBattle] Starting battle for room:", roomId);
             const user = await this.waitForAuth();
             this.userId = user.uid; // Ensure userId is set
-            console.log("[startBattle] User:", this.userId);
+            // console.log("[startBattle] User:", this.userId);
 
             const roomRef = ref(database, `rooms/${roomId}`);
             const snapshot = await get(roomRef);
@@ -732,9 +732,9 @@ export class BattleManager {
                 throw new Error("Need at least 2 players");
             }
 
-            console.log("[startBattle] Generating questions...");
+            // console.log("[startBattle] Generating questions...");
             const questionData = await this.generateQuestions(1, 10);
-            console.log(`[startBattle] Questions fetched: ${questionData.questions.length} questions`);
+            // console.log(`[startBattle] Questions fetched: ${questionData.questions.length} questions`);
 
             if (!questionData.questions || questionData.questions.length === 0) {
                 throw new Error("Failed to generate questions");
@@ -768,9 +768,9 @@ export class BattleManager {
                 ...playerUpdates
             };
 
-            console.log("[startBattle] Updating room with battle data");
+            // console.log("[startBattle] Updating room with battle data");
             await update(roomRef, updateData);
-            console.log("[startBattle] Battle started successfully");
+            // console.log("[startBattle] Battle started successfully");
         } catch (error) {
             console.error("[startBattle] Error:", error);
             throw error;
@@ -990,7 +990,7 @@ export class BattleManager {
                 lastDisconnected: Date.now()
             });
 
-            console.log(`Disconnected from room: ${roomId}`);
+            // console.log(`Disconnected from room: ${roomId}`);
 
         } catch (error) {
             console.error('Error disconnecting from room:', error);
@@ -1002,7 +1002,7 @@ export class BattleManager {
         try {
             const roomRef = ref(database, `rooms/${roomId}`);
             await remove(roomRef);
-            console.log('Room deleted successfully');
+            // console.log('Room deleted successfully');
         } catch (error) {
             console.error('Error deleting room:', error);
             throw error;
@@ -1208,7 +1208,7 @@ export class BattleManager {
 
     async cleanupRoom(roomId, reason = "manual") {
         try {
-            console.log(`Cleaning up room ${roomId} - Reason: ${reason}`);
+            // console.log(`Cleaning up room ${roomId} - Reason: ${reason}`);
 
             const roomRef = ref(database, `rooms/${roomId}`);
             await remove(roomRef);

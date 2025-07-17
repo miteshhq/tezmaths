@@ -306,10 +306,10 @@ export default function RegisterScreen() {
       const userRef = ref(database, `users/${userIdToUse}`);
       await set(userRef, userData);
 
-      console.log(
-        "Registration completed successfully for:",
-        isGoogleUser === "true" ? "Google user" : "regular user"
-      );
+    //   console.log(
+    //     "Registration completed successfully for:",
+    //     isGoogleUser === "true" ? "Google user" : "regular user"
+    //   );
       router.prefetch("/user/home");
 
       router.push("/user/home");
