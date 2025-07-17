@@ -1,6 +1,6 @@
 // app/user/leaderboard.tsx
 import { FontAwesome } from "@expo/vector-icons";
-import { get, limitToLast, orderByChild, query, ref, update } from "firebase/database";
+import { get, ref } from "firebase/database";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -24,167 +24,23 @@ interface FirebaseUser {
 interface LeaderboardUser {
   id: string;
   username: string;
-  totalPoints: number;
+  highScore: number;
   fullName: string;
   email: string;
   rank: number;
 }
-
-// Mock data for when Firebase returns empty results
-const mockLeaderboardData: LeaderboardUser[] = [
-  {
-    id: "1",
-    username: "QuizMaster01",
-    totalPoints: 2500,
-    rank: 1,
-    fullName: "Quiz Master",
-    email: "",
-  },
-  {
-    id: "2",
-    username: "Brainiac",
-    totalPoints: 2200,
-    rank: 2,
-    fullName: "Brainiac",
-    email: "",
-  },
-  {
-    id: "3",
-    username: "SmartPlayer",
-    totalPoints: 1950,
-    rank: 3,
-    fullName: "Smart Player",
-    email: "",
-  },
-  {
-    id: "4",
-    username: "ThinkFast",
-    totalPoints: 1700,
-    rank: 4,
-    fullName: "Think Fast",
-    email: "",
-  },
-  {
-    id: "5",
-    username: "WiseOwl",
-    totalPoints: 1500,
-    rank: 5,
-    fullName: "Wise Owl",
-    email: "",
-  },
-  {
-    id: "6",
-    username: "CleverCat",
-    totalPoints: 1350,
-    rank: 6,
-    fullName: "Clever Cat",
-    email: "",
-  },
-  {
-    id: "7",
-    username: "SharpMind",
-    totalPoints: 1200,
-    rank: 7,
-    fullName: "Sharp Mind",
-    email: "",
-  },
-  {
-    id: "8",
-    username: "QuickWit",
-    totalPoints: 1100,
-    rank: 8,
-    fullName: "Quick Wit",
-    email: "",
-  },
-  {
-    id: "9",
-    username: "Genius99",
-    totalPoints: 1000,
-    rank: 9,
-    fullName: "Genius",
-    email: "",
-  },
-  {
-    id: "10",
-    username: "SmartCookie",
-    totalPoints: 950,
-    rank: 10,
-    fullName: "Smart Cookie",
-    email: "",
-  },
-];
 
 export default function LeaderboardScreen() {
   const currentUserId = auth.currentUser?.uid;
   const [quizMasters, setQuizMasters] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-    const [userRank, setUserRank] = useState<number>(0);
-
-
-  const [currentUserData, setcurrentUserData] = useState<any>({
-      totalPoints: 0,
-      highScore: 0,
-      currentLevel: '--',
-    });
-
-      const fetchUserRank = async () => {
-        try {
-          const usersRef = query(
-            ref(database, "users"),
-            limitToLast(1000)
-          );
-          const snapshot = await get(usersRef);
-    
-          if (snapshot.exists()) {
-            const users = Object.entries(snapshot.val())
-              .map(([id, user]: [string, any]) => ({
-                id,
-                username: user.username || "Unknown",
-                highScore: user.highScore ?? 0,
-                email: user.email || "",
-              }))
-              .filter(
-                (user) =>
-                  user.email !== "tezmaths@admin.com" &&
-                  user.username.toLowerCase() !== "admin"
-              )
-              .sort((a, b) => b.highScore - a.highScore)
-              .map((user, index) => ({ ...user, rank: index + 1 }));
-    
-            const currentUser = users.find((user) => user.id === currentUserId);
-            if (currentUser) {
-              setUserRank(currentUser.rank);
-            } else {
-              setUserRank(0);
-            }
-          }
-        } catch (error) {
-          console.error("[PROFILE] Failed to fetch user rank:", error);
-          setUserRank(0);
-        }
-      };
-
-        useEffect(() => {
-          if (currentUserId && currentUserData.highScore !== undefined) {
-            const timeoutId = setTimeout(() => {
-              fetchUserRank();
-            }, 500);
-      
-            return () => clearTimeout(timeoutId);
-          }
-        }, [currentUserId, currentUserData.highScore]);
-
-    
 
   const fetchLeaderboard = async () => {
     try {
       setLoading(true);
-      const usersRef = query(
-        ref(database, "users"),
-        orderByChild("highScore"),
-        limitToLast(1000) // Increased to ensure we get all users
-      );
+      // Fetch all users without ordering (no index required)
+      const usersRef = ref(database, "users");
       const snapshot = await get(usersRef);
 
       if (snapshot.exists()) {
@@ -194,7 +50,7 @@ export default function LeaderboardScreen() {
             ([id, user]): LeaderboardUser => ({
               id,
               username: user.username || "Unknown",
-              totalPoints: user.highScore ?? 0,
+              highScore: user.highScore ?? 0,
               fullName: user.fullName || "Unknown",
               email: user.email || "",
               rank: 0, // Will be set after sorting
@@ -205,38 +61,40 @@ export default function LeaderboardScreen() {
               user.email !== "tezmaths@admin.com" &&
               user.username.toLowerCase() !== "admin"
           )
-          .sort((a, b) => b.totalPoints - a.totalPoints)
+          .sort((a, b) => b.highScore - a.highScore)
           .map((user, index) => ({ ...user, rank: index + 1 }));
 
-        if (users.length === 0) {
-          setQuizMasters(mockLeaderboardData);
-        } else {
-          // Get top 10 users
-          const top10 = users.slice(0, 10);
+        // Get top users (up to 10 if available, but could be less)
+        const topUsers = users.slice(0, 10);
 
-          // Find current user
-          const currentUser = users.find((user) => user.id === currentUserId);
+        // Find current user
+        const currentUser = users.find((user) => user.id === currentUserId);
 
-          // Create final leaderboard
-          let finalLeaderboard = [...top10];
+        console.log(currentUser);
 
-          // ALWAYS add current user if they exist and are not already in top 10
-          if (currentUser) {
-            const isInTop10 = top10.some((user) => user.id === currentUserId);
-            if (!isInTop10) {
-              // Add current user at the end with separator
-              finalLeaderboard.push(currentUser);
-            }
+        // Create final leaderboard
+        let finalLeaderboard = [...topUsers];
+
+        // Add current user if they exist and are not already in the top users
+        if (currentUser) {
+          const isInTopUsers = topUsers.some(
+            (user) => user.id === currentUserId
+          );
+          if (!isInTopUsers) {
+            // Add current user at the end
+            finalLeaderboard.push(currentUser);
           }
-
-          setQuizMasters(finalLeaderboard);
         }
+
+        setQuizMasters(finalLeaderboard);
       } else {
-        setQuizMasters(mockLeaderboardData);
+        // If no data exists, set empty array
+        setQuizMasters([]);
       }
     } catch (error) {
       console.error("Failed to fetch leaderboard:", error);
-      setQuizMasters(mockLeaderboardData);
+      // On error, set empty array instead of mock data
+      setQuizMasters([]);
     } finally {
       setLoading(false);
     }
@@ -267,7 +125,6 @@ export default function LeaderboardScreen() {
     }
   }, [currentUserId]);
 
-  // Also update the renderQuizMaster to better handle the separator:
   const renderQuizMaster = ({
     item,
     index,
@@ -276,9 +133,13 @@ export default function LeaderboardScreen() {
     index: number;
   }) => {
     const isCurrentUser = item.id === currentUserId;
-    const isAfterTop10 = item.rank > 10;
-    const showSeparator =
-      isAfterTop10 && quizMasters.findIndex((user) => user.rank > 10) === index;
+
+    // Determine if current user is after the top ranked users
+    const topRankedUsers = quizMasters.filter((user) => user.rank <= 10);
+    const isAfterTopRanked = item.rank > 10 && topRankedUsers.length > 0;
+
+    // Show separator only before current user if they're not in top rankings
+    const showSeparator = isAfterTopRanked && isCurrentUser;
 
     // Get medal icon for top 3
     const getMedalIcon = (rank: number) => {
@@ -296,7 +157,7 @@ export default function LeaderboardScreen() {
 
     return (
       <>
-        {/* Add separator before current user if they're not in top 10 */}
+        {/* Add separator before current user if they're not in top rankings */}
         {showSeparator && (
           <View className="mx-4 my-3 flex-row items-center">
             <View className="flex-1 h-px bg-gray-300" />
@@ -350,9 +211,9 @@ export default function LeaderboardScreen() {
                   isCurrentUser ? "text-primary font-semibold" : "text-gray-600"
                 }`}
               >
-                {item.totalPoints % 1 !== 0
-                  ? Math.round(item.totalPoints * 10) / 10
-                  : item.totalPoints || 0}{" "}
+                {item.highScore % 1 !== 0
+                  ? Math.round(item.highScore * 10) / 10
+                  : item.highScore || 0}{" "}
                 points
               </Text>
             </View>
@@ -387,6 +248,18 @@ export default function LeaderboardScreen() {
     </ImageBackground>
   );
 
+  const renderEmptyState = () => (
+    <View className="flex-1 justify-center items-center py-8">
+      <FontAwesome name="trophy" size={48} color="#D1D5DB" />
+      <Text className="text-gray-500 text-lg font-medium mt-4">
+        No rankings available yet
+      </Text>
+      <Text className="text-gray-400 text-sm mt-2 text-center px-4">
+        Start playing quizzes to see your ranking on the leaderboard
+      </Text>
+    </View>
+  );
+
   return (
     <View className="flex-1 bg-white">
       {loading ? (
@@ -401,19 +274,36 @@ export default function LeaderboardScreen() {
           {renderHeader()}
           <View className="p-4 flex-1">
             <View className="flex-1 py-4 border border-black rounded-2xl">
-              <FlatList
-                data={quizMasters}
-                renderItem={renderQuizMaster}
-                keyExtractor={(item) => item.id}
-                refreshControl={
-                  <RefreshControl
-                    refreshing={refreshing}
-                    onRefresh={onRefresh}
-                    tintColor="#FF6B35"
-                    colors={["#FF6B35"]}
-                  />
-                }
-                ListHeaderComponent={() => (
+              {quizMasters.length > 0 ? (
+                <FlatList
+                  data={quizMasters}
+                  renderItem={renderQuizMaster}
+                  keyExtractor={(item) => item.id}
+                  refreshControl={
+                    <RefreshControl
+                      refreshing={refreshing}
+                      onRefresh={onRefresh}
+                      tintColor="#FF6B35"
+                      colors={["#FF6B35"]}
+                    />
+                  }
+                  ListHeaderComponent={() => (
+                    <View className="flex flex-row items-center gap-1 justify-center pb-4 border-b border-black mb-4">
+                      <Image
+                        source={require("../../assets/icons/ribbon-badge.png")}
+                        style={{ width: 28, height: 28 }}
+                        tintColor={"#FF6B35"}
+                      />
+                      <Text className="font-black text-center text-3xl text-custom-purple">
+                        Top Quiz Masters
+                      </Text>
+                    </View>
+                  )}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ paddingBottom: 20 }}
+                />
+              ) : (
+                <View className="flex-1">
                   <View className="flex flex-row items-center gap-1 justify-center pb-4 border-b border-black mb-4">
                     <Image
                       source={require("../../assets/icons/ribbon-badge.png")}
@@ -424,44 +314,13 @@ export default function LeaderboardScreen() {
                       Top Quiz Masters
                     </Text>
                   </View>
-                )}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingBottom: 20 }}
-              />
+                  {renderEmptyState()}
+                </View>
+              )}
             </View>
           </View>
         </View>
       )}
-      {currentUserData && (
-  <View className="bg-primary/10 rounded-2xl mx-4 mt-4 mb-1 p-4 border-l-4 border-primary shadow-sm">
-    <View className="flex-row items-center justify-between">
-      <View>
-        <Text className="text-lg font-bold text-black">
-          {currentUserData.fullName} 👉
-(You)
-        </Text>
-        <Text className="text-gray-600 text-xl mt-1">
-          🏅Rank:
-          <Text className="font-semibold text-xl text-custom-purple"> #{userRank > 0 ? userRank : "—"}</Text>
-        </Text>
-        <Text className="text-gray-600 text-xl">
-          ⭐Points:
-         <Text className="text-xl font-black text-custom-purple">
-                           {currentUserData.totalPoints % 1 !== 0
-                    ? Math.round(currentUserData.totalPoints * 10) / 10
-                    : currentUserData.totalPoints || 0}
-                         </Text>
-        </Text>
-      </View>
-      <Image
-        source={require("../../assets/icons/ribbon-badge.png")}
-        style={{ width: 40, height: 40 }}
-        tintColor="#FF6B35"
-      />
-    </View>
-  </View>
-)}
-
     </View>
   );
 }

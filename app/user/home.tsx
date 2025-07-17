@@ -17,11 +17,11 @@ import {
   ScrollView,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import SoundManager from "../../components/soundManager";
 import { auth, database } from "../../firebase/firebaseConfig";
-import { updateUserStreak } from "../../utils/streakManager";
+import { checkStreakDecay } from "../../utils/streakManager";
 
 // Define interfaces for type safety
 interface Quiz {
@@ -55,7 +55,9 @@ interface AppData {
 }
 
 export default function HomeScreen() {
-   const backHandlerRef = useRef<ReturnType<typeof BackHandler.addEventListener> | null>(null);
+  const backHandlerRef = useRef<ReturnType<
+    typeof BackHandler.addEventListener
+  > | null>(null);
 
   const LEVEL_STORAGE_KEY = "highestLevelReached";
   const USER_DATA_KEY = "userData";
@@ -70,6 +72,7 @@ export default function HomeScreen() {
   const [referrals, setReferrals] = useState(0);
   const [userStreak, setUserStreak] = useState(0);
   const [currentLevel, setCurrentLevel] = useState(1);
+  const [streakPopupType, setStreakPopupType] = useState("manual");
 
   // Quiz State
   const [availableLevels, setAvailableLevels] = useState<number[]>([]);
@@ -119,11 +122,6 @@ export default function HomeScreen() {
       // console.error("Error loading cached data:", error);
     }
   };
-
-
-
-
- 
 
   // Fetch user data from Firebase
   const fetchUserData = async (userId: string) => {
@@ -331,45 +329,41 @@ export default function HomeScreen() {
     setShowExitDialog(false);
   };
 
-  // Back handler setup - FIXED VERSION
-useFocusEffect(
-  useCallback(() => {
-    const onBackPress = () => {
-      Alert.alert(
-        "Exit App",
-        "Are you sure you want to quit?",
-        [
-          { text: "Resume", style: "cancel" },
-          { text: "Quit", onPress: () => BackHandler.exitApp() },
-        ],
-        { cancelable: true }
-      );
-      return true; // prevent default back action
-    };
+  // Back handler setup - ENSURES EXIT CONFIRMATION FROM ANYWHERE
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // Always show exit confirmation when back is pressed from home screen
+        // regardless of where user came from
+        if (!showExitDialog) {
+          showExitConfirmation();
+        }
+        return true; // Always prevent default back behavior
+      };
 
-    // Clean up previous listener
-    backHandlerRef.current?.remove?.();
-
-    // Add new listener
-    backHandlerRef.current = BackHandler.addEventListener("hardwareBackPress", onBackPress);
-
-    // Cleanup on unmount or unfocus
-    return () => {
+      // Clean up previous listener
       backHandlerRef.current?.remove?.();
-      backHandlerRef.current = null;
-    };
-  }, [])
-);
 
+      // Add new listener
+      backHandlerRef.current = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress
+      );
 
-  // Enhanced App state change handler - FIXED VERSION
+      // Cleanup on unmount or unfocus
+      return () => {
+        backHandlerRef.current?.remove?.();
+        backHandlerRef.current = null;
+      };
+    }, [showExitDialog])
+  );
+
+  // Enhanced App state change handler
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (appStateRef.current === "active" && nextAppState === "background") {
         // App is going to background (home button pressed)
         backgroundTimeRef.current = Date.now();
-        // DON'T show exit confirmation when app goes to background
-        // This was causing the interference with back press
       } else if (
         appStateRef.current === "background" &&
         nextAppState === "active"
@@ -440,16 +434,13 @@ useFocusEffect(
   const params = useLocalSearchParams();
 
   const checkAndUpdateStreak = useCallback(async () => {
-
     const userId = auth.currentUser?.uid;
     if (!userId) return;
-    
 
     try {
       const showStreakPopupFlag = await AsyncStorage.getItem("showStreakPopup");
       if (showStreakPopupFlag) {
         // User just completed a quiz - streak was already updated in quiz screen
-        // Just check current streak and show popup if needed
         const userRef = ref(database, `users/${userId}`);
         const snapshot = await get(userRef);
 
@@ -458,6 +449,7 @@ useFocusEffect(
           const currentStreak = userData.streak || 0;
           setUserStreak(currentStreak);
           setStreakPopupMessage(`Day ${currentStreak} completed! 🔥`);
+          setStreakPopupType("completion"); // Set type to completion
           setShowStreakPopup(true);
           await AsyncStorage.removeItem("showStreakPopup");
           setTimeout(() => {
@@ -466,7 +458,7 @@ useFocusEffect(
         }
       } else {
         // App opened normally - check for streak decay
-        const decayResult = await updateUserStreak();
+        const decayResult = await checkStreakDecay();
         if (decayResult.decayed) {
           setUserStreak(0);
         } else {
@@ -485,10 +477,14 @@ useFocusEffect(
   }, [params.quizCompleted]);
 
   const checkStreakDecayOnFocus = useCallback(async () => {
-    await updateUserStreak();
+    await checkStreakDecay();
   }, []);
 
-  
+  const handleStreakIconPress = () => {
+    setStreakPopupType("manual");
+    setStreakPopupMessage(""); // Clear any completion message
+    setShowStreakPopup(true);
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -501,9 +497,6 @@ useFocusEffect(
       checkAndUpdateStreak();
     }, [loadAllData, checkStreakDecayOnFocus, checkAndUpdateStreak])
   );
-
-
-
 
   // Refresh handler
   const onRefresh = useCallback(async () => {
@@ -555,7 +548,7 @@ useFocusEffect(
       }, 500);
     }
   }, [params.quizCompleted, checkAndUpdateStreak]);
-  
+
   // Show loading screen if initial load
   if (loading) {
     return (
@@ -565,31 +558,6 @@ useFocusEffect(
       </View>
     );
   }
-{/* Streak Popup Modal */}
-<Modal
-  visible={showStreakPopup}
-  transparent
-  animationType="fade"
-  onRequestClose={() => setShowStreakPopup(false)}
->
-  <View className="flex-1 justify-center items-center">
-    <View className=" rounded-2xl p-6 w-4/5 items-center">
-      <Text className="text-2xl font-bold text-center mb-4 text-orange-600">
-        Streak
-      </Text>
-      <Text className="text-lg text-center mb-6 text-custom-purple">
-        {streakPopupMessage}
-      </Text>
-      <TouchableOpacity
-        className="bg-primary rounded-full px-8 py-3"
-        onPress={() => setShowStreakPopup(false)}
-      >
-        <Text className="text-white font-bold text-center">Close</Text>
-      </TouchableOpacity>
-    </View>
-  </View>
-</Modal>
-
 
   return (
     <View className="flex-1 bg-white">
@@ -605,7 +573,7 @@ useFocusEffect(
               {" "}
               <TouchableOpacity
                 className="items-center"
-                onPress={() => setShowStreakPopup(true)}
+                onPress={handleStreakIconPress} // Use the new handler
               >
                 <View className="flex-row items-center bg-primary p-1 pl-4 rounded-full">
                   <Text className="text-white text-sm font-black">
@@ -720,7 +688,7 @@ useFocusEffect(
         <View className="px-4 pb-4 flex-row justify-around">
           <TouchableOpacity
             className="items-center"
-            onPress={() => setShowStreakPopup(true)}
+            onPress={handleStreakIconPress} // Use the new handler
           >
             <View className="bg-custom-gray rounded-full w-16 h-16 flex justify-center items-center mb-2">
               <Text className="text-2xl">🔥</Text>
@@ -776,39 +744,61 @@ useFocusEffect(
           </View>
         </Modal>
 
-        {/* Streak Popup Modal */}
-
-<Modal
-  visible={showExitDialog}
-  transparent
-  animationType="fade"
-  onRequestClose={handleResumeApp}
->
-  <View className="flex-1 justify-center items-center bg-black/50">
-    <View className="bg-white rounded-2xl p-6 w-4/5">
-      <Text className="text-lg font-bold text-center mb-4">
-        Do you want to quit the app?
-      </Text>
-
-      <View className="flex-row justify-between gap-4 mt-4">
-        <TouchableOpacity
-          onPress={handleResumeApp}
-          className="flex-1 py-3 bg-gray-200 rounded-xl"
-        >
-          <Text className="text-center font-bold text-black">Resume</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={handleExitApp}
-          className="flex-1 py-3 bg-red-500 rounded-xl"
-        >
-          <Text className="text-center font-bold text-white">Quit</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  </View>
-</Modal>
-
+        {/* Streak Popup Modal - Updated to match new version */}
+        <Modal visible={showStreakPopup} transparent animationType="fade">
+          <View className="flex-1 justify-center items-center bg-black/60">
+            <View className="bg-white rounded-2xl p-6 mx-8 items-center">
+              {streakPopupType === "completion" && streakPopupMessage ? (
+                // Streak completion popup (after quiz)
+                <>
+                  <Text className="text-4xl mb-4">🔥</Text>
+                  <Text className="text-2xl font-bold text-center mb-2 text-black">
+                    {streakPopupMessage}
+                  </Text>
+                  <Text className="text-gray-600 text-center mb-4">
+                    Keep it up! Come back tomorrow to maintain your streak.
+                  </Text>
+                  <TouchableOpacity
+                    className="bg-black rounded-full px-6 py-3"
+                    onPress={() => {
+                      setShowStreakPopup(false);
+                      setStreakPopupMessage("");
+                    }}
+                  >
+                    <Text className="text-white font-bold">Awesome!</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                // Manual streak popup (when icon is pressed)
+                <>
+                  <Text className="text-4xl mb-4">🔥</Text>
+                  <Text className="text-2xl font-bold text-center mb-2 text-black">
+                    Current Streak: Day {userStreak}
+                  </Text>
+                  {userStreak === 0 ? (
+                    <Text className="text-gray-600 text-center mb-4">
+                      Complete a quiz today to start your streak!
+                    </Text>
+                  ) : (
+                    <Text className="text-gray-600 text-center mb-4">
+                      Great job! Keep playing daily to maintain your streak.
+                    </Text>
+                  )}
+                  <Text className="text-sm text-gray-500 text-center mb-6">
+                    💡 Tip: If you don't play for two consecutive days, your
+                    streak will reset to 0.
+                  </Text>
+                  <TouchableOpacity
+                    className="bg-black rounded-full px-6 py-3"
+                    onPress={() => setShowStreakPopup(false)}
+                  >
+                    <Text className="text-white font-bold">Got it!</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </View>
   );

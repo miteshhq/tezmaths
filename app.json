@@ -14,12 +14,6 @@
             "googleServicesFile": "./GoogleService-Info.plist",
             "buildNumber": "2"
         },
-        "googleSignIn": {
-            "androidClientId": "235143806197-rijgreiqgn4ue4vanqvqbomgmgba0o67.apps.googleusercontent.com",
-            "iosClientId": "235143806197-mn9dvnf0cllvd8av9nt3m2079kqj29ft.apps.googleusercontent.com",
-            "expoClientId": "YOUR_EXPO_GO_CLIENT_ID.apps.googleusercontent.com",
-            "webClientId": "235143806197-1k7eq1jcq6gc5h6th0opmvtm03gqt7gs.apps.googleusercontent.com"
-        },
         "android": {
             "jsEngine": "jsc",
             "adaptiveIcon": {

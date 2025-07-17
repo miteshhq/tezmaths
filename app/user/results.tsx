@@ -1,3 +1,5 @@
+// Updated version with fixed sharing logic
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system"; // Add this import
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -13,15 +15,13 @@ import {
   TouchableOpacity,
   View,
   Platform,
-  Share
+  Share,
 } from "react-native";
-import * as Sharing from 'expo-sharing';
+import * as Sharing from "expo-sharing";
 import ViewShot from "react-native-view-shot";
 import SoundManager from "../../components/soundManager";
 // Import logo as a module declaration instead of direct import
 const logo = require("../../assets/branding/tezmaths-full-logo.png");
-
-
 
 const shareConfig = {
   additionalText:
@@ -42,7 +42,6 @@ export default function ResultsScreen() {
   const viewShotRef = useRef<ViewShot>(null);
   const [userData, setUserData] = useState({ username: "player" });
 
-  const [isPopupVisible, setPopupVisible] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
 
   // Fix parameter parsing by ensuring they're strings
@@ -185,6 +184,7 @@ export default function ResultsScreen() {
 
     return shareMessage;
   };
+
   const avatarImages = (avatar: string) => {
     switch (avatar) {
       case "0":
@@ -203,109 +203,112 @@ export default function ResultsScreen() {
         return require("../../assets/avatars/avatar1.jpg");
     }
   };
-  const generateShareUrl = () => {
-  return 'https://tezmaths.app/result?username=aryan';
-};
 
-
-  
-  // const ShareComponent: React.FC = () => {
-// const shareImageAndText = async () => {
-//   setIsSharing(true);
-
-//   try {
-//     // Capture the image from ViewShot
-//     if (!viewShotRef.current) throw new Error("ViewShot ref not available");
-//     const uri = await viewShotRef.current.capture();
-
-//     // Save image to file system
-//     const timestamp = Date.now();
-//     const newUri = `${FileSystem.documentDirectory}tezmaths_result_${timestamp}.jpg`;
-//     await FileSystem.copyAsync({ from: uri, to: newUri });
-
-//     const message = getShareMessage();
-
-//     if (Platform.OS === 'android') {
-//       // Share image + text together on Android
-//       await Share.share({
-//         title: "Check this out!",
-//         message: message,
-//         url: newUri,
-//       });
-//     } else if (await Sharing.isAvailableAsync()) {
-//       // On iOS, share image first
-//       await Sharing.shareAsync(newUri, {
-//         dialogTitle: "Share your result!",
-//         mimeType: "image/jpeg",
-//       });
-
-//       // Then optionally share text separately
-//       await Share.share({ message });
-//     } else {
-//       Alert.alert("Sharing not available on this device");
-//     }
-
-//   } catch (error: any) {
-//     Alert.alert("Sharing failed", error.message || "Something went wrong.");
-//     console.error("Share error:", error);
-//   } finally {
-//     setIsSharing(false);
-//     setPopupVisible(false);
-//   }
-// };
-
-  const shareImage = async () => {
+  // Alternative robust sharing solution
+  const shareImageAndText = async () => {
     setIsSharing(true);
+
     try {
-      const newUri = await captureImage();
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(newUri);
-      } else {
-        await Share.share({ url: newUri });
+      // Capture the image from ViewShot
+      if (!viewShotRef.current) throw new Error("ViewShot ref not available");
+      const uri = await viewShotRef.current.capture();
+
+      // Save image to file system
+      const timestamp = Date.now();
+      const fileName = `tezmaths_result_${timestamp}.jpg`;
+      const newUri = `${FileSystem.documentDirectory}${fileName}`;
+      await FileSystem.copyAsync({ from: uri, to: newUri });
+
+      // Verify file exists
+      const fileInfo = await FileSystem.getInfoAsync(newUri);
+      if (!fileInfo.exists) {
+        throw new Error("Failed to save image file");
       }
-    } catch (error) {
-      console.error("Error sharing image:", error);
-      Alert.alert("Error", "Couldn't share image. Please try again.");
+
+      const message = getShareMessage();
+
+      if (Platform.OS === "android") {
+        // Android: Use content:// URI for better compatibility
+        const contentUri = `content://com.android.externalstorage.documents/document/primary:${fileName}`;
+
+        // Try multiple sharing approaches
+        const shareOptions = [
+          {
+            title: "My TezMaths Score!",
+            message: message,
+            url: `file://${newUri}`,
+            type: "image/jpeg",
+          },
+          {
+            title: "My TezMaths Score!",
+            message: message,
+            url: newUri,
+            type: "image/jpeg",
+          },
+          {
+            title: "My TezMaths Score!",
+            message: `${message}\n\nImage: ${newUri}`,
+            type: "text/plain",
+          },
+        ];
+
+        // Try each option until one works
+        for (const option of shareOptions) {
+          try {
+            await Share.share(option);
+            break; // If successful, exit loop
+          } catch (err) {
+            console.log("Share option failed:", err);
+            continue; // Try next option
+          }
+        }
+      } else {
+        // iOS: Use expo-sharing for better image handling
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(newUri, {
+            dialogTitle: "Share your TezMaths result!",
+            mimeType: "image/jpeg",
+          });
+        } else {
+          // Fallback for iOS
+          await Share.share({
+            title: "My TezMaths Score!",
+            message: message,
+            url: newUri,
+          });
+        }
+      }
+    } catch (error: any) {
+      // Don't show error if user cancelled
+      if (
+        error.message &&
+        !error.message.includes("cancel") &&
+        !error.message.includes("dismissed")
+      ) {
+        Alert.alert(
+          "Sharing failed",
+          `Error: ${error.message}\nTrying text-only share...`
+        );
+
+        // Fallback to text-only sharing
+        try {
+          await Share.share({
+            title: "My TezMaths Score!",
+            message: getShareMessage(),
+          });
+        } catch (fallbackError) {
+          console.error("Fallback share also failed:", fallbackError);
+        }
+      }
+      console.error("Share error:", error);
     } finally {
       setIsSharing(false);
-      setPopupVisible(false);
     }
-  };
-
-  // Share only the text
-  const shareText = async () => {
-    setIsSharing(true);
-    try {
-      const shareMessage = getShareMessage();
-      await Share.share({ message: shareMessage });
-    } catch (error) {
-      console.error("Error sharing text:", error);
-    } finally {
-      setIsSharing(false);
-      setPopupVisible(false);
-    }
-  };
-
-  const captureImage = async () => {
-    // Add null check for viewShotRef
-    if (!viewShotRef.current) {
-      throw new Error("ViewShot ref is not available");
-    }
-
-    const uri = await viewShotRef.current.capture();
-
-    const timestamp = Date.now();
-    const newUri = `${FileSystem.documentDirectory}tezmaths_result_${timestamp}.png`;
-
-    await FileSystem.copyAsync({ from: uri, to: newUri });
-    return newUri;
   };
 
   const handleShare = () => {
-    setPopupVisible(true);
+    shareImageAndText();
   };
-
-  
 
   return (
     <ScrollView
@@ -426,41 +429,6 @@ export default function ResultsScreen() {
           TezMaths - Sharpen Your Speed
         </Text>
       </View>
-
-      {/* Share Options Popup */}
-      <Modal
-        visible={isPopupVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setPopupVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Share Your Results</Text>
-            <TouchableOpacity
-            style= {styles.optionButton}
-            onPress={shareImage}
-            disabled= {isSharing}>
-              <Text style= {styles.optionText}>Share Image</Text>
-            </TouchableOpacity>
-             <TouchableOpacity
-            style= {styles.optionButton}
-            onPress={shareText}
-            disabled= {isSharing}>
-              <Text style= {styles.optionText}>Share Link</Text>
-            </TouchableOpacity>
-            
-
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setPopupVisible(false)}
-              disabled={isSharing}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </ScrollView>
   );
 }
