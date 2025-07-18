@@ -1,6 +1,6 @@
-import React from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { get, ref, } from "firebase/database";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { auth } from "../../firebase/firebaseConfig";
+import { auth, database } from "../../firebase/firebaseConfig";
 import { battleManager } from "../../utils/battleManager";
 
 interface RoomPlayer {
@@ -52,6 +52,8 @@ export default function BattleRoom() {
   const [isNavigating, setIsNavigating] = useState(false);
   const [battleStarting, setBattleStarting] = useState(false);
   const [opponentFound, setOpponentFound] = useState(false);
+  const [autoReadyToggled, setAutoReadyToggled] = useState(false);
+
 
   const [battleStartAttempted, setBattleStartAttempted] = useState(false);
 
@@ -258,6 +260,20 @@ export default function BattleRoom() {
     safeNavigate,
   ]);
 
+  useEffect(() => {
+  const checkInitialStatus = async () => {
+    const roomSnap = await get(ref(database, `rooms/${roomId}`));
+    const roomData = roomSnap.val();
+    if (roomData?.status === "playing") {
+      console.log("Room already started, navigating...");
+      router.replace(`/user/battle-screen?roomId=${roomId}`);
+    }
+  };
+
+  checkInitialStatus();
+}, []);
+
+
   // Enhanced fallback navigation timer
   useEffect(() => {
     if (battleStarting && room?.matchmakingRoom && battleStartAttempted) {
@@ -325,113 +341,60 @@ export default function BattleRoom() {
   }, [roomId]);
 
   // Main room listener
-  useEffect(() => {
-    if (!roomId || !isMounted) return;
+useEffect(() => {
+  if (!roomId || !isMounted) return;
 
-    const validateAndListen = async () => {
-      try {
-        const roomExists = await battleManager.validateRoomExists(roomId);
-        if (!roomExists) {
-          Alert.alert("Room Expired", "This battle room no longer exists", [
-            {
-              text: "OK",
-              onPress: () => safeNavigate("/user/multiplayer-mode-selection"),
-            },
-          ]);
-          return;
-        }
-
-        const unsubscribe = battleManager.listenToRoom(roomId, (roomData) => {
-          if (!isMounted || navigationRef.current) return;
-
-          // Add this check to prevent state updates during navigation
-          //   if (router.isNavigating) return;
-
-          setRoom(roomData);
-          setLoading(false);
-
-          // Add connection check
-          if (
-            roomData?.players?.[userId] &&
-            !roomData.players[userId].connected
-          ) {
-            battleManager.updatePlayerConnection(roomId, true);
-          }
-
-          //   console.log("Room data updated:", {
-          //     status: roomData?.status,
-          //     playerCount: Object.keys(roomData?.players || {}).length,
-          //     hasQuestions: !!roomData?.questions,
-          //     isMatchmaking: roomData?.matchmakingRoom,
-          //   });
-
-          if (!roomData) {
-            Alert.alert("Room Closed", "The battle room has been closed", [
-              {
-                text: "OK",
-                onPress: () => safeNavigate("/user/multiplayer-mode-selection"),
-              },
-            ]);
-            return;
-          }
-
-          if (JSON.stringify(roomData) !== JSON.stringify(room)) {
-            setRoom(roomData);
-          }
-
-          setLoading(false);
-
-          // Enhanced navigation to battle screen
-          if (
-            roomData.status === "playing" &&
-            roomData.questions &&
-            roomData.questions.length > 0 &&
-            !navigationRef.current &&
-            !isNavigating
-          ) {
-            // console.log("Battle is ready, navigating to battle screen");
-            // console.log(
-            //   "Room status:",
-            //   roomData.status,
-            //   "Questions:",
-            //   roomData.questions.length
-            // );
-            setBattleStarting(true);
-
-            // Navigate immediately for matchmaking, small delay for regular rooms
-            const delay = roomData.matchmakingRoom ? 100 : 500;
-
-            battleNavigationTimeoutRef.current = setTimeout(() => {
-              if (isMounted && !navigationRef.current) {
-                // console.log("Executing navigation to battle screen");
-                safeNavigate(
-                  `/user/battle-screen?roomId=${roomId}&question=${
-                    roomData.currentQuestion || 0
-                  }`
-                );
-              }
-            }, delay);
-          }
-        });
-
-        return () => {
-          if (unsubscribe) unsubscribe();
-          battleManager.updatePlayerConnection(roomId, false);
-        };
-      } catch (error) {
-        if (error.message.includes("permission")) {
-          Alert.alert(
-            "Permission Error",
-            "You don't have permission to access this room"
-          );
-        } else {
-          setError(error);
-        }
+  const validateAndListen = async () => {
+    try {
+      const roomExists = await battleManager.validateRoomExists(roomId);
+      if (!roomExists) {
+        Alert.alert("Room Expired", "This battle room no longer exists", [
+          {
+            text: "OK",
+            onPress: () => safeNavigate("/user/multiplayer-mode-selection"),
+          },
+        ]);
+        return;
       }
-    };
 
-    validateAndListen();
-  }, [roomId, isMounted, safeNavigate, isNavigating]);
+      const unsubscribe = battleManager.listenToRoom(roomId, async (roomData) => {
+        if (!isMounted || navigationRef.current) return;
+
+        setRoom(roomData);
+        setLoading(false);
+
+        // ✅ Auto toggle ready ONCE on join
+        if (
+          roomData.players &&
+          roomData.players[userId] &&
+          !roomData.players[userId].ready &&
+          !autoReadyToggled
+        ) {
+          try {
+            await battleManager.toggleReady(roomId);
+            setAutoReadyToggled(true); // Prevent re-toggling
+          } catch (err) {
+            console.error("Auto toggleReady failed:", err);
+          }
+        }
+      });
+
+      return () => {
+        if (unsubscribe) unsubscribe();
+        battleManager.updatePlayerConnection(roomId, false);
+      };
+    } catch (error) {
+      if (error.message.includes("permission")) {
+        Alert.alert("Permission Error", "You don't have permission to access this room");
+      } else {
+        setError(error);
+      }
+    }
+  };
+
+  validateAndListen();
+}, [roomId, isMounted, safeNavigate, autoReadyToggled]);
+
 
   const handleStartBattle = async () => {
     if (isNavigating || battleStarting) return;

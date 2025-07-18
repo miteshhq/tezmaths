@@ -367,6 +367,77 @@ export default function QuizScreen() {
     }, 100);
   }, [startTimer]);
 
+    // **HANDLE GAME END**
+  const handleGameEnd = useCallback(
+    async (
+      finalScore?: number,
+      finalCorrectAnswers?: number,
+      isGameComplete = false
+    ) => {
+      setIsQuizActive(false);
+      cleanupQuiz();
+      const totalScore = finalScore ?? accumulatedScore + quizScore;
+      const totalCorrect = finalCorrectAnswers ?? correctAnswers;
+      const startTime = gameStartTimeRef.current || gameStartTime;
+      const gameEndTime = Date.now();
+      let calculatedTimeMs = 0;
+      if (startTime && startTime > 0) {
+        const rawTimeMs = gameEndTime - startTime;
+        const maxReasonableTime = 2 * 60 * 60 * 1000; // 2 hours
+        const minReasonableTime = 1000; // 1 second
+        if (rawTimeMs >= minReasonableTime && rawTimeMs <= maxReasonableTime) {
+          calculatedTimeMs = rawTimeMs;
+        }
+      }
+      setTotalGameTimeMs(calculatedTimeMs);
+      const isNewHighScore = totalScore > currentHighScore;
+      if (isNewHighScore) {
+        const userId = auth.currentUser?.uid;
+        if (userId) {
+          try {
+            const userRef = ref(database, `users/${userId}`);
+            await update(userRef, { highScore: totalScore });
+            await AsyncStorage.setItem("highScore", totalScore.toString());
+          } catch (error) {
+            console.error("Error updating highScore:", error);
+          }
+        }
+      }
+      router.push({
+        pathname: "/user/results",
+        params: {
+          quizScore: totalScore.toString(),
+          correctAnswers: totalCorrect.toString(),
+          totalQuestions: questions.length.toString(),
+          currentLevel: currentLevel.toString(),
+          username: username || "player",
+          fullname: fullname || "Player",
+          avatar: avatar.toString(),
+          isPassed: (
+            isGameComplete && totalCorrect === questions.length
+          ).toString(),
+          isGameComplete: isGameComplete.toString(),
+          totalGameTime: calculatedTimeMs.toString(),
+          isNewHighScore: isNewHighScore.toString(),
+          highScore: Math.max(totalScore, currentHighScore).toString(),
+        },
+      });
+    },
+    [
+      accumulatedScore,
+      quizScore,
+      correctAnswers,
+      gameStartTime,
+      currentHighScore,
+      questions.length,
+      currentLevel,
+      username,
+      fullname,
+      avatar,
+      cleanupQuiz,
+    ]
+  );
+
   // **HANDLE LEVEL COMPLETION**
   const handleLevelComplete = useCallback(
     async (levelScore: number, levelCorrectAnswers: number) => {
@@ -447,76 +518,7 @@ export default function QuizScreen() {
     ]
   );
 
-  // **HANDLE GAME END**
-  const handleGameEnd = useCallback(
-    async (
-      finalScore?: number,
-      finalCorrectAnswers?: number,
-      isGameComplete = false
-    ) => {
-      setIsQuizActive(false);
-      cleanupQuiz();
-      const totalScore = finalScore ?? accumulatedScore + quizScore;
-      const totalCorrect = finalCorrectAnswers ?? correctAnswers;
-      const startTime = gameStartTimeRef.current || gameStartTime;
-      const gameEndTime = Date.now();
-      let calculatedTimeMs = 0;
-      if (startTime && startTime > 0) {
-        const rawTimeMs = gameEndTime - startTime;
-        const maxReasonableTime = 2 * 60 * 60 * 1000; // 2 hours
-        const minReasonableTime = 1000; // 1 second
-        if (rawTimeMs >= minReasonableTime && rawTimeMs <= maxReasonableTime) {
-          calculatedTimeMs = rawTimeMs;
-        }
-      }
-      setTotalGameTimeMs(calculatedTimeMs);
-      const isNewHighScore = totalScore > currentHighScore;
-      if (isNewHighScore) {
-        const userId = auth.currentUser?.uid;
-        if (userId) {
-          try {
-            const userRef = ref(database, `users/${userId}`);
-            await update(userRef, { highScore: totalScore });
-            await AsyncStorage.setItem("highScore", totalScore.toString());
-          } catch (error) {
-            console.error("Error updating highScore:", error);
-          }
-        }
-      }
-      router.push({
-        pathname: "/user/results",
-        params: {
-          quizScore: totalScore.toString(),
-          correctAnswers: totalCorrect.toString(),
-          totalQuestions: questions.length.toString(),
-          currentLevel: currentLevel.toString(),
-          username: username || "player",
-          fullname: fullname || "Player",
-          avatar: avatar.toString(),
-          isPassed: (
-            isGameComplete && totalCorrect === questions.length
-          ).toString(),
-          isGameComplete: isGameComplete.toString(),
-          totalGameTime: calculatedTimeMs.toString(),
-          isNewHighScore: isNewHighScore.toString(),
-          highScore: Math.max(totalScore, currentHighScore).toString(),
-        },
-      });
-    },
-    [
-      accumulatedScore,
-      quizScore,
-      correctAnswers,
-      gameStartTime,
-      currentHighScore,
-      questions.length,
-      currentLevel,
-      username,
-      fullname,
-      avatar,
-      cleanupQuiz,
-    ]
-  );
+
 
   // **HANDLE INPUT CHANGE**
   const handleInputChange = useCallback(

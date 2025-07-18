@@ -1,11 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { onValue, ref } from "firebase/database";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
+  BackHandler,
   Image,
   ImageBackground,
   ScrollView,
@@ -507,6 +509,46 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     }
   }, [roomData?.status, userId, roomId]);
 
+  // handle battle leave 
+
+  const handleroomleave = useCallback(() => {
+    Alert.alert("Leave Battle", "Are you sure you want to leave the battle?", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Leave",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await battleManager.leaveRoom(roomId); // or updatePlayerConnection(roomId, false)
+            router.replace("/user/multiplayer-mode-selection");
+          } catch (error) {
+            console.error("Leave room error:", error);
+            Alert.alert("Error", "Failed to leave the room.");
+          }
+        },
+      },
+    ]);
+  }, [roomId]);
+
+  // Handle hardware back press
+
+ useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        handleroomleave();
+        return true; // prevent default
+      };
+
+    const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+
+    return () => subscription.remove();
+    }, [handleroomleave])
+  );
+
+
   // Update handleInputChange
   const handleInputChange = async (text: string) => {
     const normalizedAnswer = text.trim().toLowerCase();
@@ -742,6 +784,11 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
                   Battle Mode
                 </Text>
               </View>
+              <TouchableOpacity onPress={handleroomleave}>
+                <View className="flex-row items-center bg-red-500 px-3 py-1 rounded-full">
+                  <Text className="flex-row items-center text-white px-3 py-1 rounded-full" >Leave</Text>
+                </View>
+              </TouchableOpacity>
             </View>
           </View>
         </View>

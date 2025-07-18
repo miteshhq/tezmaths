@@ -9,14 +9,14 @@ import {
     query,
     ref,
     remove,
+    runTransaction,
     serverTimestamp,
     set,
-    update,
-    runTransaction
+    update
 } from "firebase/database";
 import { auth, database } from "../firebase/firebaseConfig";
+import { endBattleDueToHostExit } from './handlehostExit';
 import { updateUserStreak } from './streakManager';
-import {endBattleDueToHostExit} from './handlehostExit';
 
 export class BattleManager {
     constructor() {
@@ -122,6 +122,7 @@ export class BattleManager {
             }
 
             const userId = user.uid;
+            const hostId =user.uid;
 
             const userData = await this.getUserData(userId);
             const avatar = userData?.avatar || 0;
@@ -135,7 +136,8 @@ export class BattleManager {
 
             const roomData = {
                 roomName: roomName.trim(),
-                hostId: userId,
+                hostId: hostId,
+                userId: userId,
                 code: roomCode,
                 status: "waiting",
                 maxPlayers,
@@ -341,49 +343,57 @@ export class BattleManager {
         );
     }
 
-    listenToRoom(roomId, callback) {
-        const roomRef = ref(database, `rooms/${roomId}`);
-        const listener = onValue(roomRef, async (snapshot) => {
-            const roomData = snapshot.val();
+listenToRoom(roomId, callback) {
+  const roomRef = ref(database, `rooms/${roomId}`);
 
-            // console.log(`Room ${roomId} update:`, {
-            //     status: roomData?.status,
-            //     players: roomData?.players ? Object.keys(roomData.players).length : 0,
-            //     hostId: roomData?.hostId,
-            //     currentUserId: this.userId
-            // });
+  const listener = onValue(
+    roomRef,
+    async (snapshot) => {
+      const roomData = snapshot.val();
 
-            if (roomData) {
-                // Auto-start only if current user is host
-                if (roomData?.matchmakingRoom &&
-                    roomData.status === "waiting" &&
-                    Object.keys(roomData.players || {}).length === roomData.maxPlayers &&
-                    roomData.hostId === this.userId) {
+      if (roomData) {
+        const players = Object.values(roomData.players || {});
 
-                    // console.log("Conditions met for auto-start");
+        const allReady = players.every((p) => p.ready);
+        const allConnected = players.every((p) => p.connected);
+        const enoughPlayers = players.length >= 2;
 
-                    // Add a delay to ensure both clients are ready
-                    setTimeout(async () => {
-                        try {
-                            // console.log("=== STARTING BATTLE ===");
-                            await this.startBattle(roomId);
-                            // console.log("=== BATTLE START SUCCESS ===");
-                        } catch (error) {
-                            console.error("=== BATTLE START FAILED ===", error);
-                        }
-                    }, 2000);
-                }
+        // ✅ Auto-start battle if all players are ready & connected (host only)
+        if (
+          roomData.matchmakingRoom &&
+          roomData.status === "waiting" &&
+          roomData.hostId === this.userId &&
+          allReady &&
+          allConnected &&
+          enoughPlayers
+        ) {
+          console.log("Auto-start conditions met — starting battle...");
+
+          setTimeout(async () => {
+            try {
+              await this.startBattle(roomId);
+              console.log("✅ Battle started");
+            } catch (error) {
+              console.error("❌ Auto-start battle failed:", error);
             }
+          }, 1500); // Slight delay to ensure client sync
+        }
+      }
 
-            callback(roomData);
-        }, (error) => {
-            console.error("Room listener error:", error);
-            callback(null);
-        });
-
-        this.listeners.set(roomId, listener);
-        return () => this.removeRoomListener(roomId);
+      callback(roomData);
+    },
+    (error) => {
+      console.error("Room listener error:", error);
+      callback(null);
     }
+  );
+
+  this.listeners.set(roomId, listener);
+
+  return () => this.removeRoomListener(roomId);
+}
+
+
 
     async joinRoom(roomCode) {
         try {
