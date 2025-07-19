@@ -10,6 +10,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  BackHandler,
 } from "react-native";
 import Share from "react-native-share"; // Use react-native-share instead of React Native's Share
 import ViewShot from "react-native-view-shot";
@@ -36,6 +37,8 @@ export default function ResultsScreen() {
   const viewShotRef = useRef<ViewShot>(null);
   const [userData, setUserData] = useState({ username: "player" });
   const [isSharing, setIsSharing] = useState(false);
+
+   const navigationInProgress = useRef(false);
 
   // Parameter parsing (same as original)
   const totalGameTimeMs =
@@ -97,6 +100,37 @@ export default function ResultsScreen() {
     };
     loadUserData();
   }, []);
+
+  
+
+    const handleHomeNavigation = useCallback(() => {
+      if (navigationInProgress.current) return;
+  
+      navigationInProgress.current = true;
+  
+      // **FIXED: Immediate navigation without delays**
+      router.replace("/user/home");
+  
+      // Cleanup in background after navigation
+    }, []);
+
+  // **FIXED: Handle back button properly**
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (!navigationInProgress.current) {
+          handleHomeNavigation();
+        }
+        return true;
+      };
+
+      const backHandler = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress
+      );
+      return () => backHandler.remove();
+    }, [])
+  );
 
   // Play victory or failure sound when screen is focused
   useFocusEffect(

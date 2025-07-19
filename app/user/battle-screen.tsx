@@ -288,7 +288,8 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
       const transitionTimeLeft = roomData.nextQuestionStartTime - now;
 
       if (transitionTimeLeft > 0) {
-        timeoutId = setTimeout(() => {
+        // timeoutId = 
+        setTimeout(() => {
           battleManager.moveToNextQuestion(roomId as string).catch((error) => {
             console.error("Failed to move to next question:", error);
           });
