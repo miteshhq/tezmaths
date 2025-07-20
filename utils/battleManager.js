@@ -394,54 +394,32 @@ async findRandomMatch(maxPlayers = 2) {
     }
 
 listenToRoom(roomId, callback) {
+  if (!roomId) return console.warn("listenToRoom: No roomId provided");
+
   const roomRef = ref(database, `rooms/${roomId}`);
 
-  const listener = onValue(
-    roomRef,
-    async (snapshot) => {
-      const roomData = snapshot.val();
-
-      if (roomData) {
-        const players = Object.values(roomData.players || {});
-
-        const allReady = players.every((p) => p.ready);
-        const allConnected = players.every((p) => p.connected);
-        const enoughPlayers = players.length >= 2;
-
-        // ✅ Auto-start battle if all players are ready & connected (host only)
-        if (
-          roomData.matchmakingRoom &&
-          roomData.status === "waiting" &&
-          roomData.hostId === this.userId &&
-          allReady &&
-          allConnected &&
-          enoughPlayers
-        ) {
-          console.log("Auto-start conditions met — starting battle...");
-
-          setTimeout(async () => {
-            try {
-              await this.startBattle(roomId);
-              console.log("✅ Battle started");
-            } catch (error) {
-              console.error("❌ Auto-start battle failed:", error);
-            }
-          }, 1500); // Slight delay to ensure client sync
-        }
-      }
-
-      callback(roomData);
-    },
-    (error) => {
-      console.error("Room listener error:", error);
-      callback(null);
+  const listener = onValue(roomRef, (snapshot) => {
+    const roomData = snapshot.val();
+    if (!roomData) {
+      console.warn("[listenToRoom] Room deleted or not found");
+      callback(null); // Notify room is gone
+      return;
     }
-  );
 
-  this.listeners.set(roomId, listener);
+    // Example: React based on status
+    if (roomData.status === "playing") {
+      console.log("[listenToRoom] Game started!");
+    } else if (roomData.status === "waiting") {
+      console.log("[listenToRoom] Waiting for players...");
+    }
 
-  return () => this.removeRoomListener(roomId);
+    callback(roomData);
+  });
+
+  // Return unsubscribe function
+  return () => off(roomRef, "value", listener);
 }
+
 
 
 
@@ -787,67 +765,67 @@ listenToRoom(roomId, callback) {
         };
     }
 
-    async startBattle(roomId) {
-        try {
-            // console.log("[startBattle] Starting battle for room:", roomId);
-            const user = await this.waitForAuth();
-            this.userId = user.uid; // Ensure userId is set
-            // console.log("[startBattle] User:", this.userId);
+async startBattle(roomId) {
+  try {
+    const user = await this.waitForAuth();
+    this.userId = user.uid;
 
-            const roomRef = ref(database, `rooms/${roomId}`);
-            const snapshot = await get(roomRef);
-            const room = snapshot.val();
+    if (!roomId) throw new Error("No roomId provided");
 
-            if (!room) throw new Error("Room not found");
-            if (room.hostId !== this.userId) return; // Only host can start
-            if (Object.values(room.players || {}).filter(p => p.connected).length < 2) {
-                throw new Error("Need at least 2 players");
-            }
+    const roomRef = ref(database, `rooms/${roomId}`);
+    const snapshot = await get(roomRef);
+    const room = snapshot.val();
 
-            // console.log("[startBattle] Generating questions...");
-            const questionData = await this.generateQuestions(1, 10);
-            // console.log(`[startBattle] Questions fetched: ${questionData.questions.length} questions`);
+    if (!room) throw new Error("Room not found");
+    if (room.hostId !== this.userId) return; // Only host starts
+    if (room.status === "playing") return; // Already playing
 
-            if (!questionData.questions || questionData.questions.length === 0) {
-                throw new Error("Failed to generate questions");
-            }
+    const connectedPlayers = Object.values(room.players || {}).filter(p => p.connected);
+    if (connectedPlayers.length < 2) throw new Error("At least 2 connected players are required");
 
-            const playerUpdates = {};
-            Object.keys(room.players).forEach(playerId => {
-                playerUpdates[`players/${playerId}/score`] = 0;
-                playerUpdates[`players/${playerId}/answers`] = {};
-                playerUpdates[`players/${playerId}/answer`] = "";
-                playerUpdates[`players/${playerId}/winner`] = false;
-                playerUpdates[`players/${playerId}/consecutiveCorrect`] = 0;
-            });
-
-            const now = Date.now();
-            const updateData = {
-                status: "playing",
-                questions: questionData.questions,
-                currentQuestion: 0,
-                currentLevel: 1,
-                totalQuestions: questionData.questions.length,
-                questionTimeLimit: 15,
-                gameStartedAt: now,
-                questionStartedAt: now,
-                lastActivity: serverTimestamp(),
-                questionTransition: false,
-                nextQuestionStartTime: null,
-                currentWinner: null,
-                maxConsecutiveTarget: 50,
-                consecutiveWinThreshold: 50,
-                ...playerUpdates
-            };
-
-            // console.log("[startBattle] Updating room with battle data");
-            await update(roomRef, updateData);
-            // console.log("[startBattle] Battle started successfully");
-        } catch (error) {
-            console.error("[startBattle] Error:", error);
-            throw error;
-        }
+    // Generate questions
+    const questionData = await this.generateQuestions(1, 10);
+    if (!questionData.questions || questionData.questions.length === 0) {
+      throw new Error("Failed to generate questions");
     }
+
+    const now = Date.now();
+
+    const playerUpdates = {};
+    for (const playerId in room.players) {
+      playerUpdates[`players/${playerId}/score`] = 0;
+      playerUpdates[`players/${playerId}/answers`] = {};
+      playerUpdates[`players/${playerId}/answer`] = "";
+      playerUpdates[`players/${playerId}/winner`] = false;
+      playerUpdates[`players/${playerId}/consecutiveCorrect`] = 0;
+      playerUpdates[`players/${playerId}/ready`] = false; // reset ready status
+    }
+
+    const updateData = {
+      status: "playing",
+      questions: questionData.questions,
+      currentQuestion: 0,
+      currentLevel: 1,
+      totalQuestions: questionData.questions.length,
+      questionTimeLimit: 15,
+      gameStartedAt: now,
+      questionStartedAt: now,
+      lastActivity: serverTimestamp(),
+      questionTransition: false,
+      nextQuestionStartTime: null,
+      currentWinner: null,
+      maxConsecutiveTarget: 50,
+      consecutiveWinThreshold: 50,
+      ...playerUpdates
+    };
+
+    await update(roomRef, updateData);
+    console.log("[startBattle] Battle started for room:", roomId);
+  } catch (error) {
+    console.error("[startBattle] Error:", error.message);
+    throw error;
+  }
+}
 
     async submitAnswer(roomId, questionIndex, userAnswer) {
         try {
