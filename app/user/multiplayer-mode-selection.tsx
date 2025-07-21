@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,11 +15,11 @@ import {
   View,
 } from "react-native";
 import { battleManager } from "../../utils/battleManager";
-
+import {get, ref, remove,} from "firebase/database";
 import type { BattleEntry } from "../../components/battlescoreBoard";
 import BattleScoreBoard from "../../components/battlescoreBoard";
 import { fetchLast5BattleResults } from '../../utils/saveBattleResult';
-import {auth} from '../../firebase/firebaseConfig'
+import {auth, database} from '../../firebase/firebaseConfig'
 
 
 
@@ -263,52 +263,77 @@ const resetRoomStates = () => {
   };
 
 const handleCreateRoom = async () => {
-  // Cleanup any previous listener
+  // Step 1: Cleanup old room if any
   if (roomListenerRef.current) {
-    roomListenerRef.current(); // unsubscribe
+    roomListenerRef.current(); // unsubscribe previous listener
     roomListenerRef.current = null;
   }
 
+  if (roomId) {
+    try {
+      await battleManager.leaveRoom(roomId); // leave the previous room
+    } catch (err) {
+      console.warn("Failed to leave previous room:", err);
+    }
+    setRoomId(null);
+    setRoomCode(null);
+    setPlayersInRoom({});
+  }
+
   setCreatingRoom(true);
+
   try {
+    // Step 2: Create new room
     const { roomId: newRoomId, roomCode: newRoomCode } =
       await battleManager.createRoom(roomName.trim(), MAX_PLAYERS);
 
     setRoomCode(newRoomCode);
     setRoomId(newRoomId);
 
-    // console.log("✅ Room created with code:", newRoomCode, "and id:", newRoomId);
-
-    // Mark the host as ready
+    // Mark host as ready
     await battleManager.toggleReady(newRoomId);
 
-    // Start listening to room updates
-    roomListenerRef.current = battleManager.listenToRoom(
+    const user = auth.currentUser;
+    const userId = user?.uid;
+
+    // Step 3: Set listener for room updates
+    roomListenerRef.current = await battleManager.listenToRoom(
       newRoomId,
       (roomData) => {
-        if (roomData && roomData.status !== "finished") {
-          setPlayersInRoom(roomData.players || {});
+        if (!roomData) return;
 
-          // Host starts the battle immediately
-          const isHost = roomData.hostId === auth.currentUser?.uid;
+        setPlayersInRoom(roomData.players || {});
 
-          if (isHost && Object.keys(roomData.players || {}).length >= 1) {
-            startBattleRoom(); // trigger battle screen
-          }
+        if (
+          roomData.status === "playing" &&
+          roomData.players?.[userId]
+        ) {
+          const isHost = roomData.hostId === userId;
+
+          router.replace({
+            pathname: "/user/battle-screen",
+            params: {
+              roomId: newRoomId,
+              isHost: isHost ? "true" : undefined,
+            },
+          });
         }
       }
     );
 
-    // Optional: Share room info
+    // Optional: Share room code
     await shareRoomDetails(newRoomId, newRoomCode);
-
   } catch (error) {
-    Alert.alert("Error", error.message);
+    Alert.alert("Error", error.message || "Failed to create room");
   } finally {
     setCreatingRoom(false);
   }
 };
+
+
+
   const startBattleRoom = async () => {
+    
     if (Object.keys(playersInRoom).length < 2) {
       // Alert.alert("Need More Players", "Wait for at least 2 players to join");
       return;
@@ -316,42 +341,60 @@ const handleCreateRoom = async () => {
 
     try {
       await battleManager.startBattle(roomId);
-      router.push(`/user/battle-room?roomId=${roomId}&isHost=true`);
+      router.push(`/user/battle-screen?roomId=${roomId}&isHost=true`);
     } catch (error) {
       Alert.alert("Error", error.message || "Failed to start battle");
     }
   };
 
-  const cancelRoomCreation = useCallback(async () => {
-    try {
-      if (roomId) {
-        await battleManager.leaveRoom(roomId);
-      }
+const cancelRoomCreation = useCallback(async () => {
+  try {
+    if (roomId) {
+      const user = auth.currentUser;
+      const userId = user?.uid;
 
-      // Remove listener
-      if (roomListenerRef.current) {
-        roomListenerRef.current();
-        roomListenerRef.current = null;
-      }
+      // Check if the current user is the host, then delete the room
+      const roomRef = ref(database, `rooms/${roomId}`);
+      const snapshot = await get(roomRef);
 
-      // Reset all create room states
-      setShowCreateRoom(false);
-      setRoomName("");
-      setRoomCode("");
-      setRoomId("");
-      setPlayersInRoom({});
-      setCreatingRoom(false);
-    } catch (error) {
-      console.error("Cancel room error:", error);
-      // Reset states anyway
-      setShowCreateRoom(false);
-      setRoomName("");
-      setRoomCode("");
-      setRoomId("");
-      setPlayersInRoom({});
-      setCreatingRoom(false);
+      if (snapshot.exists()) {
+        const roomData = snapshot.val();
+        if (roomData.hostId === userId) {
+          await remove(roomRef); // delete the entire room from Firebase
+          console.log("Room deleted by host");
+        } else {
+          // Not host, just leave
+          await battleManager.leaveRoom(roomId);
+        }
+      }
     }
-  }, [roomId]);
+
+    // Remove listener
+    if (roomListenerRef.current) {
+      roomListenerRef.current();
+      roomListenerRef.current = null;
+    }
+
+    // Reset all create room states
+    setShowCreateRoom(false);
+    setRoomName("");
+    setRoomCode("");
+    setRoomId("");
+    setPlayersInRoom({});
+    setCreatingRoom(false);
+  } catch (error) {
+    console.error("Cancel room error:", error);
+
+    // Reset states anyway
+    setShowCreateRoom(false);
+    setRoomName("");
+    setRoomCode("");
+    setRoomId("");
+    setPlayersInRoom({});
+    setCreatingRoom(false);
+  }
+}, [roomId]);
+
 
   const handleRandomMatch = async () => {
     setSearchingRandom(true);
