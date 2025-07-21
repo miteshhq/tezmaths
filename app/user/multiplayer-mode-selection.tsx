@@ -15,15 +15,11 @@ import {
   View,
 } from "react-native";
 import { battleManager } from "../../utils/battleManager";
-import {get, ref, remove,} from "firebase/database";
+import { get, ref, remove } from "firebase/database";
 import type { BattleEntry } from "../../components/battlescoreBoard";
 import BattleScoreBoard from "../../components/battlescoreBoard";
-import { fetchLast5BattleResults } from '../../utils/saveBattleResult';
-import {auth, database} from '../../firebase/firebaseConfig'
-
-
-
-
+import { fetchLast5BattleResults } from "../../utils/saveBattleResult";
+import { auth, database } from "../../firebase/firebaseConfig";
 
 type Player = {
   name: string;
@@ -42,7 +38,6 @@ export default function MultiplayerModeSelection() {
   const [last5Scores, setLast5Scores] = useState([]);
   const [battleResults, setBattleResults] = useState([]);
 
-
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [roomCode, setRoomCode] = useState("");
   const [roomName, setRoomName] = useState("");
@@ -55,8 +50,6 @@ export default function MultiplayerModeSelection() {
   const [searchingRandom, setSearchingRandom] = useState(false);
 
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  
 
   const MAX_PLAYERS = 4;
 
@@ -78,21 +71,16 @@ export default function MultiplayerModeSelection() {
     setClearingRooms(false);
   }, []);
 
-
   // Your state setup
 
-
-// Helper
-const resetRoomStates = () => {
-  setQuizCode("");
-  setRoomName("");
-  setRoomCode("");
-  setRoomId("");
-  setPlayersInRoom({});
-};
-
-
-
+  // Helper
+  const resetRoomStates = () => {
+    setQuizCode("");
+    setRoomName("");
+    setRoomCode("");
+    setRoomId("");
+    setPlayersInRoom({});
+  };
 
   // Enhanced cleanup function
   const performCleanup = useCallback(async () => {
@@ -181,20 +169,20 @@ const resetRoomStates = () => {
   }, [performCleanup]);
 
   // Keyboard listeners
- useEffect(() => {
-  const showSub = Keyboard.addListener("keyboardDidShow", () => {
-    setKeyboardHeight(300); // or some fixed height if you don't need dynamic
-  });
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardDidShow", () => {
+      setKeyboardHeight(300); // or some fixed height if you don't need dynamic
+    });
 
-  const hideSub = Keyboard.addListener("keyboardDidHide", () => {
-    setKeyboardHeight(0);
-  });
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboardHeight(0);
+    });
 
-  return () => {
-    showSub.remove();
-    hideSub.remove();
-  };
-}, []);
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Room listener cleanup
   useEffect(() => {
@@ -260,78 +248,72 @@ const resetRoomStates = () => {
     }
   };
 
-const handleCreateRoom = async () => {
-  // Step 1: Cleanup old room if any
-  if (roomListenerRef.current) {
-    roomListenerRef.current(); // unsubscribe previous listener
-    roomListenerRef.current = null;
-  }
-
-  if (roomId) {
-    try {
-      await battleManager.leaveRoom(roomId); // leave the previous room
-    } catch (err) {
-      console.warn("Failed to leave previous room:", err);
+  const handleCreateRoom = async () => {
+    // Step 1: Cleanup old room if any
+    if (roomListenerRef.current) {
+      roomListenerRef.current(); // unsubscribe previous listener
+      roomListenerRef.current = null;
     }
-    setRoomId(null);
-    setRoomCode(null);
-    setPlayersInRoom({});
-  }
 
-  setCreatingRoom(true);
-
-  try {
-    // Step 2: Create new room
-    const { roomId: newRoomId, roomCode: newRoomCode } =
-      await battleManager.createRoom(roomName.trim(), MAX_PLAYERS);
-
-    setRoomCode(newRoomCode);
-    setRoomId(newRoomId);
-
-    // Mark host as ready
-    await battleManager.toggleReady(newRoomId);
-
-    const user = auth.currentUser;
-    const userId = user?.uid;
-
-    // Step 3: Set listener for room updates
-    roomListenerRef.current = await battleManager.listenToRoom(
-      newRoomId,
-      (roomData) => {
-        if (!roomData) return;
-
-        setPlayersInRoom(roomData.players || {});
-
-        if (
-          roomData.status === "playing" &&
-          roomData.players?.[userId]
-        ) {
-          const isHost = roomData.hostId === userId;
-
-          router.replace({
-            pathname: "/user/battle-screen",
-            params: {
-              roomId: newRoomId,
-              isHost: isHost ? "true" : undefined,
-            },
-          });
-        }
+    if (roomId) {
+      try {
+        await battleManager.leaveRoom(roomId); // leave the previous room
+      } catch (err) {
+        console.warn("Failed to leave previous room:", err);
       }
-    );
+      setRoomId(null);
+      setRoomCode(null);
+      setPlayersInRoom({});
+    }
 
-    // Optional: Share room code
-    await shareRoomDetails(newRoomId, newRoomCode);
-  } catch (error) {
-    Alert.alert("Error", error.message || "Failed to create room");
-  } finally {
-    setCreatingRoom(false);
-  }
-};
+    setCreatingRoom(true);
 
+    try {
+      // Step 2: Create new room
+      const { roomId: newRoomId, roomCode: newRoomCode } =
+        await battleManager.createRoom(roomName.trim(), MAX_PLAYERS);
 
+      setRoomCode(newRoomCode);
+      setRoomId(newRoomId);
+
+      // Mark host as ready
+      await battleManager.toggleReady(newRoomId);
+
+      const user = auth.currentUser;
+      const userId = user?.uid;
+
+      // Step 3: Set listener for room updates
+      roomListenerRef.current = await battleManager.listenToRoom(
+        newRoomId,
+        (roomData) => {
+          if (!roomData) return;
+
+          setPlayersInRoom(roomData.players || {});
+
+          if (roomData.status === "playing" && roomData.players?.[userId]) {
+            const isHost = roomData.hostId === userId;
+
+            router.replace({
+              pathname: "/user/battle-screen",
+              params: {
+                roomId: newRoomId,
+                isHost: isHost ? "true" : undefined,
+              },
+            });
+          }
+        }
+      );
+
+      // Optional: Share room code
+      await shareRoomDetails(newRoomId, newRoomCode);
+    } catch (error) {
+      Alert.alert("Error", error.message || "Failed to create room");
+    } finally {
+      setCreatingRoom(false);
+    }
+  };
 
   const startBattleRoom = async () => {
-    
     if (Object.keys(playersInRoom).length < 2) {
       // Alert.alert("Need More Players", "Wait for at least 2 players to join");
       return;
@@ -345,59 +327,58 @@ const handleCreateRoom = async () => {
     }
   };
 
-const cancelRoomCreation = useCallback(async () => {
-  try {
-    if (roomId) {
-      const user = auth.currentUser;
-      const userId = user?.uid;
+  const cancelRoomCreation = useCallback(async () => {
+    try {
+      if (roomId) {
+        const user = auth.currentUser;
+        const userId = user?.uid;
 
-      // Check if the current user is the host, then delete the room
-      const roomRef = ref(database, `rooms/${roomId}`);
-      const snapshot = await get(roomRef);
+        // Check if the current user is the host, then delete the room
+        const roomRef = ref(database, `rooms/${roomId}`);
+        const snapshot = await get(roomRef);
 
-      if (snapshot.exists()) {
-        const roomData = snapshot.val();
-        if (roomData.hostId === userId) {
-          await remove(roomRef); // delete the entire room from Firebase
-          console.log("Room deleted by host");
-        } else {
-          // Not host, just leave
-          await battleManager.leaveRoom(roomId);
+        if (snapshot.exists()) {
+          const roomData = snapshot.val();
+          if (roomData.hostId === userId) {
+            await remove(roomRef); // delete the entire room from Firebase
+            console.log("Room deleted by host");
+          } else {
+            // Not host, just leave
+            await battleManager.leaveRoom(roomId);
+          }
         }
       }
+
+      // Remove listener
+      if (roomListenerRef.current) {
+        roomListenerRef.current();
+        roomListenerRef.current = null;
+      }
+
+      // Reset all create room states
+      setShowCreateRoom(false);
+      setRoomName("");
+      setRoomCode("");
+      setRoomId("");
+      setPlayersInRoom({});
+      setCreatingRoom(false);
+    } catch (error) {
+      console.error("Cancel room error:", error);
+
+      // Reset states anyway
+      setShowCreateRoom(false);
+      setRoomName("");
+      setRoomCode("");
+      setRoomId("");
+      setPlayersInRoom({});
+      setCreatingRoom(false);
     }
-
-    // Remove listener
-    if (roomListenerRef.current) {
-      roomListenerRef.current();
-      roomListenerRef.current = null;
-    }
-
-    // Reset all create room states
-    setShowCreateRoom(false);
-    setRoomName("");
-    setRoomCode("");
-    setRoomId("");
-    setPlayersInRoom({});
-    setCreatingRoom(false);
-  } catch (error) {
-    console.error("Cancel room error:", error);
-
-    // Reset states anyway
-    setShowCreateRoom(false);
-    setRoomName("");
-    setRoomCode("");
-    setRoomId("");
-    setPlayersInRoom({});
-    setCreatingRoom(false);
-  }
-}, [roomId]);
-
+  }, [roomId]);
 
   const handleRandomMatch = async () => {
     setSearchingRandom(true);
     try {
-      const { roomId, isHost } = await battleManager.findRandomMatch();
+      const { roomId, isHost } = await battleManager.findRandomMatch(2);
 
       // Optional: wait briefly to ensure Firebase sets everything up
       await new Promise((res) => setTimeout(res, 500));
@@ -411,7 +392,6 @@ const cancelRoomCreation = useCallback(async () => {
       Alert.alert("Matchmaking Failed", error.message || "Room not found");
     }
   };
-
 
   const cancelRandomSearch = useCallback(async () => {
     setSearchingRandom(false);
@@ -448,7 +428,6 @@ const cancelRoomCreation = useCallback(async () => {
     opponentScore: entry.opponentScore || 0, // You must save this during battle
   }));
 
-
   // Enhanced cancel functions for UI buttons
   const handleCancelQuizCode = () => {
     setShowQuizCodeInput(false);
@@ -481,7 +460,7 @@ const cancelRoomCreation = useCallback(async () => {
           </View>
         </View>
       </ImageBackground>
-      
+
       <ScrollView
         className="bg-white"
         keyboardShouldPersistTaps="handled"
@@ -491,10 +470,6 @@ const cancelRoomCreation = useCallback(async () => {
         }}
         showsVerticalScrollIndicator={false}
       >
-        
-
- 
-
         <View className="px-4 py-4">
           <View className="flex-col justify-center items-center">
             <Text className="text-custom-purple text-2xl mt-4 font-black">
@@ -642,12 +617,6 @@ const cancelRoomCreation = useCallback(async () => {
                   Create your own battle room and invite friends to join!
                 </Text>
               </View>
-              
-
-
-            
-
-
 
               {!showCreateRoom ? (
                 <TouchableOpacity onPress={handleShowCreateRoom}>
@@ -663,140 +632,140 @@ const cancelRoomCreation = useCallback(async () => {
                     </View>
                   </ImageBackground>
                 </TouchableOpacity>
-
-                
-
               ) : (
-              <View className="w-full flex flex-col gap-3">
-                <TextInput
-                  className="border-2 border-custom-purple rounded-lg px-4 py-3 text-center text-lg text-black"
-                  placeholder="Enter Room Name"
-                  placeholderTextColor="black"
-                  value={roomName}
-                  onChangeText={setRoomName}
-                  maxLength={20}
-                  returnKeyType="done"
-                  onSubmitEditing={handleCreateRoom}
-                  blurOnSubmit={true}
-                />
+                <View className="w-full flex flex-col gap-3">
+                  <TextInput
+                    className="border-2 border-custom-purple rounded-lg px-4 py-3 text-center text-lg text-black"
+                    placeholder="Enter Room Name"
+                    placeholderTextColor="black"
+                    value={roomName}
+                    onChangeText={setRoomName}
+                    maxLength={20}
+                    returnKeyType="done"
+                    onSubmitEditing={handleCreateRoom}
+                    blurOnSubmit={true}
+                  />
 
-                {!roomCode ? (
-                  <View className="flex-row gap-2">
-                    <TouchableOpacity
-                      className="flex-1"
-                      onPress={handleCreateRoom}
-                      disabled={creatingRoom}
-                    >
-                      <ImageBackground
-                        source={require("../../assets/gradient.jpg")}
-                        style={{
-                          borderRadius: 8,
-                          overflow: "hidden",
-                          opacity: creatingRoom ? 0.7 : 1,
-                        }}
-                        imageStyle={{ borderRadius: 12 }}
-                      >
-                        <View className="py-3 flex-row justify-center items-center gap-2">
-                          {creatingRoom && (
-                            <ActivityIndicator size="small" color="white" />
-                          )}
-                          <Text className="text-white font-bold text-lg">
-                            {creatingRoom ? "Creating..." : "Generate Code"}
-                          </Text>
-                        </View>
-                      </ImageBackground>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      className="px-4 py-3 bg-gray-200 rounded-lg"
-                      onPress={handleCancelCreateRoom}
-                    >
-                      <Text className="text-custom-purple font-bold">Cancel</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <View className="flex flex-col gap-3">
-                    <View className="bg-light-orange rounded-lg p-4">
-                      <Text className="text-center text-black font-bold text-sm">
-                        Room Code
-                      </Text>
-                      <Text className="text-center text-black font-black text-2xl">
-                        {roomCode}
-                      </Text>
-                      <Text className="text-center text-black text-xs mt-2">
-                        Players: {Object.keys(playersInRoom).length}/{MAX_PLAYERS}
-                      </Text>
-                    </View>
-
-                    {Object.keys(playersInRoom).length > 1 && (
-                      <View className="bg-custom-gray rounded-lg p-3">
-                        <Text className="text-center text-custom-purple font-bold text-sm mb-2">
-                          Players Joined:
-                        </Text>
-                        {Object.entries(playersInRoom).map(([playerId, player]) => (
-                          <Text
-                            key={playerId}
-                            className="text-center text-custom-purple text-sm"
-                          >
-                            • {player.name}
-                          </Text>
-                        ))}
-                      </View>
-                    )}
-
+                  {!roomCode ? (
                     <View className="flex-row gap-2">
-                      <TouchableOpacity className="flex-1" onPress={() => shareRoomDetails(roomId, roomCode)}>
-                        <View className="py-3 bg-purple-200 rounded-lg">
-                          <Text className="text-custom-purple font-bold text-center">Share</Text>
-                        </View>
-                      </TouchableOpacity>
-                      <TouchableOpacity className="flex-1" onPress={startBattleRoom}>
+                      <TouchableOpacity
+                        className="flex-1"
+                        onPress={handleCreateRoom}
+                        disabled={creatingRoom}
+                      >
                         <ImageBackground
                           source={require("../../assets/gradient.jpg")}
-                          style={{ borderRadius: 8, overflow: "hidden" }}
+                          style={{
+                            borderRadius: 8,
+                            overflow: "hidden",
+                            opacity: creatingRoom ? 0.7 : 1,
+                          }}
                           imageStyle={{ borderRadius: 12 }}
                         >
-                          <View className="py-3">
-                            <Text className="text-white font-bold text-center">
-                              Start Battle
+                          <View className="py-3 flex-row justify-center items-center gap-2">
+                            {creatingRoom && (
+                              <ActivityIndicator size="small" color="white" />
+                            )}
+                            <Text className="text-white font-bold text-lg">
+                              {creatingRoom ? "Creating..." : "Generate Code"}
                             </Text>
                           </View>
                         </ImageBackground>
                       </TouchableOpacity>
+                      <TouchableOpacity
+                        className="px-4 py-3 bg-gray-200 rounded-lg"
+                        onPress={handleCancelCreateRoom}
+                      >
+                        <Text className="text-custom-purple font-bold">
+                          Cancel
+                        </Text>
+                      </TouchableOpacity>
                     </View>
+                  ) : (
+                    <View className="flex flex-col gap-3">
+                      <View className="bg-light-orange rounded-lg p-4">
+                        <Text className="text-center text-black font-bold text-sm">
+                          Room Code
+                        </Text>
+                        <Text className="text-center text-black font-black text-2xl">
+                          {roomCode}
+                        </Text>
+                        <Text className="text-center text-black text-xs mt-2">
+                          Players: {Object.keys(playersInRoom).length}/
+                          {MAX_PLAYERS}
+                        </Text>
+                      </View>
 
-                    <TouchableOpacity
-                      className="py-2 bg-light-orange rounded-lg"
-                      onPress={cancelRoomCreation}
-                    >
-                      <Text className="text-red-600 font-bold text-center">Cancel Room</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                      {Object.keys(playersInRoom).length > 1 && (
+                        <View className="bg-custom-gray rounded-lg p-3">
+                          <Text className="text-center text-custom-purple font-bold text-sm mb-2">
+                            Players Joined:
+                          </Text>
+                          {Object.entries(playersInRoom).map(
+                            ([playerId, player]) => (
+                              <Text
+                                key={playerId}
+                                className="text-center text-custom-purple text-sm"
+                              >
+                                • {player.name}
+                              </Text>
+                            )
+                          )}
+                        </View>
+                      )}
 
-              </View>
+                      <View className="flex-row gap-2">
+                        <TouchableOpacity
+                          className="flex-1"
+                          onPress={() => shareRoomDetails(roomId, roomCode)}
+                        >
+                          <View className="py-3 bg-purple-200 rounded-lg">
+                            <Text className="text-custom-purple font-bold text-center">
+                              Share
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          className="flex-1"
+                          onPress={startBattleRoom}
+                        >
+                          <ImageBackground
+                            source={require("../../assets/gradient.jpg")}
+                            style={{ borderRadius: 8, overflow: "hidden" }}
+                            imageStyle={{ borderRadius: 12 }}
+                          >
+                            <View className="py-3">
+                              <Text className="text-white font-bold text-center">
+                                Start Battle
+                              </Text>
+                            </View>
+                          </ImageBackground>
+                        </TouchableOpacity>
+                      </View>
+
+                      <TouchableOpacity
+                        className="py-2 bg-light-orange rounded-lg"
+                        onPress={cancelRoomCreation}
+                      >
+                        <Text className="text-red-600 font-bold text-center">
+                          Cancel Room
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
               )}
-
             </View>
           </View>
         </View>
-                
-
-
       </ScrollView>
 
       <View className="border-t border-gray-300 my-6" />
-       {battleResults.length > 0 && (
-  <View className="mt-6 mb-12 px-4">
-    <BattleScoreBoard players={formattedResults as BattleEntry[]} />
-  </View>
-)}
-      
-
+      {battleResults.length > 0 && (
+        <View className="mt-6 mb-12 px-4">
+          <BattleScoreBoard players={formattedResults as BattleEntry[]} />
+        </View>
+      )}
     </View>
-    
-    
-    
-
-
-  );}
-  
+  );
+}

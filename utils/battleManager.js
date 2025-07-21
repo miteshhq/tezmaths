@@ -97,289 +97,305 @@ export class BattleManager {
         throw new Error("Failed to generate unique room code");
     }
 
-async createRoom(roomName, maxPlayers = 2) {
-  try {
-    // 🔐 Step 1: Validate inputs
-    if (!roomName || typeof roomName !== 'string') {
-      throw new Error("Room name is required and must be a string");
-    }
-
-    const trimmedRoomName = roomName.trim();
-    if (trimmedRoomName.length === 0) {
-      throw new Error("Room name cannot be empty");
-    }
-
-    if (trimmedRoomName.length > 50) {
-      throw new Error("Room name cannot exceed 50 characters");
-    }
-
-    if (!Number.isInteger(maxPlayers) || maxPlayers < 2 || maxPlayers > 10) {
-      throw new Error("Max players must be an integer between 2 and 10");
-    }
-
-    // ✅ Step 2: Auth and user data
-    const user = await this.waitForAuth();
-    if (!user || !user.uid) {
-      throw new Error("User authentication failed");
-    }
-
-    const userId = user.uid;
-    const hostId = user.uid;
-
-    const userData = await this.getUserData(userId);
-    const avatar = userData?.avatar || 0;
-
-    // 🔍 Step 3: Check for existing room by the user
-    const roomsQuery = query(ref(database, "rooms"), orderByChild("hostId"), equalTo(userId));
-    const existingRoomsSnapshot = await get(roomsQuery);
-
-    if (existingRoomsSnapshot.exists()) {
-      const rooms = existingRoomsSnapshot.val();
-      const roomIds = Object.keys(rooms);
-
-      for (const roomId of roomIds) {
-        console.log(`Deleting old room for user: ${roomId}`);
-        await remove(ref(database, `rooms/${roomId}`));
-      }
-    }
-
-    // 🎲 Step 4: Generate room code
-    const roomCode = await this.generateUniqueRoomCode();
-    if (!roomCode) {
-      throw new Error("Failed to generate room code");
-    }
-
-    const playerName = user.displayName?.trim() || user.email?.split('@')[0] || "Player";
-
-    // 🏗️ Step 5: Room structure
-    const roomData = {
-      roomName: trimmedRoomName,
-      hostId,
-      userId,
-      code: roomCode,
-      status: "waiting",
-      maxPlayers,
-      currentPlayerCount: 1,
-      createdAt: serverTimestamp(),
-      lastActivity: serverTimestamp(),
-      players: {
-        [userId]: {
-          name: user.displayName || "Host",
-          username: user.displayName || "Host",
-          ready: false,
-          score: 0,
-          isHost: true,
-          connected: true,
-          joinedAt: serverTimestamp(),
-          answers: {},
-          answer: "",
-          winner: false,
-          avatar
-        }
-      },
-      gameState: {
-        currentRound: 0,
-        totalRounds: 5,
-        currentQuestion: null,
-        timeLeft: 0
-      }
-    };
-
-    // 🔑 Step 6: Push new room
-    const newRoomRef = push(ref(database, "rooms"));
-    if (!newRoomRef.key) {
-      throw new Error("Failed to generate room reference");
-    }
-
-    await set(newRoomRef, roomData);
-
-    const snapshot = await get(newRoomRef);
-    if (!snapshot.exists()) {
-      throw new Error("Failed to verify room creation");
-    }
-
-    return {
-      roomId: newRoomRef.key,
-      roomCode,
-      roomData: {
-        ...roomData,
-        createdAt: new Date().toISOString(),
-        lastActivity: new Date().toISOString(),
-        players: {
-          [userId]: {
-            ...roomData.players[userId],
-            joinedAt: new Date().toISOString()
-          }
-        }
-      }
-    };
-
-  } catch (error) {
-    console.error("Create room error:", error);
-
-    if (error.message.includes("permission") || error.message.includes("auth")) {
-      throw new Error("Permission denied. Please check your authentication.");
-    } else if (error.message.includes("network") || error.message.includes("offline")) {
-      throw new Error("Network error. Please check your connection and try again.");
-    } else if (error.message.startsWith("Room name") || error.message.startsWith("Max players")) {
-      throw error;
-    } else {
-      throw new Error(`Failed to create room: ${error.message}`);
-    }
-  }
-}
-
-async clearAllUserRooms() {
-  try {
-    const user = await this.waitForAuth();
-    const userId = user.uid;
-
-    const roomsRef = ref(database, "rooms");
-    const snapshot = await get(roomsRef);
-
-    if (!snapshot.exists()) return 0;
-
-    const allRooms = snapshot.val();
-    const deletePromises = [];
-
-    for (const [roomId, room] of Object.entries(allRooms)) {
-      const isHost = room.hostId === userId;
-      const isPlayer = room.players && room.players[userId];
-
-      if (isHost || isPlayer) {
-        console.log("Deleting room for user:", roomId);
-        deletePromises.push(remove(ref(database, `rooms/${roomId}`)));
-      }
-    }
-
-    await Promise.all(deletePromises);
-    return deletePromises.length;
-
-  } catch (error) {
-    console.error("clearAllUserRooms error:", error);
-    throw error;
-  }
-}
-async findRandomMatch(maxPlayers = 2) {
-  const user = await this.waitForAuth();
-  const userId = user.uid;
-  const now = Date.now();
-  const timeoutDuration = 30000;
-  const halfMinuteAgo = now - timeoutDuration;
-
-  const cleanUserRooms = async () => {
-    const roomsSnapshot = await get(ref(database, "rooms"));
-    const rooms = roomsSnapshot.val() || {};
-
-    for (const [roomId, room] of Object.entries(rooms)) {
-      if (room.hostId === userId || (room.players && room.players[userId])) {
-        console.log("🧹 Deleting previous room of user:", roomId);
-        await remove(ref(database, `rooms/${roomId}`));
-      }
-    }
-  };
-
-  try {
-    // 🧹 Step 1: Delete any previous room this user was in
-    await cleanUserRooms();
-
-    const startTime = Date.now();
-
-    // ⏳ Step 2: Loop for up to 30 seconds
-    while (Date.now() - startTime < timeoutDuration) {
-      const roomsSnapshot = await get(ref(database, "rooms"));
-      const rooms = roomsSnapshot.val() || {};
-
-      const nowCheck = Date.now();
-
-      const availableRooms = Object.entries(rooms).filter(([roomId, room]) => {
-        if (room.players) {
-          Object.entries(room.players).forEach(([playerId, player]) => {
-            if (!player.connected) {
-              delete room.players[playerId];
+    async createRoom(roomName, maxPlayers = 4) {
+        try {
+            // 🔐 Step 1: Validate inputs
+            if (!roomName || typeof roomName !== 'string') {
+                throw new Error("Room name is required and must be a string");
             }
-          });
+
+            const trimmedRoomName = roomName.trim();
+            if (trimmedRoomName.length === 0) {
+                throw new Error("Room name cannot be empty");
+            }
+
+            if (trimmedRoomName.length > 50) {
+                throw new Error("Room name cannot exceed 50 characters");
+            }
+
+            if (!Number.isInteger(maxPlayers) || maxPlayers < 2 || maxPlayers > 4) {
+                throw new Error("Max players must be an integer between 2 and 4");
+            }
+
+            // ✅ Step 2: Auth and user data
+            const user = await this.waitForAuth();
+            if (!user || !user.uid) {
+                throw new Error("User authentication failed");
+            }
+
+            const userId = user.uid;
+            const hostId = user.uid;
+
+            const userData = await this.getUserData(userId);
+            const avatar = userData?.avatar || 0;
+
+            // 🔍 Step 3: Check for existing room by the user
+            const roomsQuery = query(ref(database, "rooms"), orderByChild("hostId"), equalTo(userId));
+            const existingRoomsSnapshot = await get(roomsQuery);
+
+            if (existingRoomsSnapshot.exists()) {
+                const rooms = existingRoomsSnapshot.val();
+                const roomIds = Object.keys(rooms);
+
+                for (const roomId of roomIds) {
+                    console.log(`Deleting old room for user: ${roomId}`);
+                    await remove(ref(database, `rooms/${roomId}`));
+                }
+            }
+
+            // 🎲 Step 4: Generate room code
+            const roomCode = await this.generateUniqueRoomCode();
+            if (!roomCode) {
+                throw new Error("Failed to generate room code");
+            }
+
+            const playerName = user.displayName?.trim() || user.email?.split('@')[0] || "Player";
+
+            // 🏗️ Step 5: Room structure
+            const roomData = {
+                roomName: trimmedRoomName,
+                hostId,
+                userId,
+                code: roomCode,
+                status: "waiting",
+                maxPlayers,
+                currentPlayerCount: 1,
+                createdAt: serverTimestamp(),
+                lastActivity: serverTimestamp(),
+                totalQuestions: 25, // always 25
+                players: {
+                    [userId]: {
+                        name: user.displayName || "Host",
+                        username: user.displayName || "Host",
+                        ready: false,
+                        score: 0,
+                        isHost: true,
+                        connected: true,
+                        joinedAt: serverTimestamp(),
+                        answers: {},
+                        answer: "",
+                        winner: false,
+                        avatar
+                    }
+                },
+                gameState: {
+                    currentRound: 0,
+                    totalRounds: 5,
+                    currentQuestion: null,
+                    timeLeft: 0
+                }
+            };
+
+            // 🔑 Step 6: Push new room
+            const newRoomRef = push(ref(database, "rooms"));
+            if (!newRoomRef.key) {
+                throw new Error("Failed to generate room reference");
+            }
+
+            await set(newRoomRef, roomData);
+
+            const snapshot = await get(newRoomRef);
+            if (!snapshot.exists()) {
+                throw new Error("Failed to verify room creation");
+            }
+
+            return {
+                roomId: newRoomRef.key,
+                roomCode,
+                roomData: {
+                    ...roomData,
+                    createdAt: new Date().toISOString(),
+                    lastActivity: new Date().toISOString(),
+                    players: {
+                        [userId]: {
+                            ...roomData.players[userId],
+                            joinedAt: new Date().toISOString()
+                        }
+                    }
+                }
+            };
+
+        } catch (error) {
+            console.error("Create room error:", error);
+
+            if (error.message.includes("permission") || error.message.includes("auth")) {
+                throw new Error("Permission denied. Please check your authentication.");
+            } else if (error.message.includes("network") || error.message.includes("offline")) {
+                throw new Error("Network error. Please check your connection and try again.");
+            } else if (error.message.startsWith("Room name") || error.message.startsWith("Max players")) {
+                throw error;
+            } else {
+                throw new Error(`Failed to create room: ${error.message}`);
+            }
         }
+    }
 
-        const isMatchmakingRoom = room.matchmakingRoom === true;
-        const isWaiting = room.status === "waiting";
-        const hasSpace = room.players && Object.keys(room.players).length < (room.maxPlayers || 2);
-        const isRecent = (room.lastActivity || 0) > halfMinuteAgo;
-        const matchesMaxPlayers = room.maxPlayers === maxPlayers;
+    async clearAllUserRooms() {
+        try {
+            const user = await this.waitForAuth();
+            const userId = user.uid;
 
-        return (
-          isMatchmakingRoom &&
-          isWaiting &&
-          hasSpace &&
-          isRecent &&
-          matchesMaxPlayers &&
-          room.hostId !== userId // Don't join your own room
-        );
-      });
+            const roomsRef = ref(database, "rooms");
+            const snapshot = await get(roomsRef);
 
-      if (availableRooms.length > 0) {
-        availableRooms.sort(
-          ([, a], [, b]) => (b.lastActivity || 0) - (a.lastActivity || 0)
-        );
+            if (!snapshot.exists()) return 0;
 
-        const [roomId, roomData] = availableRooms[0];
+            const allRooms = snapshot.val();
+            const deletePromises = [];
 
-        // Update lastActivity and join
-        await update(ref(database, `rooms/${roomId}`), {
-          lastActivity: Date.now(),
-        });
+            for (const [roomId, room] of Object.entries(allRooms)) {
+                const isHost = room.hostId === userId;
+                const isPlayer = room.players && room.players[userId];
 
-        await this.joinRoom(roomData.code);
+                if (isHost || isPlayer) {
+                    console.log("Deleting room for user:", roomId);
+                    deletePromises.push(remove(ref(database, `rooms/${roomId}`)));
+                }
+            }
 
-        return {
-          roomId,
-          roomCode: roomData.code,
-          isHost: false,
+            await Promise.all(deletePromises);
+            return deletePromises.length;
+
+        } catch (error) {
+            console.error("clearAllUserRooms error:", error);
+            throw error;
+        }
+    }
+    async findRandomMatch(maxPlayers = 2) {
+        const user = await this.waitForAuth();
+        const userId = user.uid;
+        const now = Date.now();
+        const timeoutDuration = 30000;
+        const halfMinuteAgo = now - timeoutDuration;
+
+        const cleanUserRooms = async () => {
+            const roomsSnapshot = await get(ref(database, "rooms"));
+            const rooms = roomsSnapshot.val() || {};
+
+            for (const [roomId, room] of Object.entries(rooms)) {
+                if (room.hostId === userId || (room.players && room.players[userId])) {
+                    console.log("🧹 Deleting previous room of user:", roomId);
+                    await remove(ref(database, `rooms/${roomId}`));
+                }
+            }
         };
-      }
 
-      // If no room found, wait a bit then retry (poll every 3 seconds)
-      await new Promise((res) => setTimeout(res, 3000));
+        try {
+            // 🧹 Step 1: Delete any previous room this user was in
+            await cleanUserRooms();
+
+            const startTime = Date.now();
+
+            // ⏳ Step 2: Loop for up to 30 seconds
+            while (Date.now() - startTime < timeoutDuration) {
+                const roomsSnapshot = await get(ref(database, "rooms"));
+                const rooms = roomsSnapshot.val() || {};
+
+                const nowCheck = Date.now();
+
+                const availableRooms = Object.entries(rooms).filter(([roomId, room]) => {
+                    if (room.players) {
+                        Object.entries(room.players).forEach(([playerId, player]) => {
+                            if (!player.connected) {
+                                delete room.players[playerId];
+                            }
+                        });
+                    }
+
+                    const isMatchmakingRoom = room.matchmakingRoom === true;
+                    const isWaiting = room.status === "waiting";
+                    const hasSpace = room.players && Object.keys(room.players).length < (room.maxPlayers || 2);
+                    const isRecent = (room.lastActivity || 0) > halfMinuteAgo;
+                    const matchesMaxPlayers = room.maxPlayers === maxPlayers;
+
+                    return (
+                        isMatchmakingRoom &&
+                        isWaiting &&
+                        hasSpace &&
+                        isRecent &&
+                        matchesMaxPlayers &&
+                        room.hostId !== userId // Don't join your own room
+                    );
+                });
+
+                if (availableRooms.length > 0) {
+                    availableRooms.sort(
+                        ([, a], [, b]) => (b.lastActivity || 0) - (a.lastActivity || 0)
+                    );
+
+                    const [roomId, roomData] = availableRooms[0];
+
+                    // Update lastActivity and join
+                    await update(ref(database, `rooms/${roomId}`), {
+                        lastActivity: Date.now(),
+                    });
+
+                    await this.joinRoom(roomData.code);
+
+                    return {
+                        roomId,
+                        roomCode: roomData.code,
+                        isHost: false,
+                    };
+                }
+
+                // If no room found, wait a bit then retry (poll every 3 seconds)
+                await new Promise((res) => setTimeout(res, 3000));
+            }
+
+            // 😔 Step 3: After timeout, create your own room as host
+            const newRoom = await this.createRoom("Quick Battle", 2);
+
+            await update(ref(database, `rooms/${newRoom.roomId}`), {
+                matchmakingRoom: true,
+                lastActivity: Date.now(),
+            });
+
+            return {
+                ...newRoom,
+                isHost: true,
+                noMatchFound: true
+            };
+
+        } catch (error) {
+            console.error("Random match error:", error);
+            throw new Error("Failed to find or create match");
+        }
     }
 
-    // 😔 Step 3: After timeout, create your own room as host
-    const newRoom = await this.createRoom("Quick Battle", maxPlayers);
-
-    await update(ref(database, `rooms/${newRoom.roomId}`), {
-      matchmakingRoom: true,
-      lastActivity: Date.now(),
-    });
-
-    return {
-      ...newRoom,
-      isHost: true,
-      noMatchFound: true
-    };
-
-  } catch (error) {
-    console.error("Random match error:", error);
-    throw new Error("Failed to find or create match");
-  }
-}
-
-
-
- async cleanupMatchmakingRoom(roomId) {
-  try {
-    const roomRef = ref(database, `rooms/${roomId}`);
-    const snapshot = await get(roomRef);
-    const room = snapshot.val();
-
-    if (room?.matchmakingRoom && room.status === "finished") {
-      await remove(roomRef);
-      console.log(`Room ${roomId} cleaned up.`);
-    } else {
-      console.log(`Room ${roomId} not eligible for cleanup.`);
+    async handleHostLeave(roomId) {
+        try {
+            const roomRef = ref(database, `rooms/${roomId}`);
+            // Mark the room as finished and set the hostLeft flag
+            await update(roomRef, {
+                status: "finished",
+                hostLeft: true,
+                endedBy: "host",
+                endedAt: Date.now(),
+                lastActivity: serverTimestamp()
+            });
+            console.log(`[handleHostLeave] Room ${roomId} marked finished due to host exit.`);
+        } catch (error) {
+            console.error("[handleHostLeave] Error:", error);
+        }
     }
-  } catch (error) {
-    console.error("Cleanup error:", error);
-  }
-}
+
+    async cleanupMatchmakingRoom(roomId) {
+        try {
+            const roomRef = ref(database, `rooms/${roomId}`);
+            const snapshot = await get(roomRef);
+            const room = snapshot.val();
+
+            if (room?.matchmakingRoom && room.status === "finished") {
+                await remove(roomRef);
+                console.log(`Room ${roomId} cleaned up.`);
+            } else {
+                console.log(`Room ${roomId} not eligible for cleanup.`);
+            }
+        } catch (error) {
+            console.error("Cleanup error:", error);
+        }
+    }
 
     async cleanupStaleMatchmaking(userId) {
         const matchmakingRef = ref(database, "matchmaking");
@@ -393,176 +409,170 @@ async findRandomMatch(maxPlayers = 2) {
         );
     }
 
-//  listenToRoom(roomId, callback) {
-//   if (!roomId) return console.warn("listenToRoom: No roomId provided");
+    //  listenToRoom(roomId, callback) {
+    //   if (!roomId) return console.warn("listenToRoom: No roomId provided");
 
-//   const roomRef = ref(database, `rooms/${roomId}`);
+    //   const roomRef = ref(database, `rooms/${roomId}`);
 
-//   const listener = onValue(roomRef, (snapshot) => {
-//     const roomData = snapshot.val();
-//     if (!roomData) {
-//       console.warn("[listenToRoom] Room deleted or not found");
-//       callback(null); // Notify room is gone
-//       return;
-//     }
+    //   const listener = onValue(roomRef, (snapshot) => {
+    //     const roomData = snapshot.val();
+    //     if (!roomData) {
+    //       console.warn("[listenToRoom] Room deleted or not found");
+    //       callback(null); // Notify room is gone
+    //       return;
+    //     }
 
-//     // Example: React based on status
-//     if (roomData.status === "playing") {
-//        router.replace({
-//         pathname: "/user/battle-screen",
-//         params: { roomId },
-//        });
-//         console.log("[listenToRoom] Game started!");
-//     } else if (roomData.status === "waiting") {
-//       console.log("[listenToRoom] Waiting for players...");
-//     }
+    //     // Example: React based on status
+    //     if (roomData.status === "playing") {
+    //        router.replace({
+    //         pathname: "/user/battle-screen",
+    //         params: { roomId },
+    //        });
+    //         console.log("[listenToRoom] Game started!");
+    //     } else if (roomData.status === "waiting") {
+    //       console.log("[listenToRoom] Waiting for players...");
+    //     }
 
-//     callback(roomData);
-//   });
+    //     callback(roomData);
+    //   });
 
-//   // Return unsubscribe function
-//   return () => off(roomRef, "value", listener);
-// }
+    //   // Return unsubscribe function
+    //   return () => off(roomRef, "value", listener);
+    // }
 
 
-listenToRoom(roomId, callback) {
-  if (!roomId) {
-    console.warn("listenToRoom: No roomId provided");
-    return () => {};
-  }
+    listenToRoom(roomId, callback) {
+        if (!roomId) {
+            console.warn("listenToRoom: No roomId provided");
+            return () => { };
+        }
 
-  const roomRef = ref(database, `rooms/${roomId}`);
+        const roomRef = ref(database, `rooms/${roomId}`);
 
-  const handler = (snapshot) => {
-    const roomData = snapshot.val();
-    if (!roomData) {
-      console.warn("[listenToRoom] Room deleted or not found");
-      callback(null);
-      return;
+        const handler = (snapshot) => {
+            const roomData = snapshot.val();
+            if (!roomData) {
+                console.warn("[listenToRoom] Room deleted or not found");
+                callback(null);
+                return;
+            }
+
+            if (roomData.status === "playing") {
+                router.replace({
+                    pathname: "/user/battle-screen",
+                    params: { roomId },
+                });
+                console.log("[listenToRoom] Game started!");
+            } else if (roomData.status === "waiting") {
+                console.log("[listenToRoom] Waiting for players...");
+            }
+
+            callback(roomData);
+        };
+
+        onValue(roomRef, handler);
+
+        return () => {
+            try {
+                off(roomRef, "value", handler); // ✅ Correct way to unsubscribe
+            } catch (err) {
+                console.warn("[listenToRoom] Failed to detach listener:", err.message);
+            }
+        };
     }
 
-    if (roomData.status === "playing") {
-      router.replace({
-        pathname: "/user/battle-screen",
-        params: { roomId },
-      });
-      console.log("[listenToRoom] Game started!");
-    } else if (roomData.status === "waiting") {
-      console.log("[listenToRoom] Waiting for players...");
+    async joinRoom(roomCode) {
+        try {
+            console.log("[joinRoom] Starting join process for code:", roomCode);
+
+            const user = await this.waitForAuth();
+            const userId = user.uid;
+            console.log("[joinRoom] Authenticated user:", userId);
+
+            const userData = await this.getUserData(userId);
+            const avatar = userData?.avatar || 0;
+            console.log("[joinRoom] User data loaded:", userData);
+
+            // Query room by code
+            const snapshot = await get(query(
+                ref(database, "rooms"),
+                orderByChild("code"),
+                equalTo(roomCode.toUpperCase())
+            ));
+            console.log("[joinRoom] Firebase query executed for roomCode:", roomCode.toUpperCase());
+
+            if (!snapshot.exists()) {
+                console.warn("[joinRoom] No room found for code:", roomCode);
+                throw new Error("Room not found or expired");
+            }
+
+            const roomId = Object.keys(snapshot.val())[0];
+            const roomData = snapshot.val()[roomId];
+            console.log("[joinRoom] Found room:", roomId, "Room data:", roomData);
+
+            // Check room status
+            if (roomData.status === "playing" || roomData.status === "finished") {
+                console.warn("[joinRoom] Room already in progress or finished:", roomId);
+                throw new Error("Game already in progress");
+            }
+
+            // Check capacity
+            const currentPlayerCount = Object.keys(roomData.players || {}).length;
+            if (currentPlayerCount >= roomData.maxPlayers) {
+                throw new Error("Room is full");
+            }
+
+            // Check if user is already in room
+            if (roomData.players && roomData.players[userId]) {
+                console.log("[joinRoom] User already exists in room, updating status...");
+                await update(ref(database, `rooms/${roomId}/players/${userId}`), {
+                    connected: true,
+                    ready: true,
+                    lastSeen: serverTimestamp()
+                });
+                console.log("[joinRoom] User reconnected successfully");
+            } else {
+                // New player joining
+                const playerName = user.displayName ||
+                    user.email?.split('@')[0] ||
+                    `Player ${currentPlayerCount + 1}`;
+
+                const playerData = {
+                    name: playerName,
+                    username: playerName,
+                    ready: roomData.matchmakingRoom ? true : false,
+                    score: 0,
+                    isHost: false,
+                    connected: true,
+                    joinedAt: serverTimestamp(),
+                    answers: {},
+                    answer: "",
+                    winner: false,
+                    avatar: avatar || 0
+                };
+
+                if (roomData.matchmakingRoom) {
+                    playerData.ready = true;
+                }
+
+                console.log("[joinRoom] Adding new player data:", playerData);
+
+                await update(ref(database, `rooms/${roomId}`), {
+                    [`players/${userId}`]: playerData,
+                    currentPlayerCount: currentPlayerCount + 1,
+                    lastActivity: serverTimestamp()
+                });
+                console.log("[joinRoom] New user added to room:", roomId);
+            }
+
+            console.log("[joinRoom] Successfully joined room:", roomId);
+            return { roomId, roomData: { ...roomData, code: roomCode } };
+
+        } catch (error) {
+            console.error("[joinRoom] Error:", error);
+            throw error;
+        }
     }
-
-    callback(roomData);
-  };
-
-  onValue(roomRef, handler);
-
-  return () => {
-    try {
-      off(roomRef, "value", handler); // ✅ Correct way to unsubscribe
-    } catch (err) {
-      console.warn("[listenToRoom] Failed to detach listener:", err.message);
-    }
-  };
-}
-
-
-
-
-async joinRoom(roomCode) {
-  try {
-    console.log("[joinRoom] Starting join process for code:", roomCode);
-
-    const user = await this.waitForAuth();
-    const userId = user.uid;
-    console.log("[joinRoom] Authenticated user:", userId);
-
-    const userData = await this.getUserData(userId);
-    const avatar = userData?.avatar || 0;
-    console.log("[joinRoom] User data loaded:", userData);
-
-    // Query room by code
-    const snapshot = await get(query(
-      ref(database, "rooms"),
-      orderByChild("code"),
-      equalTo(roomCode.toUpperCase())
-    ));
-    console.log("[joinRoom] Firebase query executed for roomCode:", roomCode.toUpperCase());
-
-    if (!snapshot.exists()) {
-      console.warn("[joinRoom] No room found for code:", roomCode);
-      throw new Error("Room not found or expired");
-    }
-
-    const roomId = Object.keys(snapshot.val())[0];
-    const roomData = snapshot.val()[roomId];
-    console.log("[joinRoom] Found room:", roomId, "Room data:", roomData);
-
-    // Check room status
-    if (roomData.status === "playing" || roomData.status === "finished") {
-      console.warn("[joinRoom] Room already in progress or finished:", roomId);
-      throw new Error("Game already in progress");
-    }
-
-    // Check capacity
-    const currentPlayerCount = Object.keys(roomData.players || {}).length;
-    console.log("[joinRoom] Current player count:", currentPlayerCount, "Max players:", roomData.maxPlayers);
-
-    if (currentPlayerCount >= roomData.maxPlayers) {
-      console.warn("[joinRoom] Room is full:", roomId);
-      throw new Error("Room is full");
-    }
-
-    // Check if user is already in room
-    if (roomData.players && roomData.players[userId]) {
-      console.log("[joinRoom] User already exists in room, updating status...");
-      await update(ref(database, `rooms/${roomId}/players/${userId}`), {
-        connected: true,
-        ready: true,
-        lastSeen: serverTimestamp()
-      });
-      console.log("[joinRoom] User reconnected successfully");
-    } else {
-      // New player joining
-      const playerName = user.displayName ||
-        user.email?.split('@')[0] ||
-        `Player ${currentPlayerCount + 1}`;
-
-      const playerData = {
-        name: playerName,
-        username: playerName,
-        ready: roomData.matchmakingRoom ? true : false,
-        score: 0,
-        isHost: false,
-        connected: true,
-        joinedAt: serverTimestamp(),
-        answers: {},
-        answer: "",
-        winner: false,
-        avatar: avatar || 0
-      };
-
-      if (roomData.matchmakingRoom) {
-        playerData.ready = true;
-      }
-
-      console.log("[joinRoom] Adding new player data:", playerData);
-
-      await update(ref(database, `rooms/${roomId}`), {
-        [`players/${userId}`]: playerData,
-        currentPlayerCount: currentPlayerCount + 1,
-        lastActivity: serverTimestamp()
-      });
-      console.log("[joinRoom] New user added to room:", roomId);
-    }
-
-    console.log("[joinRoom] Successfully joined room:", roomId);
-    return { roomId, roomData: { ...roomData, code: roomCode } };
-
-  } catch (error) {
-    console.error("[joinRoom] Error:", error);
-    throw error;
-  }
-}
 
 
     async validateRoomExists(roomId) {
@@ -827,75 +837,75 @@ async joinRoom(roomCode) {
         };
     }
 
-async startBattle(roomId) {
-  try {
-    const user = await this.waitForAuth();
-    this.userId = user.uid;
+    async startBattle(roomId) {
+        try {
+            const user = await this.waitForAuth();
+            this.userId = user.uid;
 
-    if (!roomId) throw new Error("No roomId provided");
+            if (!roomId) throw new Error("No roomId provided");
 
-    const roomRef = ref(database, `rooms/${roomId}`);
-    const snapshot = await get(roomRef);
-    const room = snapshot.val();
+            const roomRef = ref(database, `rooms/${roomId}`);
+            const snapshot = await get(roomRef);
+            const room = snapshot.val();
 
-    if (!room) throw new Error("Room not found");
-    if (room.hostId !== this.userId) return; // Only host can start
-    if (room.status === "playing") return; // Prevent double-starting
+            if (!room) throw new Error("Room not found");
+            if (room.hostId !== this.userId) return; // Only host can start
+            if (room.status === "playing") return; // Prevent double-starting
 
-    // ✅ Check that at least 2 players are connected
-    const connectedPlayers = Object.values(room.players || {}).filter(
-      (p) => p.connected
-    );
-    if (connectedPlayers.length < 2) {
-      throw new Error("At least 2 connected players are required");
+            // ✅ Check that at least 2 players are connected
+            const connectedPlayers = Object.values(room.players || {}).filter(
+                (p) => p.connected
+            );
+            if (connectedPlayers.length < 2) {
+                throw new Error("At least 2 connected players are required");
+            }
+
+            // ✅ Generate quiz questions
+            const questionData = await this.generateQuestions(1, 10);
+            if (!questionData.questions || questionData.questions.length === 0) {
+                throw new Error("Failed to generate questions");
+            }
+
+            const now = Date.now();
+
+            // ✅ Prepare player state resets
+            const playerUpdates: Record<string, any> = {};
+            for (const playerId in room.players) {
+                playerUpdates[`players/${playerId}/score`] = 0;
+                playerUpdates[`players/${playerId}/answers`] = {};
+                playerUpdates[`players/${playerId}/answer`] = "";
+                playerUpdates[`players/${playerId}/winner`] = false;
+                playerUpdates[`players/${playerId}/consecutiveCorrect`] = 0;
+                playerUpdates[`players/${playerId}/ready`] = false;
+            }
+
+            // ✅ Build update payload
+            const updateData = {
+                status: "playing",
+                questions: questionData.questions,
+                currentQuestion: 0,
+                currentLevel: 1,
+                totalQuestions: 25,
+                questionTimeLimit: 15,
+                gameStartedAt: now,
+                questionStartedAt: now,
+                lastActivity: serverTimestamp(),
+                questionTransition: false,
+                nextQuestionStartTime: null,
+                currentWinner: null,
+                maxConsecutiveTarget: 0,
+                consecutiveWinThreshold: 0,
+                ...playerUpdates,
+            };
+
+            // ✅ Apply update
+            await update(roomRef, updateData);
+            console.log("[startBattle] Battle started for room:", roomId);
+        } catch (error) {
+            console.error("[startBattle] Error:", error.message);
+            throw error;
+        }
     }
-
-    // ✅ Generate quiz questions
-    const questionData = await this.generateQuestions(1, 10);
-    if (!questionData.questions || questionData.questions.length === 0) {
-      throw new Error("Failed to generate questions");
-    }
-
-    const now = Date.now();
-
-    // ✅ Prepare player state resets
-    const playerUpdates: Record<string, any> = {};
-    for (const playerId in room.players) {
-      playerUpdates[`players/${playerId}/score`] = 0;
-      playerUpdates[`players/${playerId}/answers`] = {};
-      playerUpdates[`players/${playerId}/answer`] = "";
-      playerUpdates[`players/${playerId}/winner`] = false;
-      playerUpdates[`players/${playerId}/consecutiveCorrect`] = 0;
-      playerUpdates[`players/${playerId}/ready`] = false;
-    }
-
-    // ✅ Build update payload
-    const updateData = {
-      status: "playing",
-      questions: questionData.questions,
-      currentQuestion: 0,
-      currentLevel: 1,
-      totalQuestions: questionData.questions.length,
-      questionTimeLimit: 15,
-      gameStartedAt: now,
-      questionStartedAt: now,
-      lastActivity: serverTimestamp(),
-      questionTransition: false,
-      nextQuestionStartTime: null,
-      currentWinner: null,
-      maxConsecutiveTarget: 50,
-      consecutiveWinThreshold: 50,
-      ...playerUpdates,
-    };
-
-    // ✅ Apply update
-    await update(roomRef, updateData);
-    console.log("[startBattle] Battle started for room:", roomId);
-  } catch (error) {
-    console.error("[startBattle] Error:", error.message);
-    throw error;
-  }
-}
 
     async submitAnswer(roomId, questionIndex, userAnswer) {
         try {
@@ -958,12 +968,6 @@ async startBattle(roomId) {
                     ...playerUpdates,
                     lastActivity: serverTimestamp()
                 });
-
-                // Check for consecutive win condition
-                if (gapToLastQuestion > room.consecutiveWinThreshold && newConsecutiveCorrect >= room.maxConsecutiveTarget) {
-                    await this.declareWinner(roomId, userId);
-                    return true;
-                }
 
                 setTimeout(() => {
                     this.startQuestionTransition(roomId, 2000).catch(console.error('Error found'));
@@ -1289,8 +1293,7 @@ async startBattle(roomId) {
                 await this.updatePlayerConnection(roomId, false);
             } else {
                 if (roomData.hostId === userId) {
-                    const otherPlayers = Object.keys(roomData.players || {})
-                        .filter(id => id !== userId && roomData.players[id].connected);
+                    const otherPlayers = Object.keys(roomData.players || {}).filter(id => id !== userId && roomData.players[id].connected);
 
                     if (otherPlayers.length > 0 && playerCount > 1) {
                         const newHostId = otherPlayers[0];
@@ -1302,7 +1305,8 @@ async startBattle(roomId) {
                             lastActivity: serverTimestamp()
                         });
                     } else {
-                        // No other players or only host - remove room
+                        // No other players or only host - mark battle finished due to host leaving
+                        await this.handleHostLeave(roomId);
                         await this.cleanupRoom(roomId, "host_left_empty_room");
                     }
                 } else {
@@ -1320,6 +1324,7 @@ async startBattle(roomId) {
             }
 
             this.removeRoomListener(roomId);
+
         } catch (error) {
             console.error("Leave room error:", error);
             this.removeRoomListener(roomId);

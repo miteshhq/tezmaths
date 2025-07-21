@@ -14,16 +14,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import SoundManager from "../../components/soundManager";
 import { auth, database } from "../../firebase/firebaseConfig";
 import { battleManager } from "../../utils/battleManager";
 
-
-
- 
 const DEBUG_MODE = false;
 
 // Type definitions
@@ -60,11 +57,6 @@ interface RoomData {
   consecutiveWinThreshold?: number;
   maxConsecutiveTarget?: number;
 }
-
-
-
-
-
 
 const avatarImages = (avatar: number | string) => {
   const avatarNumber =
@@ -178,8 +170,7 @@ export default function BattleScreen() {
   const [battleStartTime, setBattleStartTime] = useState<number>(0);
   const battleStartTimeRef = useRef<number>(0);
   const isFirstQuestionRef = useRef(true);
-const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -288,7 +279,7 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
       const transitionTimeLeft = roomData.nextQuestionStartTime - now;
 
       if (transitionTimeLeft > 0) {
-        // timeoutId = 
+        // timeoutId =
         setTimeout(() => {
           battleManager.moveToNextQuestion(roomId as string).catch((error) => {
             console.error("Failed to move to next question:", error);
@@ -510,7 +501,7 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     }
   }, [roomData?.status, userId, roomId]);
 
-  // handle battle leave 
+  // handle battle leave
 
   const handleroomleave = useCallback(() => {
     Alert.alert("Leave Battle", "Are you sure you want to leave the battle?", [
@@ -536,19 +527,21 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Handle hardware back press
 
- useFocusEffect(
+  useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
         handleroomleave();
         return true; // prevent default
       };
 
-    const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+      const subscription = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress
+      );
 
-    return () => subscription.remove();
+      return () => subscription.remove();
     }, [handleroomleave])
   );
-
 
   // Update handleInputChange
   const handleInputChange = async (text: string) => {
@@ -607,7 +600,8 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
       if (isFirstCorrect) {
         setFeedback(
-          `✅ Correct! ${isFirstCorrect ? "You got it first! " : ""
+          `✅ Correct! ${
+            isFirstCorrect ? "You got it first! " : ""
           }+${pointsEarned} points`
         );
       } else {
@@ -787,7 +781,9 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
               </View>
               <TouchableOpacity onPress={handleroomleave}>
                 <View className="flex-row items-center bg-red-500 px-3 py-1 rounded-full">
-                  <Text className="flex-row items-center text-white px-3 py-1 rounded-full" >Leave</Text>
+                  <Text className="flex-row items-center text-white px-3 py-1 rounded-full">
+                    Leave
+                  </Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -804,8 +800,9 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
               }
               strokeWidth={8}
               color="#F97316"
-              text={`${roomData?.currentQuestion + 1}/${roomData?.totalQuestions
-                }`}
+              text={`${roomData?.currentQuestion + 1}/${
+                roomData?.totalQuestions
+              }`}
             />
             <View className="flex-1 ml-4">
               <View className="flex-row justify-between mb-1">
@@ -846,8 +843,9 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
             />
             {feedback && (
               <Text
-                className={`text-center mt-2 ${feedback.includes("✅") ? "text-green-500" : "text-red-500"
-                  }`}
+                className={`text-center mt-2 ${
+                  feedback.includes("✅") ? "text-green-500" : "text-red-500"
+                }`}
               >
                 {feedback}
               </Text>
@@ -874,30 +872,6 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
             }
             return null;
           })}
-
-          {roomData?.players?.[userId!]?.consecutiveCorrect &&
-            roomData?.players?.[userId!]?.consecutiveCorrect! > 0 &&
-            roomData.totalQuestions - roomData.currentQuestion >
-            (roomData.consecutiveWinThreshold || 0) &&
-            !roomData?.currentWinner && (
-              <Text className="text-blue-500 text-center mt-2 font-bold">
-                🔥 {roomData.players[userId!].consecutiveCorrect} correct in a
-                row!
-                {(() => {
-                  const remaining = Math.max(
-                    0,
-                    questionsArray.length - (roomData.currentQuestion + 1)
-                  );
-                  const toWin = Math.min(
-                    roomData.maxConsecutiveTarget || 0,
-                    remaining
-                  );
-                  return toWin > 0 ? (
-                    <Text className="text-sm"> ({toWin} more to win!)</Text>
-                  ) : null;
-                })()}
-              </Text>
-            )}
 
           {timeLeft === 0 && !roomData.questionTransition && (
             <View className="mt-4">

@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import {  get, ref, off, onValue } from "firebase/database";
+import { get, ref, off, onValue } from "firebase/database";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -56,7 +56,6 @@ export default function BattleRoom() {
   const [autoReadyToggled, setAutoReadyToggled] = useState(false);
   const [playersInRoom, setPlayersInRoom] = useState({});
 
-
   const [battleStartAttempted, setBattleStartAttempted] = useState(false);
 
   const userId = auth.currentUser?.uid;
@@ -90,57 +89,55 @@ export default function BattleRoom() {
     setMatchmakingTimeout(false);
   }, [roomId]);
 
-
-   useBattleStartListener(roomId as string, isHost === "true");
-
-useEffect(() => {
-  if (!roomId) return;
-
-  const roomRef = ref(database, `rooms/${roomId}/players`);
-
-  const handleSnapshot = (snapshot: any) => {
-    try {
-      if (!snapshot || typeof snapshot.val !== "function") {
-        console.warn("Invalid snapshot received:", snapshot);
-        setPlayersInRoom({});
-        return;
-      }
-
-      const data = snapshot.val();
-      setPlayersInRoom(data || {}); // fallback if null
-    } catch (err) {
-      console.error("Failed to process player data:", err);
-      setPlayersInRoom({}); // fallback to prevent crash
-    }
-  };
-
-  onValue(roomRef, handleSnapshot);
-
-  return () => {
-    try {
-      off(roomRef, "value", handleSnapshot);
-    } catch (error) {
-      console.warn("Error detaching Firebase listener:", error);
-    }
-  };
-}, [roomId]);
-
+  useBattleStartListener(roomId as string, isHost === "true");
 
   useEffect(() => {
-  const unsubscribe = battleManager.listenToRoom(roomId, (roomData) => {
-    if (!roomData) return;
+    if (!roomId) return;
 
-    if (roomData.status === "playing") {
-      // Auto-navigate for non-hosts
-      router.replace({
-        pathname: "/user/battle-room",
-        params: { roomId },
-      });
-    }
-  });
+    const roomRef = ref(database, `rooms/${roomId}/players`);
 
-  return () => unsubscribe();
-}, [roomId]);
+    const handleSnapshot = (snapshot: any) => {
+      try {
+        if (!snapshot || typeof snapshot.val !== "function") {
+          console.warn("Invalid snapshot received:", snapshot);
+          setPlayersInRoom({});
+          return;
+        }
+
+        const data = snapshot.val();
+        setPlayersInRoom(data || {}); // fallback if null
+      } catch (err) {
+        console.error("Failed to process player data:", err);
+        setPlayersInRoom({}); // fallback to prevent crash
+      }
+    };
+
+    onValue(roomRef, handleSnapshot);
+
+    return () => {
+      try {
+        off(roomRef, "value", handleSnapshot);
+      } catch (error) {
+        console.warn("Error detaching Firebase listener:", error);
+      }
+    };
+  }, [roomId]);
+
+  useEffect(() => {
+    const unsubscribe = battleManager.listenToRoom(roomId, (roomData) => {
+      if (!roomData) return;
+
+      if (roomData.status === "playing") {
+        // Auto-navigate for non-hosts
+        router.replace({
+          pathname: "/user/battle-room",
+          params: { roomId },
+        });
+      }
+    });
+
+    return () => unsubscribe();
+  }, [roomId]);
 
   useEffect(() => {
     const connectToRoom = async () => {
@@ -315,18 +312,17 @@ useEffect(() => {
   ]);
 
   useEffect(() => {
-  const checkInitialStatus = async () => {
-    const roomSnap = await get(ref(database, `rooms/${roomId}`));
-    const roomData = roomSnap.val();
-    if (roomData?.status === "playing") {
-      console.log("Room already started, navigating...");
-      router.replace(`/user/battle-screen?roomId=${roomId}`);
-    }
-  };
+    const checkInitialStatus = async () => {
+      const roomSnap = await get(ref(database, `rooms/${roomId}`));
+      const roomData = roomSnap.val();
+      if (roomData?.status === "playing") {
+        console.log("Room already started, navigating...");
+        router.replace(`/user/battle-screen?roomId=${roomId}`);
+      }
+    };
 
-  checkInitialStatus();
-}, []);
-
+    checkInitialStatus();
+  }, []);
 
   // Enhanced fallback navigation timer
   useEffect(() => {
@@ -395,98 +391,104 @@ useEffect(() => {
   }, [roomId]);
 
   // Main room listener
-useEffect(() => {
-  if (!roomId || !isMounted) return;
+  useEffect(() => {
+    if (!roomId || !isMounted) return;
 
-  const validateAndListen = async () => {
-    try {
-      const roomExists = await battleManager.validateRoomExists(roomId);
-      if (!roomExists) {
-        Alert.alert("Room Expired", "This battle room no longer exists", [
-          {
-            text: "OK",
-            onPress: () => safeNavigate("/user/multiplayer-mode-selection"),
-          },
-        ]);
-        return;
-      }
-
-      const unsubscribe = battleManager.listenToRoom(roomId, async (roomData) => {
-        if (!isMounted || navigationRef.current) return;
-
-        setRoom(roomData);
-        setLoading(false);
-
-        // ✅ Auto toggle ready ONCE on join
-        if (
-          roomData.players &&
-          roomData.players[userId] &&
-          !roomData.players[userId].ready &&
-          !autoReadyToggled
-        ) {
-          try {
-            await battleManager.toggleReady(roomId);
-            setAutoReadyToggled(true); // Prevent re-toggling
-          } catch (err) {
-            console.error("Auto toggleReady failed:", err);
-          }
+    const validateAndListen = async () => {
+      try {
+        const roomExists = await battleManager.validateRoomExists(roomId);
+        if (!roomExists) {
+          Alert.alert("Room Expired", "This battle room no longer exists", [
+            {
+              text: "OK",
+              onPress: () => safeNavigate("/user/multiplayer-mode-selection"),
+            },
+          ]);
+          return;
         }
-      });
 
-      return () => {
-        if (unsubscribe) unsubscribe();
-        battleManager.updatePlayerConnection(roomId, false);
-      };
-    } catch (error) {
-      if (error.message.includes("permission")) {
-        Alert.alert("Permission Error", "You don't have permission to access this room");
-      } else {
-        setError(error);
+        const unsubscribe = battleManager.listenToRoom(
+          roomId,
+          async (roomData) => {
+            if (!isMounted || navigationRef.current) return;
+
+            setRoom(roomData);
+            setLoading(false);
+
+            // ✅ Auto toggle ready ONCE on join
+            if (
+              roomData.players &&
+              roomData.players[userId] &&
+              !roomData.players[userId].ready &&
+              !autoReadyToggled
+            ) {
+              try {
+                await battleManager.toggleReady(roomId);
+                setAutoReadyToggled(true); // Prevent re-toggling
+              } catch (err) {
+                console.error("Auto toggleReady failed:", err);
+              }
+            }
+          }
+        );
+
+        return () => {
+          if (unsubscribe) unsubscribe();
+          battleManager.updatePlayerConnection(roomId, false);
+        };
+      } catch (error) {
+        if (error.message.includes("permission")) {
+          Alert.alert(
+            "Permission Error",
+            "You don't have permission to access this room"
+          );
+        } else {
+          setError(error);
+        }
       }
+    };
+
+    validateAndListen();
+  }, [roomId, isMounted, safeNavigate, autoReadyToggled]);
+
+  useEffect(() => {
+    if (!roomId) return;
+
+    const roomRef = ref(database, `rooms/${roomId}`);
+
+    const handleSnapshot = (snapshot) => {
+      const roomData = snapshot.val();
+      if (!roomData) return;
+
+      // All users (host and players) navigate when status is "playing"
+      if (roomData.status === "playing") {
+        router.replace({
+          pathname: "/user/battle-screen",
+          params: { roomId, isHost },
+        });
+      }
+    };
+
+    onValue(roomRef, handleSnapshot);
+
+    return () => off(roomRef, "value", handleSnapshot);
+  }, [roomId, isHost]);
+
+  const handleStartBattle = async () => {
+    if (isNavigating || battleStarting) return;
+
+    try {
+      setBattleStarting(true);
+      setBattleStartAttempted(true);
+      await battleManager.startBattle(roomId); // ⬅️ triggers `status: "playing"`
+      // no need to manually navigate — listener handles that
+    } catch (error) {
+      console.error("Start battle error:", error);
+      setBattleStarting(false);
+      setBattleStartAttempted(false);
+      Alert.alert("Error", "Failed to start battle");
     }
   };
-
-  validateAndListen();
-}, [roomId, isMounted, safeNavigate, autoReadyToggled]);
-
-useEffect(() => {
-  if (!roomId) return;
-
-  const roomRef = ref(database, `rooms/${roomId}`);
-
-  const handleSnapshot = (snapshot) => {
-    const roomData = snapshot.val();
-    if (!roomData) return;
-
-    // All users (host and players) navigate when status is "playing"
-    if (roomData.status === "playing") {
-      router.replace({
-        pathname: "/user/battle-screen",
-        params: { roomId, isHost },
-      });
-    }
-  };
-
-  onValue(roomRef, handleSnapshot);
-
-  return () => off(roomRef, "value", handleSnapshot);
-}, [roomId, isHost]);
-
-const handleStartBattle = async () => {
-  if (isNavigating || battleStarting) return;
-
-  try {
-    setBattleStarting(true);
-    setBattleStartAttempted(true);
-    await battleManager.startBattle(roomId); // ⬅️ triggers `status: "playing"`
-    // no need to manually navigate — listener handles that
-  } catch (error) {
-    console.error("Start battle error:", error);
-    setBattleStarting(false);
-    setBattleStartAttempted(false);
-    Alert.alert("Error", "Failed to start battle");
-  }
-};
 
   const toggleReady = async () => {
     try {
@@ -710,4 +712,3 @@ const handleStartBattle = async () => {
 // function onValue(roomRef: DatabaseReference, arg1: (snapshot: any) => void) {
 //   throw new Error("Function not implemented.");
 // }
-

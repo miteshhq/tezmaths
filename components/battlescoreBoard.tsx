@@ -3,7 +3,6 @@ import { View, Text, Image } from "react-native";
 import { auth } from "../firebase/firebaseConfig";
 import { Entypo } from "@expo/vector-icons";
 
-
 export type BattleEntry = {
   userId: string;
   score: number;
@@ -11,7 +10,6 @@ export type BattleEntry = {
   opponentScore?: number;
   timestamp?: number;
 };
-
 
 interface Props {
   players: BattleEntry[];
