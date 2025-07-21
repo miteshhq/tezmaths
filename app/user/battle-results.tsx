@@ -114,22 +114,20 @@ export default function BattleResultsScreen() {
   });
   const [errorMessage, setErrorMessage] = useState("");
 
-  // **FIXED: Immediate cleanup without blocking navigation**
+  const [isNavigating, setIsNavigating] = useState(false);
+
   const performCleanup = useCallback(() => {
     if (cleanupExecuted.current || !roomId) return;
     cleanupExecuted.current = true;
 
-    // Non-blocking cleanup in background
-    setTimeout(() => {
-      Promise.allSettled([
-        battleManager.removeRoomListener?.(roomId as string),
-        battleManager.updatePlayerConnection?.(roomId as string, false),
-        battleManager.cleanupRoom?.(roomId as string, "battle_ended"),
-      ]).catch(() => {}); // Ignore cleanup errors
-    }, 100);
+    // Non-blocking cleanup
+    Promise.allSettled([
+      battleManager.removeRoomListener(roomId as string),
+      battleManager.updatePlayerConnection(roomId as string, false),
+      battleManager.cleanupRoom(roomId as string, "battle_ended"),
+    ]).catch(() => {});
   }, [roomId]);
 
-  // **FIXED: Validate and process battle data with better error handling**
   useEffect(() => {
     const validateBattleData = () => {
       try {
@@ -174,7 +172,7 @@ export default function BattleResultsScreen() {
           }
         } catch (parseError) {
           console.error("Error parsing players data:", parseError);
-          // **FIXED: Fallback to empty results instead of error**
+
           parsedPlayers = [
             {
               userId: currentUserId,
@@ -185,7 +183,6 @@ export default function BattleResultsScreen() {
           ];
         }
 
-        // **FIXED: Always ensure at least current user exists**
         if (!Array.isArray(parsedPlayers) || parsedPlayers.length === 0) {
           parsedPlayers = [
             {
@@ -222,7 +219,6 @@ export default function BattleResultsScreen() {
             (Array.isArray(currentUserId) ? currentUserId[0] : currentUserId)
         );
 
-        // **FIXED: If user not found, add them**
         if (userIndex === -1) {
           processedPlayers.push({
             userId: Array.isArray(currentUserId)
@@ -257,7 +253,7 @@ export default function BattleResultsScreen() {
         });
       } catch (error) {
         console.error("Error validating battle data:", error);
-        // **FIXED: Don't show error, just provide fallback data**
+
         setBattleData({
           players: [
             {
@@ -301,7 +297,6 @@ export default function BattleResultsScreen() {
     loadUserData();
   }, []);
 
-  // **FIXED: Play victory sound only once**
   useFocusEffect(
     useCallback(() => {
       if (
@@ -321,7 +316,6 @@ export default function BattleResultsScreen() {
     }, [battleData.isValid, battleData.userRank])
   );
 
-  // **FIXED: Handle back button properly**
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
@@ -339,24 +333,19 @@ export default function BattleResultsScreen() {
     }, [])
   );
 
-  // **FIXED: Fast navigation with immediate response**
   const handleHomeNavigation = useCallback(() => {
-    if (navigationInProgress.current) return;
+    if (isNavigating) return;
 
-    navigationInProgress.current = true;
+    setIsNavigating(true);
 
-    // **FIXED: Immediate navigation without delays**
+    // Immediate navigation
     router.replace("/user/home");
 
-    // Cleanup in background after navigation
-    performCleanup();
+    // Background cleanup
+    setTimeout(() => {
+      performCleanup();
+    }, 100);
   }, [performCleanup]);
-
-  // **FIXED: Responsive share handling**
-  const handleShare = useCallback(() => {
-    if (isSharing) return;
-    setPopupVisible(true);
-  }, [isSharing]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -487,7 +476,6 @@ export default function BattleResultsScreen() {
     }
   };
 
-  // **FIXED: Always show results, never show loading indefinitely**
   if (!battleData.isValid) {
     return (
       <View className="flex-1 bg-white justify-center items-center">
@@ -595,7 +583,6 @@ export default function BattleResultsScreen() {
           </View>
         </ViewShot>
 
-        {/* **FIXED: Responsive Action Buttons** */}
         <View className="flex-row justify-between mt-6 w-full max-w-md">
           <TouchableOpacity
             className="py-3 px-6 border border-black rounded-full flex-1 mr-1"

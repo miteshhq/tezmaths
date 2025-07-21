@@ -58,6 +58,8 @@ export default function BattleRoom() {
 
   const [battleStartAttempted, setBattleStartAttempted] = useState(false);
 
+  const [navigationLock, setNavigationLock] = useState(false);
+
   const userId = auth.currentUser?.uid;
   const navigationRef = useRef(false);
   const timeoutRef = useRef(null);
@@ -176,13 +178,20 @@ export default function BattleRoom() {
 
   const safeNavigate = useCallback(
     (path) => {
-      if (navigationRef.current) return;
-      navigationRef.current = true;
+      if (navigationLock) {
+        console.log("Navigation blocked - already navigating");
+        return;
+      }
 
-      // Immediate navigation
-      router.push(path);
+      setNavigationLock(true);
+
+      // Use replace instead of push to prevent stack buildup
+      router.replace(path);
+
+      // Reset lock after navigation
+      setTimeout(() => setNavigationLock(false), 1000);
     },
-    [router]
+    [navigationLock]
   );
 
   useEffect(() => {
@@ -452,27 +461,34 @@ export default function BattleRoom() {
   }, [roomId, isMounted, safeNavigate, autoReadyToggled]);
 
   useEffect(() => {
-    if (!roomId) return;
+    if (!roomId || navigationLock) return;
 
     const roomRef = ref(database, `rooms/${roomId}`);
 
     const handleSnapshot = (snapshot) => {
       const roomData = snapshot.val();
-      if (!roomData) return;
+      if (!roomData || navigationLock) return;
 
-      // All users (host and players) navigate when status is "playing"
-      if (roomData.status === "playing") {
-        router.replace({
+      // Only navigate on status change to playing
+      if (roomData.status === "playing" && !navigationLock) {
+        console.log("Room status changed to playing - navigating");
+        safeNavigate({
           pathname: "/user/battle-screen",
           params: { roomId, isHost },
         });
       }
     };
 
-    onValue(roomRef, handleSnapshot);
+    const unsubscribe = onValue(roomRef, handleSnapshot);
 
-    return () => off(roomRef, "value", handleSnapshot);
-  }, [roomId, isHost]);
+    return () => {
+      try {
+        unsubscribe();
+      } catch (error) {
+        console.warn("Error unsubscribing:", error);
+      }
+    };
+  }, [roomId, isHost, navigationLock, safeNavigate]);
 
   const handleStartBattle = async () => {
     if (isNavigating || battleStarting) return;

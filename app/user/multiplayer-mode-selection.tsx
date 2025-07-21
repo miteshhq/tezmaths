@@ -30,6 +30,7 @@ export default function MultiplayerModeSelection() {
   const router = useRouter();
 
   const [clearingRooms, setClearingRooms] = useState(false);
+  const [isCleaningUp, setIsCleaningUp] = useState(false);
 
   const [showQuizCodeInput, setShowQuizCodeInput] = useState(false);
   const [quizCode, setQuizCode] = useState("");
@@ -56,8 +57,9 @@ export default function MultiplayerModeSelection() {
   const cleanupRef = useRef(false);
   const roomListenerRef = useRef(null);
 
-  // Complete state reset function
   const resetAllStates = useCallback(() => {
+    if (isCleaningUp) return;
+
     setShowQuizCodeInput(false);
     setQuizCode("");
     setJoiningRoom(false);
@@ -69,9 +71,8 @@ export default function MultiplayerModeSelection() {
     setPlayersInRoom({});
     setSearchingRandom(false);
     setClearingRooms(false);
-  }, []);
-
-  // Your state setup
+    Keyboard.dismiss();
+  }, [isCleaningUp]);
 
   // Helper
   const resetRoomStates = () => {
@@ -82,69 +83,50 @@ export default function MultiplayerModeSelection() {
     setPlayersInRoom({});
   };
 
-  // Enhanced cleanup function
   const performCleanup = useCallback(async () => {
-    if (cleanupRef.current) return;
-    cleanupRef.current = true;
+    if (isCleaningUp) return;
+    setIsCleaningUp(true);
 
     try {
-      // Remove room listener
+      // Remove room listener first
       if (roomListenerRef.current) {
         roomListenerRef.current();
         roomListenerRef.current = null;
       }
+
+      // Cancel matchmaking
+      await battleManager.cancelMatchmaking();
 
       // Leave room if in one
       if (roomId) {
         await battleManager.leaveRoom(roomId);
       }
 
-      // Cancel matchmaking
-      await battleManager.cancelMatchmaking();
+      // Clear all user rooms
+      await battleManager.clearAllUserRooms();
     } catch (error) {
       console.error("Cleanup error:", error);
+    } finally {
+      setIsCleaningUp(false);
     }
+  }, [roomId, isCleaningUp]);
 
-    // Reset cleanup flag for next use
-    cleanupRef.current = false;
-  }, [roomId]);
+  useFocusEffect(
+    useCallback(() => {
+      console.log("MultiplayerModeSelection focused - resetting");
 
-  // MAIN RESET EFFECT - This runs every time screen comes into focus
-  // useFocusEffect(
-  //   useCallback(() => {
-  //     console.log("MultiplayerModeSelection screen focused - resetting states");
+      // Reset states immediately
+      resetAllStates();
 
-  //     // Reset all states immediately when screen comes into focus
-  //     resetAllStates();
+      // Perform cleanup
+      performCleanup();
 
-  //     // Perform cleanup of any ongoing operations
-  //     const cleanup = async () => {
-  //       try {
-  //         // Cancel any ongoing matchmaking
-  //         await battleManager.cancelMatchmaking();
-
-  //         // If there's any room listener, remove it
-  //         if (roomListenerRef.current) {
-  //           roomListenerRef.current();
-  //           roomListenerRef.current = null;
-  //         }
-  //       } catch (error) {
-  //         console.error("Initial cleanup error:", error);
-  //       }
-  //     };
-
-  //     cleanup();
-
-  //     // Dismiss keyboard if open
-  //     Keyboard.dismiss();
-
-  //     // Return cleanup function for when screen loses focus
-  //     return () => {
-  //       console.log("MultiplayerModeSelection screen unfocused - cleaning up");
-  //       performCleanup();
-  //     };
-  //   }, [resetAllStates, performCleanup])
-  // );
+      return () => {
+        console.log("MultiplayerModeSelection unfocused");
+        // Don't perform cleanup on unfocus to prevent issues
+      };
+    }, [resetAllStates, performCleanup])
+  );
 
   // Handle hardware back button
   useEffect(() => {

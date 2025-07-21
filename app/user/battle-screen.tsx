@@ -170,7 +170,16 @@ export default function BattleScreen() {
   const [battleStartTime, setBattleStartTime] = useState<number>(0);
   const battleStartTimeRef = useRef<number>(0);
   const isFirstQuestionRef = useRef(true);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerRef = useRef(null);
+
+  const [backHandlerActive, setBackHandlerActive] = useState(false);
+
+  const cleanupTimers = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -394,7 +403,6 @@ export default function BattleScreen() {
     }
   }, [roomData?.players, userId]);
 
-  // FIXED: Timer management with proper calculation
   useEffect(() => {
     if (
       roomData &&
@@ -402,12 +410,11 @@ export default function BattleScreen() {
       roomData.questionStartedAt &&
       !roomData.questionTransition
     ) {
+      // Clear any existing timer
+      cleanupTimers();
+
       const startTime = roomData.questionStartedAt;
       const timeLimit = roomData.questionTimeLimit || 15;
-
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
 
       const updateTimer = () => {
         const now = Date.now();
@@ -416,30 +423,22 @@ export default function BattleScreen() {
         setTimeLeft(remaining);
 
         if (remaining <= 0) {
-          if (timerRef.current) clearTimeout(timerRef.current);
-          timerRef.current = null;
+          cleanupTimers();
         }
       };
 
       updateTimer();
       timerRef.current = setInterval(updateTimer, 1000);
-
-      return () => {
-        if (timerRef.current) {
-          clearTimeout(timerRef.current);
-          timerRef.current = null;
-        }
-      };
     } else {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
+      cleanupTimers();
     }
+
+    return cleanupTimers;
   }, [
     roomData?.questionStartedAt,
     roomData?.questionTransition,
     roomData?.status,
+    cleanupTimers,
   ]);
 
   useEffect(() => {
@@ -503,7 +502,9 @@ export default function BattleScreen() {
 
   // handle battle leave
 
-  const handleroomleave = useCallback(() => {
+  const handleRoomLeave = useCallback(() => {
+    if (backHandlerActive) return;
+
     Alert.alert("Leave Battle", "Are you sure you want to leave the battle?", [
       {
         text: "Cancel",
@@ -513,25 +514,28 @@ export default function BattleScreen() {
         text: "Leave",
         style: "destructive",
         onPress: async () => {
+          setBackHandlerActive(true);
           try {
-            await battleManager.leaveRoom(roomId); // or updatePlayerConnection(roomId, false)
+            await battleManager.leaveRoom(roomId);
             router.replace("/user/multiplayer-mode-selection");
           } catch (error) {
             console.error("Leave room error:", error);
-            Alert.alert("Error", "Failed to leave the room.");
+            router.replace("/user/multiplayer-mode-selection");
+          } finally {
+            setBackHandlerActive(false);
           }
         },
       },
     ]);
-  }, [roomId]);
+  }, [roomId, backHandlerActive]);
 
   // Handle hardware back press
 
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        handleroomleave();
-        return true; // prevent default
+        handleRoomLeave();
+        return true; // Always prevent default
       };
 
       const subscription = BackHandler.addEventListener(
@@ -540,7 +544,7 @@ export default function BattleScreen() {
       );
 
       return () => subscription.remove();
-    }, [handleroomleave])
+    }, [handleRoomLeave])
   );
 
   // Update handleInputChange
@@ -779,7 +783,7 @@ export default function BattleScreen() {
                   Battle Mode
                 </Text>
               </View>
-              <TouchableOpacity onPress={handleroomleave}>
+              <TouchableOpacity onPress={handleRoomLeave}>
                 <View className="flex-row items-center bg-red-500 px-3 py-1 rounded-full">
                   <Text className="flex-row items-center text-white px-3 py-1 rounded-full">
                     Leave

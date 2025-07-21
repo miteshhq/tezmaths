@@ -22,6 +22,7 @@ export class BattleManager {
     constructor() {
         this.userId = null;
         this.listeners = new Map();
+        this.activeRooms = new Set();
         this.userPresenceRef = null;
         this.matchmakingListener = null;
         this.roomListener = null;
@@ -409,77 +410,31 @@ export class BattleManager {
         );
     }
 
-    //  listenToRoom(roomId, callback) {
-    //   if (!roomId) return console.warn("listenToRoom: No roomId provided");
-
-    //   const roomRef = ref(database, `rooms/${roomId}`);
-
-    //   const listener = onValue(roomRef, (snapshot) => {
-    //     const roomData = snapshot.val();
-    //     if (!roomData) {
-    //       console.warn("[listenToRoom] Room deleted or not found");
-    //       callback(null); // Notify room is gone
-    //       return;
-    //     }
-
-    //     // Example: React based on status
-    //     if (roomData.status === "playing") {
-    //        router.replace({
-    //         pathname: "/user/battle-screen",
-    //         params: { roomId },
-    //        });
-    //         console.log("[listenToRoom] Game started!");
-    //     } else if (roomData.status === "waiting") {
-    //       console.log("[listenToRoom] Waiting for players...");
-    //     }
-
-    //     callback(roomData);
-    //   });
-
-    //   // Return unsubscribe function
-    //   return () => off(roomRef, "value", listener);
-    // }
-
-
     listenToRoom(roomId, callback) {
         if (!roomId) {
             console.warn("listenToRoom: No roomId provided");
             return () => { };
         }
 
+        // Remove existing listener for this room first
+        this.removeRoomListener(roomId);
+
         const roomRef = ref(database, `rooms/${roomId}`);
 
         const handler = (snapshot) => {
             const roomData = snapshot.val();
-            if (!roomData) {
-                console.warn("[listenToRoom] Room deleted or not found");
-                callback(null);
-                return;
-            }
-
-            if (roomData.status === "playing") {
-                router.replace({
-                    pathname: "/user/battle-screen",
-                    params: { roomId },
-                });
-                console.log("[listenToRoom] Game started!");
-            } else if (roomData.status === "waiting") {
-                console.log("[listenToRoom] Waiting for players...");
-            }
-
             callback(roomData);
         };
 
+        // Store the handler for proper cleanup
+        this.listeners.set(roomId, { ref: roomRef, handler });
         onValue(roomRef, handler);
 
         return () => {
-            try {
-                off(roomRef, "value", handler); // ✅ Correct way to unsubscribe
-            } catch (err) {
-                console.warn("[listenToRoom] Failed to detach listener:", err.message);
-            }
+            this.removeRoomListener(roomId);
         };
     }
+
 
     async joinRoom(roomCode) {
         try {
@@ -607,7 +562,11 @@ export class BattleManager {
     removeRoomListener(roomId) {
         const listener = this.listeners.get(roomId);
         if (listener) {
-            off(ref(database, `rooms/${roomId}`), listener);
+            try {
+                off(listener.ref, "value", listener.handler);
+            } catch (error) {
+                console.warn("Error removing listener:", error);
+            }
             this.listeners.delete(roomId);
         }
     }
