@@ -181,22 +181,20 @@ const resetRoomStates = () => {
   }, [performCleanup]);
 
   // Keyboard listeners
-  useEffect(() => {
-    const keyboardShowListener = Keyboard.addListener(
-      "keyboardDidShow",
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
-    );
-    const keyboardHideListener = Keyboard.addListener("keyboardDidHide", () => {
-      setKeyboardHeight(0);
-    });
+ useEffect(() => {
+  const showSub = Keyboard.addListener("keyboardDidShow", () => {
+    setKeyboardHeight(300); // or some fixed height if you don't need dynamic
+  });
 
-    return () => {
-      keyboardShowListener?.remove();
-      keyboardHideListener?.remove();
-    };
-  }, []);
+  const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+    setKeyboardHeight(0);
+  });
+
+  return () => {
+    showSub.remove();
+    hideSub.remove();
+  };
+}, []);
 
   // Room listener cleanup
   useEffect(() => {
