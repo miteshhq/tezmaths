@@ -73,10 +73,20 @@ export default function BattleRoom() {
     if (cleanupRef.current) return;
     cleanupRef.current = true;
 
+    console.log("Performing battle room cleanup");
+
     // Clear all timeouts
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
+    }
+    if (battleStartTimeoutRef.current) {
+      clearTimeout(battleStartTimeoutRef.current);
+      battleStartTimeoutRef.current = null;
+    }
+    if (battleNavigationTimeoutRef.current) {
+      clearTimeout(battleNavigationTimeoutRef.current);
+      battleNavigationTimeoutRef.current = null;
     }
 
     // Remove listeners
@@ -89,6 +99,14 @@ export default function BattleRoom() {
     setBattleStarting(false);
     setBattleStartAttempted(false);
     setMatchmakingTimeout(false);
+    setOpponentFound(false);
+    setNavigationLock(false);
+    setIsNavigating(false);
+
+    // Update connection if roomId exists
+    if (roomId) {
+      battleManager.updatePlayerConnection(roomId, false).catch(console.warn);
+    }
   }, [roomId]);
 
   useBattleStartListener(roomId as string, isHost === "true");

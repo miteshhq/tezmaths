@@ -29,14 +29,10 @@ type Player = {
 export default function MultiplayerModeSelection() {
   const router = useRouter();
 
-  const [clearingRooms, setClearingRooms] = useState(false);
-  const [isCleaningUp, setIsCleaningUp] = useState(false);
-
   const [showQuizCodeInput, setShowQuizCodeInput] = useState(false);
   const [quizCode, setQuizCode] = useState("");
   const [joiningRoom, setJoiningRoom] = useState(false);
 
-  const [last5Scores, setLast5Scores] = useState([]);
   const [battleResults, setBattleResults] = useState([]);
 
   const [showCreateRoom, setShowCreateRoom] = useState(false);
@@ -52,46 +48,27 @@ export default function MultiplayerModeSelection() {
 
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
+  // Add this ref
+  const matchmakingListenerRef = useRef(null);
+
   const MAX_PLAYERS = 4;
 
-  const cleanupRef = useRef(false);
   const roomListenerRef = useRef(null);
 
-  const resetAllStates = useCallback(() => {
-    if (isCleaningUp) return;
-
-    setShowQuizCodeInput(false);
-    setQuizCode("");
-    setJoiningRoom(false);
-    setShowCreateRoom(false);
-    setRoomCode("");
-    setRoomName("");
-    setRoomId("");
-    setCreatingRoom(false);
-    setPlayersInRoom({});
-    setSearchingRandom(false);
-    setClearingRooms(false);
-    Keyboard.dismiss();
-  }, [isCleaningUp]);
-
-  // Helper
-  const resetRoomStates = () => {
-    setQuizCode("");
-    setRoomName("");
-    setRoomCode("");
-    setRoomId("");
-    setPlayersInRoom({});
-  };
-
   const performCleanup = useCallback(async () => {
-    if (isCleaningUp) return;
-    setIsCleaningUp(true);
+    console.log("Performing multiplayer cleanup");
 
     try {
-      // Remove room listener first
+      // Remove room listener
       if (roomListenerRef.current) {
         roomListenerRef.current();
         roomListenerRef.current = null;
+      }
+
+      // Remove matchmaking listener
+      if (matchmakingListenerRef.current) {
+        matchmakingListenerRef.current();
+        matchmakingListenerRef.current = null;
       }
 
       // Cancel matchmaking
@@ -102,30 +79,34 @@ export default function MultiplayerModeSelection() {
         await battleManager.leaveRoom(roomId);
       }
 
-      // Clear all user rooms
-      await battleManager.clearAllUserRooms();
+      console.log("Multiplayer cleanup completed");
     } catch (error) {
-      console.error("Cleanup error:", error);
-    } finally {
-      setIsCleaningUp(false);
+      console.warn("Cleanup error:", error);
     }
-  }, [roomId, isCleaningUp]);
+  }, [roomId]);
 
   useFocusEffect(
     useCallback(() => {
-      console.log("MultiplayerModeSelection focused - resetting");
+      console.log("MultiplayerModeSelection focused");
 
-      // Reset states immediately
-      resetAllStates();
+      // Only cleanup matchmaking if we're coming back from a battle
+      const handleFocus = async () => {
+        try {
+          // Cancel any ongoing matchmaking
+          await battleManager.cancelMatchmaking();
+          console.log("Matchmaking cancelled on focus");
+        } catch (error) {
+          console.warn("Focus cleanup error:", error);
+        }
+      };
 
-      // Perform cleanup
-      performCleanup();
+      handleFocus();
 
       return () => {
         console.log("MultiplayerModeSelection unfocused");
-        // Don't perform cleanup on unfocus to prevent issues
+        // Minimal cleanup on unfocus
       };
-    }, [resetAllStates, performCleanup])
+    }, [])
   );
 
   // Handle hardware back button
@@ -231,65 +212,94 @@ export default function MultiplayerModeSelection() {
   };
 
   const handleCreateRoom = async () => {
-    // Step 1: Cleanup old room if any
-    if (roomListenerRef.current) {
-      roomListenerRef.current(); // unsubscribe previous listener
-      roomListenerRef.current = null;
-    }
-
-    if (roomId) {
-      try {
-        await battleManager.leaveRoom(roomId); // leave the previous room
-      } catch (err) {
-        console.warn("Failed to leave previous room:", err);
-      }
-      setRoomId(null);
-      setRoomCode(null);
-      setPlayersInRoom({});
-    }
+    // Prevent multiple concurrent room creations
+    if (creatingRoom) return;
 
     setCreatingRoom(true);
 
     try {
-      // Step 2: Create new room
-      const { roomId: newRoomId, roomCode: newRoomCode } =
-        await battleManager.createRoom(roomName.trim(), MAX_PLAYERS);
+      // Step 1: Cleanup old room if any
+      if (roomListenerRef.current) {
+        roomListenerRef.current();
+        roomListenerRef.current = null;
+      }
 
-      setRoomCode(newRoomCode);
-      setRoomId(newRoomId);
-
-      // Mark host as ready
-      await battleManager.toggleReady(newRoomId);
-
-      const user = auth.currentUser;
-      const userId = user?.uid;
-
-      // Step 3: Set listener for room updates
-      roomListenerRef.current = await battleManager.listenToRoom(
-        newRoomId,
-        (roomData) => {
-          if (!roomData) return;
-
-          setPlayersInRoom(roomData.players || {});
-
-          if (roomData.status === "playing" && roomData.players?.[userId]) {
-            const isHost = roomData.hostId === userId;
-
-            router.replace({
-              pathname: "/user/battle-screen",
-              params: {
-                roomId: newRoomId,
-                isHost: isHost ? "true" : undefined,
-              },
-            });
-          }
+      if (roomId) {
+        try {
+          await battleManager.leaveRoom(roomId);
+        } catch (err) {
+          console.warn("Failed to leave previous room:", err);
         }
+      }
+
+      // Reset states properly
+      setRoomId("");
+      setRoomCode("");
+      setPlayersInRoom({});
+
+      // Step 2: Create new room
+      const user = auth.currentUser;
+      if (!user) {
+        Alert.alert("Error", "You must be logged in to create a room");
+        setCreatingRoom(false);
+        return;
+      }
+
+      const userId = user.uid;
+      const userName = user.displayName || "Anonymous";
+
+      // Step 3: Create room with BattleManager
+      const roomData = await battleManager.createRoom(
+        roomName,
+        userId,
+        userName
       );
 
-      // Optional: Share room code
-      await shareRoomDetails(newRoomId, newRoomCode);
+      if (roomData && roomData.roomId && roomData.roomCode) {
+        setRoomId(roomData.roomId);
+        setRoomCode(roomData.roomCode);
+
+        console.log("Room created successfully:", {
+          roomId: roomData.roomId,
+          roomCode: roomData.roomCode,
+        });
+
+        // Step 4: Setup room listener
+        const unsubscribe = battleManager.addRoomListener(
+          roomData.roomId,
+          (updatedRoomData) => {
+            console.log("Room data updated:", updatedRoomData);
+            if (updatedRoomData && updatedRoomData.players) {
+              setPlayersInRoom(updatedRoomData.players);
+
+              // Check if battle should start
+              if (updatedRoomData.status === "in-progress") {
+                console.log("Battle starting, navigating to battle screen");
+                setShowCreateRoom(false);
+                router.push({
+                  pathname: "/user/battle-screen",
+                  params: {
+                    roomId: roomData.roomId,
+                    isHost: "true",
+                  },
+                });
+              }
+            }
+          }
+        );
+
+        roomListenerRef.current = unsubscribe;
+      } else {
+        throw new Error("Failed to create room - invalid response");
+      }
     } catch (error) {
-      Alert.alert("Error", error.message || "Failed to create room");
+      console.error("Create room error:", error);
+      Alert.alert("Error", "Failed to create room. Please try again.");
+
+      // Reset states on error
+      setRoomId("");
+      setRoomCode("");
+      setPlayersInRoom({});
     } finally {
       setCreatingRoom(false);
     }
@@ -310,23 +320,29 @@ export default function MultiplayerModeSelection() {
   };
 
   const cancelRoomCreation = useCallback(async () => {
+    // Prevent multiple cancellations
+    if (creatingRoom) return;
+
+    setCreatingRoom(true);
+
     try {
       if (roomId) {
         const user = auth.currentUser;
         const userId = user?.uid;
 
-        // Check if the current user is the host, then delete the room
         const roomRef = ref(database, `rooms/${roomId}`);
         const snapshot = await get(roomRef);
 
         if (snapshot.exists()) {
           const roomData = snapshot.val();
           if (roomData.hostId === userId) {
-            await remove(roomRef); // delete the entire room from Firebase
+            // Host deletes the room
+            await remove(roomRef);
             console.log("Room deleted by host");
           } else {
-            // Not host, just leave
+            // Guest leaves the room
             await battleManager.leaveRoom(roomId);
+            console.log("Left room as guest");
           }
         }
       }
@@ -336,18 +352,10 @@ export default function MultiplayerModeSelection() {
         roomListenerRef.current();
         roomListenerRef.current = null;
       }
-
-      // Reset all create room states
-      setShowCreateRoom(false);
-      setRoomName("");
-      setRoomCode("");
-      setRoomId("");
-      setPlayersInRoom({});
-      setCreatingRoom(false);
     } catch (error) {
       console.error("Cancel room error:", error);
-
-      // Reset states anyway
+    } finally {
+      // Always reset states
       setShowCreateRoom(false);
       setRoomName("");
       setRoomCode("");
@@ -355,7 +363,7 @@ export default function MultiplayerModeSelection() {
       setPlayersInRoom({});
       setCreatingRoom(false);
     }
-  }, [roomId]);
+  }, [roomId, creatingRoom]);
 
   const handleRandomMatch = async () => {
     setSearchingRandom(true);

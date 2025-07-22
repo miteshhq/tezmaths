@@ -21,7 +21,7 @@ import SoundManager from "../../components/soundManager";
 import { auth, database } from "../../firebase/firebaseConfig";
 import { battleManager } from "../../utils/battleManager";
 
-const DEBUG_MODE = false;
+import { get } from "firebase/database";
 
 // Type definitions
 interface Player {
@@ -179,6 +179,10 @@ export default function BattleScreen() {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
+    if (submitTimeoutRef.current) {
+      clearTimeout(submitTimeoutRef.current);
+      submitTimeoutRef.current = null;
+    }
   }, []);
 
   useEffect(() => {
@@ -311,6 +315,14 @@ export default function BattleScreen() {
     userId,
     roomId,
   ]);
+
+  useEffect(() => {
+    return () => {
+      cleanupTimers();
+      // Clear all other timeouts
+      timeExpiryHandled.current = false;
+    };
+  }, [cleanupTimers]);
 
   useEffect(() => {
     if (roomData?.questionTransition) {
@@ -452,10 +464,39 @@ export default function BattleScreen() {
 
   useEffect(() => {
     return () => {
-      if (roomId) {
-        battleManager.removeRoomListener(roomId as string);
-        battleManager.updatePlayerConnection(roomId as string, false);
-      }
+      const cleanup = async () => {
+        console.log("Battle screen cleanup starting");
+
+        try {
+          if (roomId) {
+            // Remove room listener
+            battleManager.removeRoomListener(roomId as string);
+
+            // Update connection status
+            await battleManager.updatePlayerConnection(roomId as string, false);
+
+            // Check room status before leaving
+            const roomRef = ref(database, `rooms/${roomId}`);
+            const snapshot = await get(roomRef);
+
+            if (snapshot.exists()) {
+              const roomData = snapshot.val();
+
+              // Only leave if room is not finished (to avoid conflicts with results screen)
+              if (roomData.status !== "finished") {
+                await battleManager.leaveRoom(roomId as string);
+                console.log("Left room during battle cleanup");
+              }
+            }
+          }
+
+          console.log("Battle screen cleanup completed");
+        } catch (error) {
+          console.warn("Battle screen cleanup error:", error);
+        }
+      };
+
+      cleanup();
     };
   }, [roomId]);
 

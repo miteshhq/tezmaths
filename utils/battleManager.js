@@ -98,138 +98,56 @@ export class BattleManager {
         throw new Error("Failed to generate unique room code");
     }
 
-    async createRoom(roomName, maxPlayers = 4) {
+    async createRoom(roomName, hostId, hostName) {
         try {
-            // 🔐 Step 1: Validate inputs
-            if (!roomName || typeof roomName !== 'string') {
-                throw new Error("Room name is required and must be a string");
-            }
+            console.log("Creating room with:", { roomName, hostId, hostName });
 
-            const trimmedRoomName = roomName.trim();
-            if (trimmedRoomName.length === 0) {
-                throw new Error("Room name cannot be empty");
-            }
-
-            if (trimmedRoomName.length > 50) {
-                throw new Error("Room name cannot exceed 50 characters");
-            }
-
-            if (!Number.isInteger(maxPlayers) || maxPlayers < 2 || maxPlayers > 4) {
-                throw new Error("Max players must be an integer between 2 and 4");
-            }
-
-            // ✅ Step 2: Auth and user data
-            const user = await this.waitForAuth();
-            if (!user || !user.uid) {
-                throw new Error("User authentication failed");
-            }
-
-            const userId = user.uid;
-            const hostId = user.uid;
-
-            const userData = await this.getUserData(userId);
-            const avatar = userData?.avatar || 0;
-
-            // 🔍 Step 3: Check for existing room by the user
-            const roomsQuery = query(ref(database, "rooms"), orderByChild("hostId"), equalTo(userId));
-            const existingRoomsSnapshot = await get(roomsQuery);
-
-            if (existingRoomsSnapshot.exists()) {
-                const rooms = existingRoomsSnapshot.val();
-                const roomIds = Object.keys(rooms);
-
-                for (const roomId of roomIds) {
-                    console.log(`Deleting old room for user: ${roomId}`);
-                    await remove(ref(database, `rooms/${roomId}`));
-                }
-            }
-
-            // 🎲 Step 4: Generate room code
+            // Generate unique room code
             const roomCode = await this.generateUniqueRoomCode();
-            if (!roomCode) {
-                throw new Error("Failed to generate room code");
-            }
 
-            const playerName = user.displayName?.trim() || user.email?.split('@')[0] || "Player";
+            // Create room reference
+            const roomsRef = ref(database, 'rooms');
+            const newRoomRef = push(roomsRef);
+            const roomId = newRoomRef.key;
 
-            // 🏗️ Step 5: Room structure
             const roomData = {
-                roomName: trimmedRoomName,
-                hostId,
-                userId,
+                id: roomId,
                 code: roomCode,
+                name: roomName,
+                hostId: hostId,
                 status: "waiting",
-                maxPlayers,
-                currentPlayerCount: 1,
-                createdAt: serverTimestamp(),
-                lastActivity: serverTimestamp(),
-                totalQuestions: 25, // always 25
+                createdAt: Date.now(),
                 players: {
-                    [userId]: {
-                        name: user.displayName || "Host",
-                        username: user.displayName || "Host",
-                        ready: false,
-                        score: 0,
-                        isHost: true,
+                    [hostId]: {
+                        id: hostId,
+                        name: hostName,
                         connected: true,
-                        joinedAt: serverTimestamp(),
-                        answers: {},
-                        answer: "",
-                        winner: false,
-                        avatar
+                        joinedAt: Date.now(),
+                        isHost: true,
+                        ready: false
                     }
                 },
-                gameState: {
-                    currentRound: 0,
-                    totalRounds: 5,
-                    currentQuestion: null,
-                    timeLeft: 0
-                }
+                maxPlayers: 2,
+                currentPlayers: 1
             };
 
-            // 🔑 Step 6: Push new room
-            const newRoomRef = push(ref(database, "rooms"));
-            if (!newRoomRef.key) {
-                throw new Error("Failed to generate room reference");
-            }
-
+            // Set room data
             await set(newRoomRef, roomData);
 
-            const snapshot = await get(newRoomRef);
-            if (!snapshot.exists()) {
-                throw new Error("Failed to verify room creation");
-            }
+            console.log("Room created successfully:", { roomId, roomCode });
 
             return {
-                roomId: newRoomRef.key,
-                roomCode,
-                roomData: {
-                    ...roomData,
-                    createdAt: new Date().toISOString(),
-                    lastActivity: new Date().toISOString(),
-                    players: {
-                        [userId]: {
-                            ...roomData.players[userId],
-                            joinedAt: new Date().toISOString()
-                        }
-                    }
-                }
+                roomId: roomId,
+                roomCode: roomCode,
+                roomData: roomData
             };
 
         } catch (error) {
-            console.error("Create room error:", error);
-
-            if (error.message.includes("permission") || error.message.includes("auth")) {
-                throw new Error("Permission denied. Please check your authentication.");
-            } else if (error.message.includes("network") || error.message.includes("offline")) {
-                throw new Error("Network error. Please check your connection and try again.");
-            } else if (error.message.startsWith("Room name") || error.message.startsWith("Max players")) {
-                throw error;
-            } else {
-                throw new Error(`Failed to create room: ${error.message}`);
-            }
+            console.error("Error creating room:", error);
+            throw error;
         }
     }
+
 
     async clearAllUserRooms() {
         try {
@@ -1234,59 +1152,63 @@ export class BattleManager {
 
     async leaveRoom(roomId) {
         try {
-            const user = await this.waitForAuth();
-            const userId = user.uid;
+            const user = auth.currentUser;
+            if (!user) return;
 
-            const roomRef = ref(database, `rooms/${roomId}`);
+            const userId = user.uid;
+            console.log(`Player ${userId} leaving room ${roomId}`);
+
+            const roomRef = ref(this.database, `rooms/${roomId}`);
             const snapshot = await get(roomRef);
 
             if (!snapshot.exists()) {
-                this.removeRoomListener(roomId);
+                console.log("Room doesn't exist, nothing to leave");
                 return;
             }
 
             const roomData = snapshot.val();
-            const playerCount = Object.keys(roomData.players || {}).length;
 
-            if (roomData.status === "playing") {
-                await this.updatePlayerConnection(roomId, false);
-            } else {
-                if (roomData.hostId === userId) {
-                    const otherPlayers = Object.keys(roomData.players || {}).filter(id => id !== userId && roomData.players[id].connected);
+            // Remove player from room
+            if (roomData.players && roomData.players[userId]) {
+                const playerRef = ref(this.database, `rooms/${roomId}/players/${userId}`);
+                await remove(playerRef);
 
-                    if (otherPlayers.length > 0 && playerCount > 1) {
-                        const newHostId = otherPlayers[0];
-                        await update(roomRef, {
-                            hostId: newHostId,
-                            [`players/${newHostId}/isHost`]: true,
-                            [`players/${userId}`]: null,
-                            currentPlayerCount: otherPlayers.length,
-                            lastActivity: serverTimestamp()
-                        });
-                    } else {
-                        // No other players or only host - mark battle finished due to host leaving
-                        await this.handleHostLeave(roomId);
-                        await this.cleanupRoom(roomId, "host_left_empty_room");
-                    }
+                // Update player count
+                const currentPlayers = Object.keys(roomData.players).length - 1;
+                await update(roomRef, {
+                    currentPlayers: Math.max(0, currentPlayers)
+                });
+            }
+
+            // If host is leaving and room is not finished, transfer host or delete room
+            if (roomData.hostId === userId && roomData.status !== "finished") {
+                const remainingPlayers = Object.keys(roomData.players).filter(id => id !== userId);
+
+                if (remainingPlayers.length > 0) {
+                    // Transfer host to another player
+                    const newHostId = remainingPlayers[0];
+                    await update(roomRef, {
+                        hostId: newHostId
+                    });
+
+                    // Update new host status
+                    const newHostRef = ref(this.database, `rooms/${roomId}/players/${newHostId}`);
+                    await update(newHostRef, {
+                        isHost: true
+                    });
+
+                    console.log(`Host transferred to ${newHostId}`);
                 } else {
-                    if (playerCount <= 1) {
-                        // Last player leaving - remove room
-                        await this.cleanupRoom(roomId, "last_player_left");
-                    } else {
-                        await update(roomRef, {
-                            [`players/${userId}`]: null,
-                            currentPlayerCount: playerCount - 1,
-                            lastActivity: serverTimestamp()
-                        });
-                    }
+                    // No players left, delete room
+                    await remove(roomRef);
+                    console.log("Room deleted - no players remaining");
                 }
             }
 
-            this.removeRoomListener(roomId);
-
+            console.log(`Successfully left room ${roomId}`);
         } catch (error) {
-            console.error("Leave room error:", error);
-            this.removeRoomListener(roomId);
+            console.error("Error leaving room:", error);
+            throw error;
         }
     }
 
@@ -1308,6 +1230,10 @@ export class BattleManager {
             console.error("Room cleanup error:", error);
             // Don't throw error to prevent blocking other operations
         }
+    }
+
+    addRoomListener(roomId, callback) {
+        return this.listenToRoom(roomId, callback);
     }
 
     cleanup() {

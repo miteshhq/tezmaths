@@ -12,6 +12,8 @@ import {
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
 import ViewShot from "react-native-view-shot";
 import Share from "react-native-share";
+import { auth, database } from "../../firebase/firebaseConfig";
+import { ref, get, remove } from "firebase/database";
 
 import * as FileSystem from "expo-file-system";
 import SoundManager from "../../components/soundManager";
@@ -116,16 +118,45 @@ export default function BattleResultsScreen() {
 
   const [isNavigating, setIsNavigating] = useState(false);
 
-  const performCleanup = useCallback(() => {
-    if (cleanupExecuted.current || !roomId) return;
-    cleanupExecuted.current = true;
+  const performCleanup = useCallback(async () => {
+    console.log("Battle results cleanup starting");
 
-    // Non-blocking cleanup
-    Promise.allSettled([
-      battleManager.removeRoomListener(roomId as string),
-      battleManager.updatePlayerConnection(roomId as string, false),
-      battleManager.cleanupRoom(roomId as string, "battle_ended"),
-    ]).catch(() => {});
+    try {
+      const user = auth.currentUser;
+      const userId = user?.uid;
+
+      if (roomId && userId) {
+        // Update player connection status
+        await battleManager.updatePlayerConnection(roomId, false);
+
+        // Check if we should clean up the room
+        const roomRef = ref(database, `rooms/${roomId}`);
+        const snapshot = await get(roomRef);
+
+        if (snapshot.exists()) {
+          const roomData = snapshot.val();
+
+          // If we're the host and room is finished, clean it up
+          if (roomData.hostId === userId && roomData.status === "finished") {
+            const playersStillConnected = Object.values(
+              roomData.players || {}
+            ).some((player: any) => player.connected);
+
+            if (!playersStillConnected) {
+              await remove(roomRef);
+              console.log("Room cleaned up by host");
+            }
+          } else {
+            // Just leave the room
+            await battleManager.leaveRoom(roomId);
+          }
+        }
+      }
+
+      console.log("Battle results cleanup completed");
+    } catch (error) {
+      console.error("Battle results cleanup error:", error);
+    }
   }, [roomId]);
 
   useEffect(() => {
@@ -333,18 +364,25 @@ export default function BattleResultsScreen() {
     }, [])
   );
 
-  const handleHomeNavigation = useCallback(() => {
+  const handleHomeNavigation = useCallback(async () => {
     if (isNavigating) return;
 
     setIsNavigating(true);
 
-    // Immediate navigation
-    router.replace("/user/home");
+    try {
+      // Perform cleanup first
+      await performCleanup();
 
-    // Background cleanup
-    setTimeout(() => {
-      performCleanup();
-    }, 100);
+      // Small delay to ensure cleanup completes
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      // Navigate back to multiplayer selection
+      router.replace("/user/multiplayer-mode-selection");
+    } catch (error) {
+      console.warn("Navigation cleanup error:", error);
+      // Navigate anyway
+      router.replace("/user/multiplayer-mode-selection");
+    }
   }, [performCleanup]);
 
   // Cleanup on unmount
