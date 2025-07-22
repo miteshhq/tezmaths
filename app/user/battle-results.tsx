@@ -11,9 +11,9 @@ import {
 } from "react-native";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
 import ViewShot from "react-native-view-shot";
-import Share from "react-native-share";
 import { auth, database } from "../../firebase/firebaseConfig";
 import { ref, get, remove } from "firebase/database";
+import Share from "react-native-share";
 
 import * as FileSystem from "expo-file-system";
 import SoundManager from "../../components/soundManager";
