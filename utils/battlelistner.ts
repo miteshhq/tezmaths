@@ -1,26 +1,75 @@
-// hooks/useBattleStartListener.ts
-import { useEffect } from "react";
-import { onValue, ref } from "firebase/database";
-import { useRouter } from "expo-router";
-import { database } from "../firebase/firebaseConfig";
+import { useEffect, useRef } from 'react';
+import { useRouter } from 'expo-router';
+import { battleManager } from './battleManager';
 
-const useBattleStartListener = (roomId: string, isHost: boolean) => {
+const useBattleStartListener = (roomId, isHost) => {
   const router = useRouter();
+  const listenerRef = useRef(null);
+  const navigationAttempted = useRef(false);
 
   useEffect(() => {
     if (!roomId) return;
 
-    const roomRef = ref(database, `rooms/${roomId}`);
+    console.log(`[useBattleStartListener] Setting up listener for room: ${roomId}, isHost: ${isHost}`);
 
-    const unsubscribe = onValue(roomRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data?.battleStarted) {
-        router.replace(`/user/battle-screen?roomId=${roomId}&isHost=${isHost}`);
+    const cleanup = () => {
+      if (listenerRef.current) {
+        listenerRef.current();
+        listenerRef.current = null;
       }
-    });
+      navigationAttempted.current = false;
+    };
 
-    return () => unsubscribe();
-  }, [roomId, isHost]);
+    const handleRoomUpdate = (roomData) => {
+      if (!roomData) return;
+
+      console.log(`[useBattleStartListener] Room update - Status: ${roomData.status}, Questions: ${roomData.questions?.length || 0}`);
+
+      // Navigate to battle screen when status changes to "playing" and we have questions
+      if (
+        roomData.status === "playing" && 
+        roomData.questions && 
+        roomData.questions.length > 0 && 
+        !navigationAttempted.current
+      ) {
+        navigationAttempted.current = true;
+        
+        console.log(`[useBattleStartListener] Navigating to battle screen for room: ${roomId}`);
+        
+        // Small delay to ensure state is properly set
+        setTimeout(() => {
+          router.replace({
+            pathname: "/user/battle-screen",
+            params: {
+              roomId: roomId,
+              isHost: isHost ? "true" : "false",
+            },
+          });
+        }, 500);
+      }
+
+      // Handle battle end - navigate back to multiplayer selection
+      if (roomData.status === "finished") {
+        console.log(`[useBattleStartListener] Battle finished, cleaning up`);
+        cleanup();
+      }
+    };
+
+    // Set up room listener
+    listenerRef.current = battleManager.listenToRoom(roomId, handleRoomUpdate);
+
+    return cleanup;
+  }, [roomId, isHost, router]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (listenerRef.current) {
+        listenerRef.current();
+        listenerRef.current = null;
+      }
+    };
+  }, []);
 };
 
 export default useBattleStartListener;

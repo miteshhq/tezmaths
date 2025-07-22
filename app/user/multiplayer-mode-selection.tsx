@@ -23,7 +23,6 @@ import { auth, database } from "../../firebase/firebaseConfig";
 
 type Player = {
   name: string;
-  // add other properties if needed
 };
 
 export default function MultiplayerModeSelection() {
@@ -45,36 +44,40 @@ export default function MultiplayerModeSelection() {
   );
 
   const [searchingRandom, setSearchingRandom] = useState(false);
-
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-  // Add this ref
+  // Add state management for operations
+  const [operationInProgress, setOperationInProgress] = useState(false);
+  const [lastOperationTime, setLastOperationTime] = useState(0);
+
   const matchmakingListenerRef = useRef(null);
-
-  const MAX_PLAYERS = 4;
-
   const roomListenerRef = useRef(null);
 
+  const MAX_PLAYERS = 2; // Fixed to 2 players for battles
+
   const performCleanup = useCallback(async () => {
+    if (operationInProgress) {
+      console.log("Operation in progress, skipping cleanup");
+      return;
+    }
+
     console.log("Performing multiplayer cleanup");
 
     try {
-      // Remove room listener
+      setOperationInProgress(true);
+
       if (roomListenerRef.current) {
         roomListenerRef.current();
         roomListenerRef.current = null;
       }
 
-      // Remove matchmaking listener
       if (matchmakingListenerRef.current) {
         matchmakingListenerRef.current();
         matchmakingListenerRef.current = null;
       }
 
-      // Cancel matchmaking
       await battleManager.cancelMatchmaking();
 
-      // Leave room if in one
       if (roomId) {
         await battleManager.leaveRoom(roomId);
       }
@@ -82,17 +85,18 @@ export default function MultiplayerModeSelection() {
       console.log("Multiplayer cleanup completed");
     } catch (error) {
       console.warn("Cleanup error:", error);
+    } finally {
+      setOperationInProgress(false);
     }
-  }, [roomId]);
+  }, [roomId, operationInProgress]);
 
   useFocusEffect(
     useCallback(() => {
       console.log("MultiplayerModeSelection focused");
 
-      // Only cleanup matchmaking if we're coming back from a battle
       const handleFocus = async () => {
         try {
-          // Cancel any ongoing matchmaking
+          await new Promise((resolve) => setTimeout(resolve, 500));
           await battleManager.cancelMatchmaking();
           console.log("Matchmaking cancelled on focus");
         } catch (error) {
@@ -104,16 +108,16 @@ export default function MultiplayerModeSelection() {
 
       return () => {
         console.log("MultiplayerModeSelection unfocused");
-        // Minimal cleanup on unfocus
       };
     }, [])
   );
 
-  // Handle hardware back button
   useEffect(() => {
     const backAction = () => {
-      router.push("/user/home");
-      return true; // Prevent default back behavior
+      if (!operationInProgress) {
+        router.push("/user/home");
+      }
+      return true;
     };
 
     const backHandler = BackHandler.addEventListener(
@@ -122,19 +126,17 @@ export default function MultiplayerModeSelection() {
     );
 
     return () => backHandler.remove();
-  }, [router]);
+  }, [router, operationInProgress]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       performCleanup();
     };
   }, [performCleanup]);
 
-  // Keyboard listeners
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", () => {
-      setKeyboardHeight(300); // or some fixed height if you don't need dynamic
+      setKeyboardHeight(300);
     });
 
     const hideSub = Keyboard.addListener("keyboardDidHide", () => {
@@ -147,63 +149,86 @@ export default function MultiplayerModeSelection() {
     };
   }, []);
 
-  // Room listener cleanup
   useEffect(() => {
     return () => {
       if (roomId) {
         battleManager.removeRoomListener(roomId);
-        if (!roomId) return;
       }
     };
   }, [roomId]);
 
-  // For Quiz Code section
-  const handleShowQuizCodeInput = () => {
-    setShowQuizCodeInput(true);
-    setShowCreateRoom(false); // Close create room section
-    // Reset create room states
-    setRoomCode("");
+  const debounceOperation = useCallback(
+    (operation: () => Promise<void>, delay = 1000) => {
+      const now = Date.now();
+      if (now - lastOperationTime < delay) {
+        console.log("Operation debounced");
+        return;
+      }
+      setLastOperationTime(now);
+      return operation();
+    },
+    [lastOperationTime]
+  );
+
+  const resetAllStates = useCallback(() => {
+    setShowQuizCodeInput(false);
+    setShowCreateRoom(false);
+    setSearchingRandom(false);
+    setQuizCode("");
     setRoomName("");
+    setRoomCode("");
     setRoomId("");
     setPlayersInRoom({});
+    setJoiningRoom(false);
     setCreatingRoom(false);
-    // Reset random search
-    setSearchingRandom(false);
+  }, []);
+
+  const handleShowQuizCodeInput = () => {
+    if (operationInProgress) return;
+    resetAllStates();
+    setShowQuizCodeInput(true);
   };
 
-  // For Create Room section
   const handleShowCreateRoom = () => {
+    if (operationInProgress) return;
+    resetAllStates();
     setShowCreateRoom(true);
-    setShowQuizCodeInput(false); // Close quiz code section
-    // Reset quiz code states
-    setQuizCode("");
-    setJoiningRoom(false);
-    // Reset random search
-    setSearchingRandom(false);
   };
 
   const handleJoinQuizCode = async () => {
+    if (operationInProgress || joiningRoom) return;
+
     if (quizCode.length < 4) {
-      Alert.alert("Invalid Code", "Please enter a valid quiz code");
+      Alert.alert(
+        "Invalid Code",
+        "Please enter a valid quiz code (minimum 4 characters)"
+      );
       return;
     }
 
     setJoiningRoom(true);
+    setOperationInProgress(true);
 
     try {
+      console.log("Attempting to join room with code:", quizCode);
       const { roomId: foundRoomId } = await battleManager.joinRoom(quizCode);
-      setJoiningRoom(false);
+      console.log("Successfully joined room:", foundRoomId);
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       router.push(`/user/battle-room?roomId=${foundRoomId}&isHost=false`);
     } catch (error) {
+      console.error("Join room error:", error);
       Alert.alert("Error", error.message);
+    } finally {
       setJoiningRoom(false);
+      setOperationInProgress(false);
     }
   };
 
   const shareRoomDetails = async (roomId: string, roomCode: string) => {
     try {
-      const message = `🎮 Join my TezMaths Battle Room!\n\n🆔 Room ID: ${roomId}\n🔑 Room Code: ${roomCode}\n\nOpen the app and enter the code to join. Let's battle it out! 🚀`;
-
+      const message = `🎮 Join my TezMaths Battle Room!\n\n🔑 Room Code: ${roomCode}\n\nOpen the app and enter the code to join. Let's battle it out! 🚀`;
       await Share.share({ message });
     } catch (error) {
       console.error("Failed to share room details:", error);
@@ -212,118 +237,129 @@ export default function MultiplayerModeSelection() {
   };
 
   const handleCreateRoom = async () => {
-    // Prevent multiple concurrent room creations
-    if (creatingRoom) return;
-
-    setCreatingRoom(true);
-
-    try {
-      // Step 1: Cleanup old room if any
-      if (roomListenerRef.current) {
-        roomListenerRef.current();
-        roomListenerRef.current = null;
-      }
-
-      if (roomId) {
-        try {
-          await battleManager.leaveRoom(roomId);
-        } catch (err) {
-          console.warn("Failed to leave previous room:", err);
-        }
-      }
-
-      // Reset states properly
-      setRoomId("");
-      setRoomCode("");
-      setPlayersInRoom({});
-
-      // Step 2: Create new room
-      const user = auth.currentUser;
-      if (!user) {
-        Alert.alert("Error", "You must be logged in to create a room");
-        setCreatingRoom(false);
-        return;
-      }
-
-      const userId = user.uid;
-      const userName = user.displayName || "Anonymous";
-
-      // Step 3: Create room with BattleManager
-      const roomData = await battleManager.createRoom(
-        roomName,
-        userId,
-        userName
-      );
-
-      if (roomData && roomData.roomId && roomData.roomCode) {
-        setRoomId(roomData.roomId);
-        setRoomCode(roomData.roomCode);
-
-        console.log("Room created successfully:", {
-          roomId: roomData.roomId,
-          roomCode: roomData.roomCode,
-        });
-
-        // Step 4: Setup room listener
-        const unsubscribe = battleManager.addRoomListener(
-          roomData.roomId,
-          (updatedRoomData) => {
-            console.log("Room data updated:", updatedRoomData);
-            if (updatedRoomData && updatedRoomData.players) {
-              setPlayersInRoom(updatedRoomData.players);
-
-              // Check if battle should start
-              if (updatedRoomData.status === "in-progress") {
-                console.log("Battle starting, navigating to battle screen");
-                setShowCreateRoom(false);
-                router.push({
-                  pathname: "/user/battle-screen",
-                  params: {
-                    roomId: roomData.roomId,
-                    isHost: "true",
-                  },
-                });
-              }
-            }
-          }
-        );
-
-        roomListenerRef.current = unsubscribe;
-      } else {
-        throw new Error("Failed to create room - invalid response");
-      }
-    } catch (error) {
-      console.error("Create room error:", error);
-      Alert.alert("Error", "Failed to create room. Please try again.");
-
-      // Reset states on error
-      setRoomId("");
-      setRoomCode("");
-      setPlayersInRoom({});
-    } finally {
-      setCreatingRoom(false);
-    }
-  };
-
-  const startBattleRoom = async () => {
-    if (Object.keys(playersInRoom).length < 2) {
-      // Alert.alert("Need More Players", "Wait for at least 2 players to join");
+    if (operationInProgress || creatingRoom) {
+      console.log("Create room operation already in progress");
       return;
     }
 
+    return debounceOperation(async () => {
+      setCreatingRoom(true);
+      setOperationInProgress(true);
+
+      try {
+        const user = auth.currentUser;
+        if (!user?.uid) {
+          Alert.alert("Error", "You must be logged in to create a room");
+          return;
+        }
+
+        console.log("Creating room for user:", user.uid);
+
+        if (roomListenerRef.current) {
+          roomListenerRef.current();
+          roomListenerRef.current = null;
+        }
+
+        if (roomId) {
+          try {
+            await battleManager.leaveRoom(roomId);
+          } catch (err) {
+            console.warn("Failed to leave previous room:", err);
+          }
+        }
+
+        setRoomId("");
+        setRoomCode("");
+        setPlayersInRoom({});
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        const finalRoomName = roomName?.trim() || "Battle Room";
+
+        console.log("Creating room with name:", finalRoomName);
+        const roomData = await battleManager.createRoom(finalRoomName, 2);
+
+        if (roomData?.roomId && roomData?.roomCode) {
+          setRoomId(roomData.roomId);
+          setRoomCode(roomData.roomCode);
+
+          console.log("Room created successfully:", {
+            roomId: roomData.roomId,
+            roomCode: roomData.roomCode,
+          });
+
+          const unsubscribe = battleManager.addRoomListener(
+            roomData.roomId,
+            (updatedRoomData) => {
+              console.log("Room data updated:", updatedRoomData);
+              if (updatedRoomData?.players) {
+                setPlayersInRoom(updatedRoomData.players);
+
+                if (updatedRoomData.status === "playing") {
+                  console.log("Battle starting, navigating to battle screen");
+                  setShowCreateRoom(false);
+                  router.push({
+                    pathname: "/user/battle-screen",
+                    params: {
+                      roomId: roomData.roomId,
+                      isHost: "true",
+                    },
+                  });
+                }
+              }
+            }
+          );
+
+          roomListenerRef.current = unsubscribe;
+        } else {
+          throw new Error("Failed to create room - invalid response");
+        }
+      } catch (error) {
+        console.error("Create room error:", error);
+        Alert.alert("Error", "Failed to create room. Please try again.");
+
+        setRoomId("");
+        setRoomCode("");
+        setPlayersInRoom({});
+      } finally {
+        setCreatingRoom(false);
+        setOperationInProgress(false);
+      }
+    });
+  };
+
+  const startBattleRoom = async () => {
+    if (operationInProgress) return;
+
+    if (Object.keys(playersInRoom).length < 2) {
+      Alert.alert("Need More Players", "Wait for at least 2 players to join");
+      return;
+    }
+
+    setOperationInProgress(true);
+
     try {
+      console.log("Starting battle for room:", roomId);
       await battleManager.startBattle(roomId);
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       router.push(`/user/battle-screen?roomId=${roomId}&isHost=true`);
     } catch (error) {
+      console.error("Start battle error:", error);
       Alert.alert("Error", error.message || "Failed to start battle");
+    } finally {
+      setOperationInProgress(false);
     }
   };
 
   const cancelRoomCreation = useCallback(async () => {
-    // Prevent multiple cancellations
-    if (creatingRoom) return;
+    if (operationInProgress || creatingRoom) {
+      console.log("Cannot cancel - operation in progress");
+      return;
+    }
 
-    setCreatingRoom(true);
+    setOperationInProgress(true);
 
     try {
       if (roomId) {
@@ -336,18 +372,15 @@ export default function MultiplayerModeSelection() {
         if (snapshot.exists()) {
           const roomData = snapshot.val();
           if (roomData.hostId === userId) {
-            // Host deletes the room
             await remove(roomRef);
             console.log("Room deleted by host");
           } else {
-            // Guest leaves the room
             await battleManager.leaveRoom(roomId);
             console.log("Left room as guest");
           }
         }
       }
 
-      // Remove listener
       if (roomListenerRef.current) {
         roomListenerRef.current();
         roomListenerRef.current = null;
@@ -355,43 +388,66 @@ export default function MultiplayerModeSelection() {
     } catch (error) {
       console.error("Cancel room error:", error);
     } finally {
-      // Always reset states
-      setShowCreateRoom(false);
-      setRoomName("");
-      setRoomCode("");
-      setRoomId("");
-      setPlayersInRoom({});
-      setCreatingRoom(false);
+      resetAllStates();
+      setOperationInProgress(false);
     }
-  }, [roomId, creatingRoom]);
+  }, [roomId, operationInProgress, creatingRoom, resetAllStates]);
 
   const handleRandomMatch = async () => {
-    setSearchingRandom(true);
-    try {
-      const { roomId, isHost } = await battleManager.findRandomMatch(2);
-
-      // Optional: wait briefly to ensure Firebase sets everything up
-      await new Promise((res) => setTimeout(res, 500));
-
-      router.push(
-        `/user/battle-room?roomId=${roomId}&isHost=${isHost ? "true" : "false"}`
-      );
-    } catch (error) {
-      console.error("Random match error:", error);
-      setSearchingRandom(false);
-      Alert.alert("Matchmaking Failed", error.message || "Room not found");
+    if (operationInProgress || searchingRandom) {
+      console.log("Random match already in progress");
+      return;
     }
+
+    return debounceOperation(async () => {
+      setSearchingRandom(true);
+      setOperationInProgress(true);
+      resetAllStates();
+      setSearchingRandom(true);
+
+      try {
+        console.log("Starting random match search");
+
+        const user = auth.currentUser;
+        if (!user?.uid) {
+          throw new Error("User not authenticated");
+        }
+
+        const { roomId, isHost } = await battleManager.findRandomMatch(2);
+        console.log("Random match found:", { roomId, isHost });
+
+        await new Promise((res) => setTimeout(res, 1000));
+
+        router.push(
+          `/user/battle-room?roomId=${roomId}&isHost=${
+            isHost ? "true" : "false"
+          }`
+        );
+      } catch (error) {
+        console.error("Random match error:", error);
+        Alert.alert("Matchmaking Failed", error.message || "Room not found");
+      } finally {
+        setSearchingRandom(false);
+        setOperationInProgress(false);
+      }
+    });
   };
 
   const cancelRandomSearch = useCallback(async () => {
+    if (operationInProgress) return;
+
+    setOperationInProgress(true);
     setSearchingRandom(false);
+
     try {
       await battleManager.cancelMatchmaking();
+      console.log("Random search cancelled");
     } catch (error) {
       console.error("Cancel matchmaking error:", error);
+    } finally {
+      setOperationInProgress(false);
     }
 
-    // Reset any room states
     if (roomId) {
       try {
         await battleManager.leaveRoom(roomId);
@@ -400,13 +456,18 @@ export default function MultiplayerModeSelection() {
       }
       setRoomId("");
     }
-  }, [roomId]);
+  }, [roomId, operationInProgress]);
 
   useEffect(() => {
     const fetchResults = async () => {
       if (roomId) {
-        const results = await fetchLast5BattleResults(roomId);
-        setBattleResults(results);
+        try {
+          const results = await fetchLast5BattleResults(roomId);
+          setBattleResults(results);
+        } catch (error) {
+          console.warn("Failed to fetch battle results:", error);
+          setBattleResults([]);
+        }
       }
     };
     fetchResults();
@@ -415,21 +476,18 @@ export default function MultiplayerModeSelection() {
   const formattedResults = battleResults.map((entry) => ({
     ...entry,
     name: playersInRoom[entry.userId]?.name || "Player",
-    opponentScore: entry.opponentScore || 0, // You must save this during battle
+    opponentScore: entry.opponentScore || 0,
   }));
 
-  // Enhanced cancel functions for UI buttons
   const handleCancelQuizCode = () => {
-    setShowQuizCodeInput(false);
-    setQuizCode("");
-    setJoiningRoom(false);
+    if (operationInProgress) return;
+    resetAllStates();
     Keyboard.dismiss();
   };
 
   const handleCancelCreateRoom = () => {
-    setShowCreateRoom(false);
-    setRoomName("");
-    setCreatingRoom(false);
+    if (operationInProgress) return;
+    resetAllStates();
     Keyboard.dismiss();
   };
 
@@ -439,12 +497,12 @@ export default function MultiplayerModeSelection() {
         source={require("../../assets/gradient.jpg")}
         style={{ overflow: "hidden", marginTop: 20 }}
       >
-        <View className="px-4 py-4">
-          <View className="flex-row justify-center items-center gap-2">
+        <View className="px-6 py-6">
+          <View className="flex-row justify-center items-center gap-3">
             <Image
               source={require("../../assets/icons/swords.png")}
-              style={{ width: 28, height: 28 }}
-              tintColor="#FF6B35"
+              style={{ width: 32, height: 32 }}
+              tintColor="#FFFFFF"
             />
             <Text className="text-white text-3xl font-black">Battle Mode</Text>
           </View>
@@ -456,98 +514,121 @@ export default function MultiplayerModeSelection() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           flexGrow: 1,
-          paddingBottom: keyboardHeight > 0 ? keyboardHeight - 30 : 30,
+          paddingBottom: keyboardHeight > 0 ? keyboardHeight : 100,
         }}
         showsVerticalScrollIndicator={false}
       >
-        <View className="px-4 py-4">
-          <View className="flex-col justify-center items-center">
-            <Text className="text-custom-purple text-2xl mt-4 font-black">
+        <View className="px-5 py-6">
+          <View className="flex-col justify-center items-center mb-6">
+            <Text className="text-custom-purple text-3xl font-black text-center">
               Choose Your Battle Mode!
             </Text>
-            <Text className="text-custom-purple text-center text-base mt-2 italic">
-              (Try properly closing and reopening the app if you face any issue
-              while any battle mode.)
+            <Text className="text-custom-purple text-center text-base mt-3 italic leading-6">
+              Experience competitive math battles with players worldwide.
+              Challenge yourself and climb the leaderboard!
             </Text>
           </View>
         </View>
 
-        <View className="px-4 py-6 flex flex-col gap-4">
-          <View className="border border-black rounded-2xl overflow-hidden">
-            <View className="w-full h-8 bg-primary"></View>
-            <View className="w-full p-4 flex flex-col items-center gap-4">
-              <View className="flex flex-col items-center gap-1">
+        <View className="px-5 flex flex-col gap-6">
+          {/* Random Player Mode */}
+          <View className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+            <View className="w-full h-2 bg-primary"></View>
+            <View className="p-6 flex flex-col items-center gap-5">
+              <View className="flex flex-col items-center gap-2">
                 <Text className="text-2xl text-custom-purple font-black">
-                  Random Player
+                  🎯 Random Player
                 </Text>
-                <Text className="text-sm text-center text-custom-purple">
+                <Text className="text-sm text-center text-custom-purple leading-5">
                   Get matched with a random opponent for an exciting battle!
+                  Quick and competitive.
                 </Text>
               </View>
 
               {!searchingRandom ? (
-                <TouchableOpacity onPress={handleRandomMatch}>
+                <TouchableOpacity
+                  onPress={handleRandomMatch}
+                  disabled={operationInProgress}
+                  className="w-full"
+                >
                   <ImageBackground
                     source={require("../../assets/gradient.jpg")}
-                    style={{ borderRadius: 8, overflow: "hidden" }}
+                    style={{
+                      borderRadius: 12,
+                      overflow: "hidden",
+                      opacity: operationInProgress ? 0.7 : 1,
+                    }}
                     imageStyle={{ borderRadius: 12 }}
                   >
-                    <View className="py-3">
-                      <Text className="text-white font-bold text-xl w-56 text-center">
+                    <View className="py-4 px-8">
+                      <Text className="text-white font-bold text-lg text-center">
                         Find Random Battle
                       </Text>
                     </View>
                   </ImageBackground>
                 </TouchableOpacity>
               ) : (
-                <View className="flex flex-col items-center gap-3">
+                <View className="flex flex-col items-center gap-4">
                   <ActivityIndicator size="large" color="#76184F" />
-                  <Text className="text-black font-bold">
+                  <Text className="text-custom-purple font-bold text-lg">
                     Searching for opponent...
                   </Text>
                   <TouchableOpacity
-                    className="px-4 py-2 bg-gray-200 rounded-lg"
+                    className="px-6 py-3 bg-custom-gray rounded-lg"
                     onPress={cancelRandomSearch}
+                    disabled={operationInProgress}
                   >
-                    <Text className="text-custom-purple font-bold">Cancel</Text>
+                    <Text className="text-custom-purple font-bold">
+                      Cancel Search
+                    </Text>
                   </TouchableOpacity>
                 </View>
               )}
             </View>
           </View>
 
-          <View className="border border-black rounded-2xl overflow-hidden">
-            <View className="w-full h-8 bg-primary"></View>
-            <View className="w-full p-4 flex flex-col items-center gap-4">
-              <View className="flex flex-col items-center gap-1">
+          {/* Quiz Code Mode */}
+          <View className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+            <View className="w-full h-2 bg-primary"></View>
+            <View className="p-6 flex flex-col items-center gap-5">
+              <View className="flex flex-col items-center gap-2">
                 <Text className="text-2xl text-custom-purple font-black">
-                  Quiz Code
+                  🔑 Quiz Code
                 </Text>
-                <Text className="text-sm text-center text-custom-purple">
+                <Text className="text-sm text-center text-custom-purple leading-5">
                   Join a specific battle using a quiz code from your friend!
+                  Perfect for private matches.
                 </Text>
               </View>
 
               {!showQuizCodeInput ? (
-                <TouchableOpacity onPress={handleShowQuizCodeInput}>
+                <TouchableOpacity
+                  onPress={handleShowQuizCodeInput}
+                  disabled={operationInProgress}
+                  className="w-full"
+                >
                   <ImageBackground
                     source={require("../../assets/gradient.jpg")}
-                    style={{ borderRadius: 8, overflow: "hidden" }}
+                    style={{
+                      borderRadius: 12,
+                      overflow: "hidden",
+                      opacity: operationInProgress ? 0.7 : 1,
+                    }}
                     imageStyle={{ borderRadius: 12 }}
                   >
-                    <View className="py-3">
-                      <Text className="text-white font-bold text-xl w-56 text-center">
+                    <View className="py-4 px-8">
+                      <Text className="text-white font-bold text-lg text-center">
                         Enter Quiz Code
                       </Text>
                     </View>
                   </ImageBackground>
                 </TouchableOpacity>
               ) : (
-                <View className="w-full flex flex-col gap-3">
+                <View className="w-full flex flex-col gap-4">
                   <TextInput
-                    className="border-2 border-custom-purple rounded-lg px-4 py-3 text-center text-lg font-bold text-black"
+                    className="border-2 border-custom-purple rounded-xl px-4 py-4 text-center text-lg font-bold text-custom-purple bg-light-orange"
                     placeholder="Enter Quiz Code"
-                    placeholderTextColor="black"
+                    placeholderTextColor="#76184F"
                     value={quizCode}
                     onChangeText={setQuizCode}
                     maxLength={8}
@@ -556,35 +637,37 @@ export default function MultiplayerModeSelection() {
                     returnKeyType="done"
                     onSubmitEditing={handleJoinQuizCode}
                     blurOnSubmit={true}
+                    editable={!operationInProgress}
                   />
-                  <View className="flex-row gap-2">
+                  <View className="flex-row gap-3">
                     <TouchableOpacity
                       className="flex-1"
                       onPress={handleJoinQuizCode}
-                      disabled={joiningRoom}
+                      disabled={joiningRoom || operationInProgress}
                     >
                       <ImageBackground
                         source={require("../../assets/gradient.jpg")}
                         style={{
-                          borderRadius: 8,
+                          borderRadius: 12,
                           overflow: "hidden",
-                          opacity: joiningRoom ? 0.7 : 1,
+                          opacity: joiningRoom || operationInProgress ? 0.7 : 1,
                         }}
                         imageStyle={{ borderRadius: 12 }}
                       >
-                        <View className="py-3 flex-row justify-center items-center gap-2">
+                        <View className="py-4 flex-row justify-center items-center gap-2">
                           {joiningRoom && (
                             <ActivityIndicator size="small" color="white" />
                           )}
-                          <Text className="text-white font-bold text-lg">
+                          <Text className="text-white font-bold text-base">
                             {joiningRoom ? "Joining..." : "Join Battle"}
                           </Text>
                         </View>
                       </ImageBackground>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      className="px-4 py-3 bg-gray-200 rounded-lg"
+                      className="px-6 py-4 bg-custom-gray rounded-xl"
                       onPress={handleCancelQuizCode}
+                      disabled={operationInProgress}
                     >
                       <Text className="text-custom-purple font-bold">
                         Cancel
@@ -596,75 +679,88 @@ export default function MultiplayerModeSelection() {
             </View>
           </View>
 
-          <View className="border border-black rounded-2xl overflow-hidden">
-            <View className="w-full h-8 bg-primary"></View>
-            <View className="w-full p-4 flex flex-col items-center gap-4">
-              <View className="flex flex-col items-center gap-1">
+          {/* Create Room Mode */}
+          <View className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+            <View className="w-full h-2 bg-primary"></View>
+            <View className="p-6 flex flex-col items-center gap-5">
+              <View className="flex flex-col items-center gap-2">
                 <Text className="text-2xl text-custom-purple font-black">
-                  Create Room
+                  🏠 Create Room
                 </Text>
-                <Text className="text-sm text-center text-custom-purple">
-                  Create your own battle room and invite friends to join!
+                <Text className="text-sm text-center text-custom-purple leading-5">
+                  Create your own battle room and invite friends to join! Be the
+                  host and control the game.
                 </Text>
               </View>
 
               {!showCreateRoom ? (
-                <TouchableOpacity onPress={handleShowCreateRoom}>
+                <TouchableOpacity
+                  onPress={handleShowCreateRoom}
+                  disabled={operationInProgress}
+                  className="w-full"
+                >
                   <ImageBackground
                     source={require("../../assets/gradient.jpg")}
-                    style={{ borderRadius: 8, overflow: "hidden" }}
+                    style={{
+                      borderRadius: 12,
+                      overflow: "hidden",
+                      opacity: operationInProgress ? 0.7 : 1,
+                    }}
                     imageStyle={{ borderRadius: 12 }}
                   >
-                    <View className="py-3">
-                      <Text className="text-white font-bold text-xl w-56 text-center">
+                    <View className="py-4 px-8">
+                      <Text className="text-white font-bold text-lg text-center">
                         Create New Room
                       </Text>
                     </View>
                   </ImageBackground>
                 </TouchableOpacity>
               ) : (
-                <View className="w-full flex flex-col gap-3">
+                <View className="w-full flex flex-col gap-4">
                   <TextInput
-                    className="border-2 border-custom-purple rounded-lg px-4 py-3 text-center text-lg text-black"
-                    placeholder="Enter Room Name"
-                    placeholderTextColor="black"
+                    className="border-2 border-custom-purple rounded-xl px-4 py-4 text-center text-lg text-custom-purple bg-light-orange"
+                    placeholder="Enter Room Name (Optional)"
+                    placeholderTextColor="#76184F"
                     value={roomName}
                     onChangeText={setRoomName}
                     maxLength={20}
                     returnKeyType="done"
                     onSubmitEditing={handleCreateRoom}
                     blurOnSubmit={true}
+                    editable={!operationInProgress}
                   />
 
                   {!roomCode ? (
-                    <View className="flex-row gap-2">
+                    <View className="flex-row gap-3">
                       <TouchableOpacity
                         className="flex-1"
                         onPress={handleCreateRoom}
-                        disabled={creatingRoom}
+                        disabled={creatingRoom || operationInProgress}
                       >
                         <ImageBackground
                           source={require("../../assets/gradient.jpg")}
                           style={{
-                            borderRadius: 8,
+                            borderRadius: 12,
                             overflow: "hidden",
-                            opacity: creatingRoom ? 0.7 : 1,
+                            opacity:
+                              creatingRoom || operationInProgress ? 0.7 : 1,
                           }}
                           imageStyle={{ borderRadius: 12 }}
                         >
-                          <View className="py-3 flex-row justify-center items-center gap-2">
+                          <View className="py-4 flex-row justify-center items-center gap-2">
                             {creatingRoom && (
                               <ActivityIndicator size="small" color="white" />
                             )}
-                            <Text className="text-white font-bold text-lg">
-                              {creatingRoom ? "Creating..." : "Generate Code"}
+                            <Text className="text-white font-bold text-base">
+                              {creatingRoom ? "Creating..." : "Generate Room"}
                             </Text>
                           </View>
                         </ImageBackground>
                       </TouchableOpacity>
                       <TouchableOpacity
-                        className="px-4 py-3 bg-gray-200 rounded-lg"
+                        className="px-6 py-4 bg-custom-gray rounded-xl"
                         onPress={handleCancelCreateRoom}
+                        disabled={operationInProgress}
                       >
                         <Text className="text-custom-purple font-bold">
                           Cancel
@@ -672,30 +768,30 @@ export default function MultiplayerModeSelection() {
                       </TouchableOpacity>
                     </View>
                   ) : (
-                    <View className="flex flex-col gap-3">
-                      <View className="bg-light-orange rounded-lg p-4">
-                        <Text className="text-center text-black font-bold text-sm">
+                    <View className="flex flex-col gap-4">
+                      <View className="bg-light-orange rounded-xl p-5 border-2 border-primary">
+                        <Text className="text-center text-custom-purple font-bold text-base mb-1">
                           Room Code
                         </Text>
-                        <Text className="text-center text-black font-black text-2xl">
+                        <Text className="text-center text-custom-purple font-black text-3xl tracking-wider">
                           {roomCode}
                         </Text>
-                        <Text className="text-center text-black text-xs mt-2">
+                        <Text className="text-center text-custom-purple text-sm mt-2 opacity-80">
                           Players: {Object.keys(playersInRoom).length}/
                           {MAX_PLAYERS}
                         </Text>
                       </View>
 
                       {Object.keys(playersInRoom).length > 1 && (
-                        <View className="bg-custom-gray rounded-lg p-3">
-                          <Text className="text-center text-custom-purple font-bold text-sm mb-2">
+                        <View className="bg-custom-gray rounded-xl p-4">
+                          <Text className="text-center text-custom-purple font-bold text-base mb-3">
                             Players Joined:
                           </Text>
                           {Object.entries(playersInRoom).map(
                             ([playerId, player]) => (
                               <Text
                                 key={playerId}
-                                className="text-center text-custom-purple text-sm"
+                                className="text-center text-custom-purple text-base py-1"
                               >
                                 • {player.name}
                               </Text>
@@ -704,29 +800,41 @@ export default function MultiplayerModeSelection() {
                         </View>
                       )}
 
-                      <View className="flex-row gap-2">
+                      <View className="flex-row gap-3">
                         <TouchableOpacity
-                          className="flex-1"
+                          className="flex-1 py-4 bg-purple-100 rounded-xl"
                           onPress={() => shareRoomDetails(roomId, roomCode)}
+                          disabled={operationInProgress}
                         >
-                          <View className="py-3 bg-purple-200 rounded-lg">
-                            <Text className="text-custom-purple font-bold text-center">
-                              Share
-                            </Text>
-                          </View>
+                          <Text className="text-custom-purple font-bold text-center text-base">
+                            📱 Share Code
+                          </Text>
                         </TouchableOpacity>
+
                         <TouchableOpacity
                           className="flex-1"
                           onPress={startBattleRoom}
+                          disabled={
+                            operationInProgress ||
+                            Object.keys(playersInRoom).length < 2
+                          }
                         >
                           <ImageBackground
                             source={require("../../assets/gradient.jpg")}
-                            style={{ borderRadius: 8, overflow: "hidden" }}
+                            style={{
+                              borderRadius: 12,
+                              overflow: "hidden",
+                              opacity:
+                                operationInProgress ||
+                                Object.keys(playersInRoom).length < 2
+                                  ? 0.7
+                                  : 1,
+                            }}
                             imageStyle={{ borderRadius: 12 }}
                           >
-                            <View className="py-3">
-                              <Text className="text-white font-bold text-center">
-                                Start Battle
+                            <View className="py-4">
+                              <Text className="text-white font-bold text-center text-base">
+                                🚀 Start Battle
                               </Text>
                             </View>
                           </ImageBackground>
@@ -734,11 +842,12 @@ export default function MultiplayerModeSelection() {
                       </View>
 
                       <TouchableOpacity
-                        className="py-2 bg-light-orange rounded-lg"
+                        className="py-3 bg-light-orange border-2 border-red-300 rounded-xl"
                         onPress={cancelRoomCreation}
+                        disabled={operationInProgress}
                       >
-                        <Text className="text-red-600 font-bold text-center">
-                          Cancel Room
+                        <Text className="text-red-600 font-bold text-center text-base">
+                          ❌ Cancel Room
                         </Text>
                       </TouchableOpacity>
                     </View>
@@ -748,14 +857,16 @@ export default function MultiplayerModeSelection() {
             </View>
           </View>
         </View>
-      </ScrollView>
 
-      <View className="border-t border-gray-300 my-6" />
-      {battleResults.length > 0 && (
-        <View className="mt-6 mb-12 px-4">
-          <BattleScoreBoard players={formattedResults as BattleEntry[]} />
-        </View>
-      )}
+        {battleResults.length > 0 && (
+          <>
+            <View className="border-t border-gray-200 mx-5 my-8" />
+            <View className="px-5 mb-8">
+              <BattleScoreBoard players={formattedResults as BattleEntry[]} />
+            </View>
+          </>
+        )}
+      </ScrollView>
     </View>
   );
 }

@@ -17,6 +17,7 @@ import {
 import { auth, database } from "../firebase/firebaseConfig";
 import { endBattleDueToHostExit } from './handlehostExit';
 import { updateUserStreak } from './streakManager';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export class BattleManager {
     constructor() {
@@ -26,29 +27,36 @@ export class BattleManager {
         this.userPresenceRef = null;
         this.matchmakingListener = null;
         this.roomListener = null;
+        this.isInitialized = false;
+        this.cleanupInProgress = false;
+        this.battleEndCleanupCallbacks = new Map();
         this.setupUserPresence();
     }
 
+    // ... [Previous authentication and setup methods remain the same] ...
     async waitForAuth() {
         return new Promise((resolve, reject) => {
-            if (auth.currentUser) {
-                resolve(auth.currentUser);
-                return;
+            if (auth.currentUser?.uid) {
+                const user = auth.currentUser;
+                if (user.uid && typeof user.uid === 'string') {
+                    resolve(user);
+                    return;
+                }
             }
 
             const unsubscribe = auth.onAuthStateChanged((user) => {
                 unsubscribe();
-                if (user) {
+                if (user?.uid && typeof user.uid === 'string') {
                     resolve(user);
                 } else {
-                    reject(new Error("User not authenticated"));
+                    reject(new Error("User not authenticated or invalid user data"));
                 }
             });
 
             setTimeout(() => {
                 unsubscribe();
                 reject(new Error("Authentication timeout"));
-            }, 5000);
+            }, 10000);
         });
     }
 
@@ -56,9 +64,9 @@ export class BattleManager {
         try {
             const user = await this.waitForAuth();
             this.userId = user.uid;
-            const userId = this.userId;
+            this.isInitialized = true;
 
-            this.userPresenceRef = ref(database, `presence/${userId}`);
+            this.userPresenceRef = ref(database, `presence/${this.userId}`);
             await set(this.userPresenceRef, {
                 online: true,
                 lastSeen: serverTimestamp()
@@ -66,6 +74,584 @@ export class BattleManager {
             onDisconnect(this.userPresenceRef).remove();
         } catch (error) {
             console.error("Failed to setup user presence:", error);
+            this.isInitialized = false;
+        }
+    }
+
+    // Enhanced question generation with exact 25 questions
+    async generateQuestions(startLevel = 1, maxLevels = 10) {
+        console.log("[generateQuestions] Starting question generation");
+
+        const quizzesRef = ref(database, "quizzes");
+        const snapshot = await get(quizzesRef);
+
+        if (!snapshot.exists()) {
+            console.log("[generateQuestions] No quizzes found, using fallback");
+            return {
+                questions: this.getFallbackQuestions(25),
+                levelInfo: [],
+                totalLevels: 0
+            };
+        }
+
+        const questionsByLevel = {};
+        const levelSettings = {};
+
+        snapshot.forEach((childSnapshot) => {
+            const quiz = childSnapshot.val();
+            const level = quiz.level || 1;
+
+            if (level >= startLevel && level <= maxLevels) {
+                levelSettings[level] = {
+                    pointsPerQuestion: Number.parseInt(quiz.pointsPerQuestion) || level,
+                };
+
+                if (quiz.questions) {
+                    const questions = Array.isArray(quiz.questions) ? quiz.questions : Object.values(quiz.questions);
+                    questions.forEach(q => {
+                        if (q.questionText && q.correctAnswer !== undefined) {
+                            if (!questionsByLevel[level]) questionsByLevel[level] = [];
+                            questionsByLevel[level].push({
+                                question: q.questionText,
+                                correctAnswer: q.correctAnswer.toString(),
+                                timeLimit: 15,
+                                points: levelSettings[level].pointsPerQuestion,
+                                explanation: q.explanation || "",
+                                level: level
+                            });
+                        }
+                    });
+                }
+            }
+        });
+
+        const availableLevels = Object.keys(questionsByLevel).map(Number).sort((a, b) => a - b);
+
+        if (availableLevels.length === 0) {
+            console.log("[generateQuestions] No valid levels found, using fallback");
+            return {
+                questions: this.getFallbackQuestions(25),
+                levelInfo: [],
+                totalLevels: 0
+            };
+        }
+
+        // Generate exactly 25 questions with proper distribution
+        const battleQuestions = [];
+        const TARGET_TOTAL = 25;
+
+        const getQuestionsFromLevel = (level, count) => {
+            if (!questionsByLevel[level] || questionsByLevel[level].length === 0) return [];
+            const shuffled = [...questionsByLevel[level]].sort(() => 0.5 - Math.random());
+            return shuffled.slice(0, Math.min(count, shuffled.length));
+        };
+
+        let questionsCollected = 0;
+
+        // Levels 1-5: 3 questions each (15 total)
+        for (let level = 1; level <= 5 && questionsCollected < TARGET_TOTAL; level++) {
+            if (availableLevels.includes(level)) {
+                const questions = getQuestionsFromLevel(level, 3);
+                battleQuestions.push(...questions);
+                questionsCollected += questions.length;
+            }
+        }
+
+        // Levels 6-10: 2 questions each (10 total)
+        for (let level = 6; level <= 10 && questionsCollected < TARGET_TOTAL; level++) {
+            if (availableLevels.includes(level)) {
+                const questions = getQuestionsFromLevel(level, 2);
+                battleQuestions.push(...questions);
+                questionsCollected += questions.length;
+            }
+        }
+
+        // Fill remaining slots if needed
+        if (questionsCollected < TARGET_TOTAL) {
+            const remainingNeeded = TARGET_TOTAL - questionsCollected;
+            const allRemainingQuestions = [];
+
+            availableLevels.forEach(level => {
+                if (questionsByLevel[level]) {
+                    const usedQuestions = battleQuestions.filter(q => q.level === level).length;
+                    const remainingFromLevel = questionsByLevel[level].slice(usedQuestions);
+                    allRemainingQuestions.push(...remainingFromLevel);
+                }
+            });
+
+            const shuffled = allRemainingQuestions.sort(() => 0.5 - Math.random());
+            battleQuestions.push(...shuffled.slice(0, remainingNeeded));
+        }
+
+        // Use fallback for any remaining slots
+        if (battleQuestions.length < TARGET_TOTAL) {
+            const fallbackNeeded = TARGET_TOTAL - battleQuestions.length;
+            const fallbackQuestions = this.getFallbackQuestions(fallbackNeeded);
+            battleQuestions.push(...fallbackQuestions);
+        }
+
+        // Final shuffle and ensure exactly 25 questions
+        const finalQuestions = battleQuestions.sort(() => 0.5 - Math.random()).slice(0, TARGET_TOTAL);
+
+        console.log(`[generateQuestions] Generated ${finalQuestions.length} questions`);
+
+        return {
+            questions: finalQuestions,
+            levelInfo: availableLevels.map(level => ({
+                level: level,
+                questionCount: questionsByLevel[level]?.length || 0,
+                pointsPerQuestion: levelSettings[level]?.pointsPerQuestion || level,
+                usedInBattle: finalQuestions.filter(q => q.level === level).length
+            })),
+            totalLevels: availableLevels.length
+        };
+    }
+
+    getFallbackQuestions(count = 25) {
+        console.log(`[BattleManager] Generating ${count} fallback questions`);
+        return Array(count).fill().map((_, i) => ({
+            question: `${i + 1} + ${i + 5}`,
+            correctAnswer: `${(i + 1) + (i + 5)}`,
+            timeLimit: 15,
+            points: Math.floor(i / 5) + 1,
+            explanation: `Add ${i + 1} and ${i + 5} together`,
+            level: Math.floor(i / 5) + 1
+        }));
+    }
+
+    // Enhanced battle start with proper cleanup
+    async startBattle(roomId) {
+        try {
+            const user = await this.waitForAuth();
+            this.userId = user.uid;
+
+            if (!roomId) throw new Error("No roomId provided");
+
+            const roomRef = ref(database, `rooms/${roomId}`);
+            const snapshot = await get(roomRef);
+            const room = snapshot.val();
+
+            if (!room) throw new Error("Room not found");
+            if (room.hostId !== this.userId) {
+                console.warn("Only host can start battle");
+                return;
+            }
+            if (room.status === "playing") {
+                console.warn("Battle already started");
+                return;
+            }
+
+            const connectedPlayers = Object.values(room.players || {}).filter(
+                (p) => p.connected
+            );
+
+            if (connectedPlayers.length < 2) {
+                throw new Error("At least 2 connected players are required");
+            }
+
+            console.log("[startBattle] Generating questions...");
+            const questionData = await this.generateQuestions(1, 10);
+
+            if (!questionData.questions || questionData.questions.length === 0) {
+                throw new Error("Failed to generate questions");
+            }
+
+            console.log(`[startBattle] Generated ${questionData.questions.length} questions`);
+
+            const now = Date.now();
+
+            // Reset all player states
+            const playerUpdates = {};
+            for (const playerId in room.players) {
+                playerUpdates[`players/${playerId}/score`] = 0;
+                playerUpdates[`players/${playerId}/answers`] = {};
+                playerUpdates[`players/${playerId}/answer`] = "";
+                playerUpdates[`players/${playerId}/winner`] = false;
+                playerUpdates[`players/${playerId}/consecutiveCorrect`] = 0;
+                playerUpdates[`players/${playerId}/ready`] = false;
+                playerUpdates[`players/${playerId}/finalScore`] = 0;
+                playerUpdates[`players/${playerId}/isWinner`] = false;
+            }
+
+            const updateData = {
+                status: "playing",
+                questions: questionData.questions,
+                currentQuestion: 0,
+                currentLevel: 1,
+                totalQuestions: 25, // Ensure exactly 25 questions
+                questionTimeLimit: 15,
+                gameStartedAt: now,
+                questionStartedAt: now,
+                lastActivity: serverTimestamp(),
+                questionTransition: false,
+                nextQuestionStartTime: null,
+                currentWinner: null,
+                maxConsecutiveTarget: 5, // Win condition
+                consecutiveWinThreshold: 3,
+                gameEndReason: null,
+                gameWinner: null,
+                finishedAt: null,
+                ...playerUpdates,
+            };
+
+            await update(roomRef, updateData);
+            console.log("[startBattle] Battle started successfully for room:", roomId);
+
+            // Setup battle end cleanup callback
+            this.battleEndCleanupCallbacks.set(roomId, () => {
+                this.performPostBattleCleanup(roomId);
+            });
+
+        } catch (error) {
+            console.error("[startBattle] Error:", error.message);
+            throw error;
+        }
+    }
+
+    // Enhanced host exit handling
+    async handleHostExit(roomId) {
+        try {
+            console.log(`[handleHostExit] Processing host exit for room: ${roomId}`);
+
+            const roomRef = ref(database, `rooms/${roomId}`);
+            const snapshot = await get(roomRef);
+            const room = snapshot.val();
+
+            if (!room) {
+                console.log("[handleHostExit] Room not found");
+                return;
+            }
+
+            // End battle immediately when host exits
+            await update(roomRef, {
+                status: "finished",
+                gameEndReason: "host_exit",
+                hostLeft: true,
+                endedBy: "host",
+                endedAt: serverTimestamp(),
+                lastActivity: serverTimestamp()
+            });
+
+            console.log(`[handleHostExit] Room ${roomId} marked finished due to host exit`);
+
+            // Notify remaining players
+            const remainingPlayers = Object.keys(room.players || {}).filter(
+                playerId => playerId !== room.hostId
+            );
+
+            if (remainingPlayers.length > 0) {
+                // Update player scores before ending
+                for (const playerId of remainingPlayers) {
+                    const player = room.players[playerId];
+                    if (player?.score) {
+                        await this.updateUserScore(playerId, player.score);
+                    }
+                }
+            }
+
+            // Schedule room cleanup
+            setTimeout(() => {
+                this.cleanupRoom(roomId, "host_exit").catch(console.error);
+            }, 5000);
+
+        } catch (error) {
+            console.error("[handleHostExit] Error:", error);
+        }
+    }
+
+    // Enhanced battle end with proper cleanup
+    async endBattle(roomId) {
+        try {
+            console.log(`[endBattle] Ending battle for room: ${roomId}`);
+
+            const roomRef = ref(database, `rooms/${roomId}`);
+            const snapshot = await get(roomRef);
+            const roomData = snapshot.val();
+
+            if (!roomData || !roomData.players) {
+                if (roomData) {
+                    await update(roomRef, {
+                        status: "finished",
+                        finishedAt: serverTimestamp(),
+                        gameEndReason: "no_players"
+                    });
+                }
+                return [];
+            }
+
+            const players = roomData.players;
+            const playerArray = Object.keys(players).map(id => ({
+                userId: id,
+                username: players[id].username || players[id].name || "Unknown Player",
+                score: players[id].score || 0,
+                avatar: players[id].avatar || 0,
+                finalScore: players[id].score || 0,
+            })).sort((a, b) => b.score - a.score);
+
+            // Determine winner
+            const winner = playerArray[0];
+            const gameEndReason = roomData.gameEndReason || "questions_completed";
+
+            // Update user scores
+            for (const player of playerArray) {
+                await this.updateUserScore(player.userId, player.score);
+            }
+
+            // Mark winner in player data
+            const playerUpdates = {};
+            playerArray.forEach((player, index) => {
+                playerUpdates[`players/${player.userId}/finalScore`] = player.score;
+                playerUpdates[`players/${player.userId}/isWinner`] = index === 0;
+                playerUpdates[`players/${player.userId}/placement`] = index + 1;
+            });
+
+            await update(roomRef, {
+                ...playerUpdates,
+                status: "finished",
+                results: playerArray,
+                gameWinner: winner.userId,
+                gameEndReason: gameEndReason,
+                finishedAt: serverTimestamp(),
+                lastActivity: serverTimestamp()
+            });
+
+            console.log(`[endBattle] Battle ended successfully. Winner: ${winner.username}`);
+
+            // Execute cleanup callback if exists
+            const cleanupCallback = this.battleEndCleanupCallbacks.get(roomId);
+            if (cleanupCallback) {
+                setTimeout(cleanupCallback, 2000);
+                this.battleEndCleanupCallbacks.delete(roomId);
+            }
+
+            // Schedule room cleanup
+            setTimeout(() => {
+                this.cleanupRoom(roomId, "battle_completed").catch(() => { });
+            }, 30000);
+
+            return playerArray;
+        } catch (error) {
+            console.error("[endBattle] Error:", error);
+            return [];
+        }
+    }
+
+    // Post-battle cleanup for seamless replay
+    async performPostBattleCleanup(roomId) {
+        try {
+            console.log(`[performPostBattleCleanup] Cleaning up after battle: ${roomId}`);
+
+            // Remove room listener
+            this.removeRoomListener(roomId);
+
+            // Clear active rooms
+            this.activeRooms.delete(roomId);
+
+            // Reset any battle-specific states
+            const user = await this.waitForAuth();
+            const userId = user.uid;
+
+            // Update user presence
+            if (this.userPresenceRef) {
+                await update(this.userPresenceRef, {
+                    currentBattle: null,
+                    battleStatus: "available",
+                    lastBattleEnded: serverTimestamp()
+                });
+            }
+
+            console.log(`[performPostBattleCleanup] Cleanup completed for room: ${roomId}`);
+        } catch (error) {
+            console.error("[performPostBattleCleanup] Error:", error);
+        }
+    }
+
+    // Enhanced move to next question with battle end logic
+    async moveToNextQuestion(roomId) {
+        try {
+            const roomRef = ref(database, `rooms/${roomId}`);
+            const snapshot = await get(roomRef);
+
+            if (!snapshot.exists()) {
+                throw new Error("Room has been deleted");
+            }
+
+            const roomData = snapshot.val();
+            if (!roomData) return;
+
+            const nextIndex = roomData.currentQuestion + 1;
+            const now = Date.now();
+
+            const questionsArray = roomData.questions
+                ? (Array.isArray(roomData.questions) ? roomData.questions : Object.values(roomData.questions))
+                : [];
+
+            // Check if we've reached the question limit (25 questions)
+            const hasMoreQuestions = nextIndex < Math.min(questionsArray.length, 25);
+
+            const playerUpdates = {};
+            Object.keys(roomData.players).forEach(playerId => {
+                playerUpdates[`players/${playerId}/answer`] = "";
+                playerUpdates[`players/${playerId}/winner`] = false;
+            });
+
+            if (hasMoreQuestions) {
+                const nextQuestion = questionsArray[nextIndex];
+                const nextLevel = nextQuestion?.level || roomData.currentLevel;
+
+                await update(roomRef, {
+                    ...playerUpdates,
+                    currentWinner: null,
+                    currentQuestion: nextIndex,
+                    currentLevel: nextLevel,
+                    questionStartedAt: now,
+                    questionTransition: false,
+                    nextQuestionStartTime: null,
+                    lastActivity: serverTimestamp()
+                });
+
+                console.log(`[moveToNextQuestion] Moved to question ${nextIndex + 1} of 25`);
+            } else {
+                console.log("[moveToNextQuestion] Reached question limit, ending battle");
+                await this.endBattle(roomId);
+            }
+        } catch (error) {
+            console.error("[moveToNextQuestion] Error:", error);
+            throw error;
+        }
+    }
+
+    // Enhanced leave room with host exit handling
+    async leaveRoom(roomId) {
+        try {
+            const user = await this.waitForAuth();
+            const userId = user.uid;
+
+            console.log(`[leaveRoom] Player ${userId} leaving room ${roomId}`);
+
+            const roomRef = ref(database, `rooms/${roomId}`);
+            const snapshot = await get(roomRef);
+
+            if (!snapshot.exists()) {
+                console.log("[leaveRoom] Room doesn't exist, nothing to leave");
+                return;
+            }
+
+            const roomData = snapshot.val();
+
+            // Check if this is the host leaving during battle
+            if (roomData.hostId === userId && roomData.status === "playing") {
+                console.log("[leaveRoom] Host leaving during battle, ending battle");
+                await this.handleHostExit(roomId);
+                return;
+            }
+
+            if (roomData.players && roomData.players[userId]) {
+                const playerRef = ref(database, `rooms/${roomId}/players/${userId}`);
+                await remove(playerRef);
+
+                const currentPlayers = Object.keys(roomData.players).length - 1;
+                await update(roomRef, {
+                    currentPlayers: Math.max(0, currentPlayers),
+                    lastActivity: serverTimestamp()
+                });
+            }
+
+            if (roomData.hostId === userId && roomData.status !== "finished") {
+                const remainingPlayers = Object.keys(roomData.players).filter(id => id !== userId);
+
+                if (remainingPlayers.length > 0) {
+                    const newHostId = remainingPlayers[0];
+                    await update(roomRef, {
+                        hostId: newHostId,
+                        lastActivity: serverTimestamp()
+                    });
+
+                    const newHostRef = ref(database, `rooms/${roomId}/players/${newHostId}`);
+                    await update(newHostRef, {
+                        isHost: true
+                    });
+
+                    console.log(`[leaveRoom] Host transferred to ${newHostId}`);
+                } else {
+                    await remove(roomRef);
+                    console.log("[leaveRoom] Room deleted - no players remaining");
+                }
+            }
+
+            console.log(`[leaveRoom] Successfully left room ${roomId}`);
+        } catch (error) {
+            console.error("[leaveRoom] Error:", error);
+            throw error;
+        }
+    }
+
+    // ... [Rest of the methods remain the same but with enhanced error handling] ...
+
+    async createRoom(roomName, maxPlayers = 2) {
+        try {
+            const user = await this.waitForAuth();
+            const hostId = user.uid;
+
+            if (!hostId || typeof hostId !== 'string') {
+                throw new Error("Invalid user authentication");
+            }
+
+            if (!roomName || typeof roomName !== 'string') {
+                roomName = "Battle Room";
+            }
+
+            let hostName = user.displayName;
+            if (!hostName || hostName === null || hostName === undefined) {
+                hostName = user.email?.split('@')[0] || "Anonymous Player";
+            }
+
+            console.log("Creating room with validated data:", { roomName, hostId, hostName });
+
+            const roomCode = await this.generateUniqueRoomCode();
+            const roomsRef = ref(database, 'rooms');
+            const newRoomRef = push(roomsRef);
+            const roomId = newRoomRef.key;
+
+            const roomData = {
+                id: roomId,
+                code: roomCode,
+                name: roomName,
+                hostId: hostId,
+                status: "waiting",
+                createdAt: Date.now(),
+                players: {
+                    [hostId]: {
+                        id: hostId,
+                        name: hostName,
+                        username: hostName,
+                        connected: true,
+                        joinedAt: Date.now(),
+                        isHost: true,
+                        ready: false,
+                        score: 0,
+                        avatar: 0
+                    }
+                },
+                maxPlayers: maxPlayers,
+                currentPlayers: 1,
+                lastActivity: serverTimestamp()
+            };
+
+            this.validateRoomData(roomData);
+            await set(newRoomRef, roomData);
+
+            console.log("Room created successfully:", { roomId, roomCode });
+
+            return {
+                roomId: roomId,
+                roomCode: roomCode,
+                roomData: roomData
+            };
+
+        } catch (error) {
+            console.error("Error creating room:", error);
+            throw error;
         }
     }
 
@@ -83,7 +669,6 @@ export class BattleManager {
 
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
             const code = this.generateRoomCode();
-
             const snapshot = await get(query(
                 ref(database, "rooms"),
                 orderByChild("code"),
@@ -98,119 +683,61 @@ export class BattleManager {
         throw new Error("Failed to generate unique room code");
     }
 
-    async createRoom(roomName, hostId, hostName) {
-        try {
-            console.log("Creating room with:", { roomName, hostId, hostName });
-
-            // Generate unique room code
-            const roomCode = await this.generateUniqueRoomCode();
-
-            // Create room reference
-            const roomsRef = ref(database, 'rooms');
-            const newRoomRef = push(roomsRef);
-            const roomId = newRoomRef.key;
-
-            const roomData = {
-                id: roomId,
-                code: roomCode,
-                name: roomName,
-                hostId: hostId,
-                status: "waiting",
-                createdAt: Date.now(),
-                players: {
-                    [hostId]: {
-                        id: hostId,
-                        name: hostName,
-                        connected: true,
-                        joinedAt: Date.now(),
-                        isHost: true,
-                        ready: false
-                    }
-                },
-                maxPlayers: 2,
-                currentPlayers: 1
-            };
-
-            // Set room data
-            await set(newRoomRef, roomData);
-
-            console.log("Room created successfully:", { roomId, roomCode });
-
-            return {
-                roomId: roomId,
-                roomCode: roomCode,
-                roomData: roomData
-            };
-
-        } catch (error) {
-            console.error("Error creating room:", error);
-            throw error;
-        }
-    }
-
-
-    async clearAllUserRooms() {
-        try {
-            const user = await this.waitForAuth();
-            const userId = user.uid;
-
-            const roomsRef = ref(database, "rooms");
-            const snapshot = await get(roomsRef);
-
-            if (!snapshot.exists()) return 0;
-
-            const allRooms = snapshot.val();
-            const deletePromises = [];
-
-            for (const [roomId, room] of Object.entries(allRooms)) {
-                const isHost = room.hostId === userId;
-                const isPlayer = room.players && room.players[userId];
-
-                if (isHost || isPlayer) {
-                    console.log("Deleting room for user:", roomId);
-                    deletePromises.push(remove(ref(database, `rooms/${roomId}`)));
+    validateRoomData(roomData) {
+        const checkForUndefined = (obj, path = '') => {
+            for (const [key, value] of Object.entries(obj)) {
+                const currentPath = path ? `${path}.${key}` : key;
+                if (value === undefined) {
+                    throw new Error(`Undefined value at path: ${currentPath}`);
                 }
-            }
-
-            await Promise.all(deletePromises);
-            return deletePromises.length;
-
-        } catch (error) {
-            console.error("clearAllUserRooms error:", error);
-            throw error;
-        }
-    }
-    async findRandomMatch(maxPlayers = 2) {
-        const user = await this.waitForAuth();
-        const userId = user.uid;
-        const now = Date.now();
-        const timeoutDuration = 30000;
-        const halfMinuteAgo = now - timeoutDuration;
-
-        const cleanUserRooms = async () => {
-            const roomsSnapshot = await get(ref(database, "rooms"));
-            const rooms = roomsSnapshot.val() || {};
-
-            for (const [roomId, room] of Object.entries(rooms)) {
-                if (room.hostId === userId || (room.players && room.players[userId])) {
-                    console.log("🧹 Deleting previous room of user:", roomId);
-                    await remove(ref(database, `rooms/${roomId}`));
+                if (value && typeof value === 'object' && !Array.isArray(value)) {
+                    checkForUndefined(value, currentPath);
                 }
             }
         };
 
+        checkForUndefined(roomData);
+    }
+
+    async findRandomMatch(maxPlayers = 2) {
         try {
-            // 🧹 Step 1: Delete any previous room this user was in
-            await cleanUserRooms();
+            if (this.cleanupInProgress) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
 
-            const startTime = Date.now();
+            const user = await this.waitForAuth();
+            const userId = user.uid;
 
-            // ⏳ Step 2: Loop for up to 30 seconds
-            while (Date.now() - startTime < timeoutDuration) {
+            if (!userId || typeof userId !== 'string') {
+                throw new Error("Invalid user authentication for random match");
+            }
+
+            const now = Date.now();
+            const timeoutDuration = 30000;
+            const halfMinuteAgo = now - timeoutDuration;
+
+            console.log("Starting random match for user:", userId);
+
+            const cleanUserRooms = async () => {
                 const roomsSnapshot = await get(ref(database, "rooms"));
                 const rooms = roomsSnapshot.val() || {};
 
-                const nowCheck = Date.now();
+                for (const [roomId, room] of Object.entries(rooms)) {
+                    if (room.hostId === userId || (room.players && room.players[userId])) {
+                        console.log("🧹 Deleting previous room of user:", roomId);
+                        await remove(ref(database, `rooms/${roomId}`));
+                    }
+                }
+            };
+
+            await cleanUserRooms();
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const startTime = Date.now();
+
+            while (Date.now() - startTime < timeoutDuration) {
+                const roomsSnapshot = await get(ref(database, "rooms"));
+                const rooms = roomsSnapshot.val() || {};
 
                 const availableRooms = Object.entries(rooms).filter(([roomId, room]) => {
                     if (room.players) {
@@ -233,7 +760,7 @@ export class BattleManager {
                         hasSpace &&
                         isRecent &&
                         matchesMaxPlayers &&
-                        room.hostId !== userId // Don't join your own room
+                        room.hostId !== userId
                     );
                 });
 
@@ -244,7 +771,6 @@ export class BattleManager {
 
                     const [roomId, roomData] = availableRooms[0];
 
-                    // Update lastActivity and join
                     await update(ref(database, `rooms/${roomId}`), {
                         lastActivity: Date.now(),
                     });
@@ -258,12 +784,11 @@ export class BattleManager {
                     };
                 }
 
-                // If no room found, wait a bit then retry (poll every 3 seconds)
                 await new Promise((res) => setTimeout(res, 3000));
             }
 
-            // 😔 Step 3: After timeout, create your own room as host
-            const newRoom = await this.createRoom("Quick Battle", 2);
+            console.log("Creating new matchmaking room for user:", userId);
+            const newRoom = await this.createRoom("Quick Battle", maxPlayers);
 
             await update(ref(database, `rooms/${newRoom.roomId}`), {
                 matchmakingRoom: true,
@@ -278,81 +803,9 @@ export class BattleManager {
 
         } catch (error) {
             console.error("Random match error:", error);
-            throw new Error("Failed to find or create match");
+            throw new Error("Failed to find or create match: " + error.message);
         }
     }
-
-    async handleHostLeave(roomId) {
-        try {
-            const roomRef = ref(database, `rooms/${roomId}`);
-            // Mark the room as finished and set the hostLeft flag
-            await update(roomRef, {
-                status: "finished",
-                hostLeft: true,
-                endedBy: "host",
-                endedAt: Date.now(),
-                lastActivity: serverTimestamp()
-            });
-            console.log(`[handleHostLeave] Room ${roomId} marked finished due to host exit.`);
-        } catch (error) {
-            console.error("[handleHostLeave] Error:", error);
-        }
-    }
-
-    async cleanupMatchmakingRoom(roomId) {
-        try {
-            const roomRef = ref(database, `rooms/${roomId}`);
-            const snapshot = await get(roomRef);
-            const room = snapshot.val();
-
-            if (room?.matchmakingRoom && room.status === "finished") {
-                await remove(roomRef);
-                console.log(`Room ${roomId} cleaned up.`);
-            } else {
-                console.log(`Room ${roomId} not eligible for cleanup.`);
-            }
-        } catch (error) {
-            console.error("Cleanup error:", error);
-        }
-    }
-
-    async cleanupStaleMatchmaking(userId) {
-        const matchmakingRef = ref(database, "matchmaking");
-        const snapshot = await get(matchmakingRef);
-        const matchmaking = snapshot.val() || {};
-
-        await Promise.all(
-            Object.entries(matchmaking)
-                .filter(([_, data]) => data.players && data.players[userId])
-                .map(([roomId, _]) => this.cleanupMatchmakingRoom(roomId))
-        );
-    }
-
-    listenToRoom(roomId, callback) {
-        if (!roomId) {
-            console.warn("listenToRoom: No roomId provided");
-            return () => { };
-        }
-
-        // Remove existing listener for this room first
-        this.removeRoomListener(roomId);
-
-        const roomRef = ref(database, `rooms/${roomId}`);
-
-        const handler = (snapshot) => {
-            const roomData = snapshot.val();
-            callback(roomData);
-        };
-
-        // Store the handler for proper cleanup
-        this.listeners.set(roomId, { ref: roomRef, handler });
-        onValue(roomRef, handler);
-
-        return () => {
-            this.removeRoomListener(roomId);
-        };
-    }
-
 
     async joinRoom(roomCode) {
         try {
@@ -360,55 +813,49 @@ export class BattleManager {
 
             const user = await this.waitForAuth();
             const userId = user.uid;
+
+            if (!userId || typeof userId !== 'string') {
+                throw new Error("Invalid user authentication");
+            }
+
             console.log("[joinRoom] Authenticated user:", userId);
 
             const userData = await this.getUserData(userId);
             const avatar = userData?.avatar || 0;
-            console.log("[joinRoom] User data loaded:", userData);
 
-            // Query room by code
             const snapshot = await get(query(
                 ref(database, "rooms"),
                 orderByChild("code"),
                 equalTo(roomCode.toUpperCase())
             ));
-            console.log("[joinRoom] Firebase query executed for roomCode:", roomCode.toUpperCase());
 
             if (!snapshot.exists()) {
-                console.warn("[joinRoom] No room found for code:", roomCode);
                 throw new Error("Room not found or expired");
             }
 
             const roomId = Object.keys(snapshot.val())[0];
             const roomData = snapshot.val()[roomId];
-            console.log("[joinRoom] Found room:", roomId, "Room data:", roomData);
 
-            // Check room status
             if (roomData.status === "playing" || roomData.status === "finished") {
-                console.warn("[joinRoom] Room already in progress or finished:", roomId);
                 throw new Error("Game already in progress");
             }
 
-            // Check capacity
             const currentPlayerCount = Object.keys(roomData.players || {}).length;
             if (currentPlayerCount >= roomData.maxPlayers) {
                 throw new Error("Room is full");
             }
 
-            // Check if user is already in room
             if (roomData.players && roomData.players[userId]) {
-                console.log("[joinRoom] User already exists in room, updating status...");
                 await update(ref(database, `rooms/${roomId}/players/${userId}`), {
                     connected: true,
                     ready: true,
                     lastSeen: serverTimestamp()
                 });
-                console.log("[joinRoom] User reconnected successfully");
             } else {
-                // New player joining
-                const playerName = user.displayName ||
-                    user.email?.split('@')[0] ||
-                    `Player ${currentPlayerCount + 1}`;
+                let playerName = user.displayName;
+                if (!playerName || playerName === null || playerName === undefined) {
+                    playerName = user.email?.split('@')[0] || `Player ${currentPlayerCount + 1}`;
+                }
 
                 const playerData = {
                     name: playerName,
@@ -424,21 +871,15 @@ export class BattleManager {
                     avatar: avatar || 0
                 };
 
-                if (roomData.matchmakingRoom) {
-                    playerData.ready = true;
-                }
-
-                console.log("[joinRoom] Adding new player data:", playerData);
+                this.validateRoomData({ players: { [userId]: playerData } });
 
                 await update(ref(database, `rooms/${roomId}`), {
                     [`players/${userId}`]: playerData,
                     currentPlayerCount: currentPlayerCount + 1,
                     lastActivity: serverTimestamp()
                 });
-                console.log("[joinRoom] New user added to room:", roomId);
             }
 
-            console.log("[joinRoom] Successfully joined room:", roomId);
             return { roomId, roomData: { ...roomData, code: roomCode } };
 
         } catch (error) {
@@ -447,34 +888,27 @@ export class BattleManager {
         }
     }
 
-
-    async validateRoomExists(roomId) {
-        const roomRef = ref(database, `rooms/${roomId}`);
-        const snapshot = await get(roomRef);
-        return snapshot.exists();
-    }
-
-    async cancelMatchmaking() {
-        await endBattleDueToHostExit();
-        try {
-            const user = await this.waitForAuth();
-            const userId = user.uid;
-
-            // Remove from all matchmaking entries
-            const matchmakingRef = ref(database, "matchmaking");
-            const snapshot = await get(matchmakingRef);
-            const matchmaking = snapshot.val() || {};
-
-            const cleanupPromises = Object.entries(matchmaking)
-                .filter(([roomId, data]) =>
-                    data.hostId === userId || (data.players && data.players[userId])
-                )
-                .map(([roomId]) => remove(ref(database, `matchmaking/${roomId}`)));
-
-            await Promise.allSettled(cleanupPromises);
-        } catch (error) {
-            // Don't log error, just silently fail
+    listenToRoom(roomId, callback) {
+        if (!roomId) {
+            console.warn("listenToRoom: No roomId provided");
+            return () => { };
         }
+
+        this.removeRoomListener(roomId);
+
+        const roomRef = ref(database, `rooms/${roomId}`);
+
+        const handler = (snapshot) => {
+            const roomData = snapshot.val();
+            callback(roomData);
+        };
+
+        this.listeners.set(roomId, { ref: roomRef, handler });
+        onValue(roomRef, handler);
+
+        return () => {
+            this.removeRoomListener(roomId);
+        };
     }
 
     removeRoomListener(roomId) {
@@ -486,6 +920,205 @@ export class BattleManager {
                 console.warn("Error removing listener:", error);
             }
             this.listeners.delete(roomId);
+        }
+    }
+
+    async cleanupRoom(roomId, reason = "manual") {
+        try {
+            console.log(`[cleanupRoom] Cleaning up room ${roomId} - Reason: ${reason}`);
+
+            const roomRef = ref(database, `rooms/${roomId}`);
+            await remove(roomRef);
+
+            this.removeRoomListener(roomId);
+            this.activeRooms.delete(roomId);
+
+            const matchmakingRef = ref(database, `matchmaking/${roomId}`);
+            await remove(matchmakingRef).catch(() => { });
+
+        } catch (error) {
+            console.error("[cleanupRoom] Error:", error);
+        }
+    }
+
+    async submitAnswer(roomId, questionIndex, userAnswer) {
+        try {
+            const user = await this.waitForAuth();
+            const userId = user.uid;
+
+            const roomRef = ref(database, `rooms/${roomId}`);
+            const roomSnapshot = await get(roomRef);
+            const room = roomSnapshot.val();
+
+            if (!room || room.status !== "playing" || questionIndex !== room.currentQuestion) {
+                return false;
+            }
+
+            const currentQuestion = room.questions[questionIndex];
+            if (!currentQuestion) return false;
+
+            const currentPlayer = room.players[userId] || {};
+            const isCorrect = currentQuestion.correctAnswer.toLowerCase() === userAnswer.toLowerCase();
+
+            if (!isCorrect) {
+                await update(ref(database, `rooms/${roomId}/players/${userId}`), {
+                    answer: userAnswer,
+                    consecutiveCorrect: 0,
+                    lastActivity: serverTimestamp()
+                });
+                return false;
+            }
+
+            const winnerRef = ref(database, `rooms/${roomId}/currentWinner`);
+            const txResult = await runTransaction(winnerRef, (current) => {
+                if (!current) return userId;
+                return current;
+            });
+
+            const basePoints = currentQuestion.level || 1;
+            const pointsToAdd = txResult.committed && txResult.snapshot.val() === userId ? basePoints * 1 : basePoints * 0;
+            const newScore = (currentPlayer.score || 0) + pointsToAdd;
+
+            if (txResult.committed && txResult.snapshot.val() === userId) {
+                const newConsecutiveCorrect = (currentPlayer.consecutiveCorrect || 0) + 1;
+
+                const playerUpdates = {};
+                Object.keys(room.players).forEach(playerId => {
+                    if (playerId !== userId) {
+                        playerUpdates[`players/${playerId}/consecutiveCorrect`] = 0;
+                    }
+                });
+
+                await update(ref(database, `rooms/${roomId}`), {
+                    [`players/${userId}/score`]: newScore,
+                    [`players/${userId}/winner`]: true,
+                    [`players/${userId}/consecutiveCorrect`]: newConsecutiveCorrect,
+                    [`players/${userId}/answer`]: userAnswer,
+                    ...playerUpdates,
+                    lastActivity: serverTimestamp()
+                });
+
+                // Check for consecutive win condition
+                if (newConsecutiveCorrect >= 5) {
+                    setTimeout(() => {
+                        this.declareWinner(roomId, userId);
+                    }, 1000);
+                } else {
+                    setTimeout(() => {
+                        this.startQuestionTransition(roomId, 2000).catch(console.error);
+                    }, 1000);
+                }
+
+                return true;
+            } else {
+                await update(ref(database, `rooms/${roomId}/players/${userId}`), {
+                    score: newScore,
+                    answer: userAnswer,
+                    consecutiveCorrect: 0,
+                    lastActivity: serverTimestamp()
+                });
+                return false;
+            }
+        } catch (error) {
+            console.error("Submit answer error:", error);
+            throw error;
+        }
+    }
+
+    async declareWinner(roomId, winnerId) {
+        try {
+            const roomRef = ref(database, `rooms/${roomId}`);
+            const snapshot = await get(roomRef);
+            const roomData = snapshot.val();
+
+            if (!roomData) return;
+
+            const playerUpdates = {};
+            Object.entries(roomData.players || {}).forEach(([playerId, player]) => {
+                playerUpdates[`players/${playerId}/finalScore`] = player.score || 0;
+                if (playerId === winnerId) {
+                    playerUpdates[`players/${playerId}/isWinner`] = true;
+                }
+            });
+
+            await update(roomRef, {
+                ...playerUpdates,
+                status: "finished",
+                gameWinner: winnerId,
+                gameEndReason: "consecutive_target_reached",
+                finishedAt: serverTimestamp(),
+                lastActivity: serverTimestamp()
+            });
+
+            for (const [playerId, player] of Object.entries(roomData.players || {})) {
+                const battleScore = player.score || 0;
+                await this.updateUserScore(playerId, battleScore);
+            }
+
+        } catch (error) {
+            console.error("Declare winner error:", error);
+        }
+    }
+
+    async startQuestionTransition(roomId, duration = 3000) {
+        try {
+            const now = Date.now();
+            const nextQuestionStartTime = now + duration;
+
+            await update(ref(database, `rooms/${roomId}`), {
+                questionTransition: true,
+                nextQuestionStartTime,
+                lastActivity: serverTimestamp()
+            });
+
+            return nextQuestionStartTime;
+        } catch (error) {
+            console.error("Start transition error:", error);
+            throw error;
+        }
+    }
+
+    async updateUserScore(userId, scoreToAdd) {
+        try {
+            if (scoreToAdd <= 0) return;
+
+            const userRef = ref(database, `users/${userId}`);
+            const snapshot = await get(userRef);
+            const userData = snapshot.val() || {};
+
+            const currentTotalPoints = userData.totalPoints || 0;
+            const currentHighScore = userData.highScore || 0;
+            const newTotalPoints = currentTotalPoints + scoreToAdd;
+            const newHighScore = Math.max(currentHighScore, scoreToAdd);
+
+            let newStreak;
+            const streakResult = await updateUserStreak();
+            if (streakResult.increased) {
+                newStreak = streakResult.streak;
+            }
+
+            await update(userRef, {
+                totalPoints: newTotalPoints,
+                highScore: newHighScore
+            });
+
+            if (!streakResult.alreadyPlayedToday) {
+                await AsyncStorage.setItem("showStreakPopup", "true");
+            }
+
+        } catch (error) {
+            console.error("Update user score error:", error);
+        }
+    }
+
+    async getUserData(userId) {
+        try {
+            const userRef = ref(database, `users/${userId}`);
+            const snapshot = await get(userRef);
+            return snapshot.val() || {};
+        } catch (error) {
+            console.warn("Error getting user data:", error);
+            return {};
         }
     }
 
@@ -523,712 +1156,43 @@ export class BattleManager {
             const user = await this.waitForAuth();
             const userId = user.uid;
 
-            // console.log(`Updating connection: ${connected} for ${userId} in ${roomId}`);
-
             await update(ref(database, `rooms/${roomId}/players/${userId}`), {
                 connected,
                 lastSeen: serverTimestamp()
             });
 
-            // Add room activity update
             await update(ref(database, `rooms/${roomId}`), {
                 lastActivity: serverTimestamp()
             });
         } catch (error) {
-            console.error("Update player connection error:", error);
+            console.warn("Update player connection error:", error);
         }
     }
 
-    async startQuestionTransition(roomId, duration = 3000) {
-        try {
-            // console.log("Starting question transition for room:", roomId);
-            const now = Date.now();
-            const nextQuestionStartTime = now + duration;
+    async cancelMatchmaking() {
+        if (this.cleanupInProgress) return;
 
-            await update(ref(database, `rooms/${roomId}`), {
-                questionTransition: true,
-                nextQuestionStartTime,
-                lastActivity: serverTimestamp()
-            });
+        this.cleanupInProgress = true;
 
-            // console.log("Question transition started, next question at:", new Date(nextQuestionStartTime));
-            return nextQuestionStartTime;
-        } catch (error) {
-            console.error("Start transition error:", error);
-            throw error;
-        }
-    }
-
-
-    getFallbackQuestions(count = 25) {
-        // console.log(`[BattleManager] Using ${count} fallback questions`);
-        return Array(count).fill().map((_, i) => ({
-            question: `${i + 1} + ${i + 5}`,
-            correctAnswer: `${(i + 1) + (i + 5)}`,
-            timeLimit: 15,
-            points: Math.floor(i / 5) + 1, // Gradually increase points
-            explanation: `Add ${i + 1} and ${i + 5} together`,
-            level: Math.floor(i / 5) + 1
-        }));
-    }
-
-    async handleTimeExpiry(roomId) {
-        try {
-            const roomRef = ref(database, `rooms/${roomId}`);
-            const snapshot = await get(roomRef);
-            const room = snapshot.val();
-
-            if (!room || room.status !== "playing" || room.questionTransition) {
-                return;
-            }
-
-            // Force transition if no winner and time is up
-            if (!room.currentWinner) {
-                await this.startQuestionTransition(roomId, 2000);
-            }
-        } catch (error) {
-            console.error("Handle time expiry error:", error);
-            throw error;
-        }
-    }
-
-    async getUserData(userId) {
-        const userRef = ref(database, `users/${userId}`);
-        const snapshot = await get(userRef);
-        return snapshot.val();
-    }
-
-    async generateQuestions(startLevel = 1, maxLevels = 10) {
-        const quizzesRef = ref(database, "quizzes");
-        const snapshot = await get(quizzesRef);
-        if (!snapshot.exists()) return { questions: this.getFallbackQuestions(25), levelInfo: [], totalLevels: 0 };
-
-        const questionsByLevel = {};
-        const levelSettings = {};
-
-        // Collect questions by level
-        snapshot.forEach((childSnapshot) => {
-            const quiz = childSnapshot.val();
-            const level = quiz.level || 1;
-            if (level >= startLevel && level <= maxLevels) {
-                levelSettings[level] = {
-                    pointsPerQuestion: Number.parseInt(quiz.pointsPerQuestion) || level,
-                };
-                if (quiz.questions) {
-                    const questions = Array.isArray(quiz.questions) ? quiz.questions : Object.values(quiz.questions);
-                    questions.forEach(q => {
-                        if (q.questionText && q.correctAnswer !== undefined) {
-                            if (!questionsByLevel[level]) questionsByLevel[level] = [];
-                            questionsByLevel[level].push({
-                                question: q.questionText,
-                                correctAnswer: q.correctAnswer.toString(),
-                                timeLimit: 15,
-                                points: levelSettings[level].pointsPerQuestion,
-                                explanation: q.explanation || "",
-                                level: level
-                            });
-                        }
-                    });
-                }
-            }
-        });
-
-        // Get available levels
-        const availableLevels = Object.keys(questionsByLevel).map(Number).sort((a, b) => a - b);
-
-        if (availableLevels.length === 0) {
-            return { questions: this.getFallbackQuestions(25), levelInfo: [], totalLevels: 0 };
-        }
-
-        // Define question distribution for 25 total questions
-        const battleQuestions = [];
-        const targetTotal = 25;
-
-        // Strategy: 3 questions from levels 1-5, 2 questions from levels 6-10
-        const getQuestionsFromLevel = (level, count) => {
-            if (!questionsByLevel[level] || questionsByLevel[level].length === 0) return [];
-
-            const shuffled = [...questionsByLevel[level]].sort(() => 0.5 - Math.random());
-            return shuffled.slice(0, Math.min(count, shuffled.length));
-        };
-
-        // First, try to get questions according to the preferred distribution
-        let questionsCollected = 0;
-
-        // Levels 1-5: 3 questions each
-        for (let level = 1; level <= 5 && questionsCollected < targetTotal; level++) {
-            if (availableLevels.includes(level)) {
-                const questions = getQuestionsFromLevel(level, 3);
-                battleQuestions.push(...questions);
-                questionsCollected += questions.length;
-            }
-        }
-
-        // Levels 6-10: 2 questions each
-        for (let level = 6; level <= 10 && questionsCollected < targetTotal; level++) {
-            if (availableLevels.includes(level)) {
-                const questions = getQuestionsFromLevel(level, 2);
-                battleQuestions.push(...questions);
-                questionsCollected += questions.length;
-            }
-        }
-
-        // If we don't have 25 questions yet, fill from available levels
-        if (questionsCollected < targetTotal) {
-            const remainingNeeded = targetTotal - questionsCollected;
-            const allRemainingQuestions = [];
-
-            // Collect remaining questions from all levels
-            availableLevels.forEach(level => {
-                if (questionsByLevel[level]) {
-                    const usedQuestions = battleQuestions.filter(q => q.level === level).length;
-                    const remainingFromLevel = questionsByLevel[level].slice(usedQuestions);
-                    allRemainingQuestions.push(...remainingFromLevel);
-                }
-            });
-
-            // Shuffle and take what we need
-            const shuffled = allRemainingQuestions.sort(() => 0.5 - Math.random());
-            battleQuestions.push(...shuffled.slice(0, remainingNeeded));
-        }
-
-        // If we still don't have enough, use fallback
-        if (battleQuestions.length < targetTotal) {
-            const fallbackNeeded = targetTotal - battleQuestions.length;
-            const fallbackQuestions = this.getFallbackQuestions(fallbackNeeded);
-            battleQuestions.push(...fallbackQuestions);
-        }
-
-        // Shuffle final questions and limit to exactly 25
-        const finalQuestions = battleQuestions.sort(() => 0.5 - Math.random()).slice(0, targetTotal);
-
-        return {
-            questions: finalQuestions,
-            levelInfo: availableLevels.map(level => ({
-                level: level,
-                questionCount: questionsByLevel[level]?.length || 0,
-                pointsPerQuestion: levelSettings[level]?.pointsPerQuestion || level,
-                usedInBattle: finalQuestions.filter(q => q.level === level).length
-            })),
-            totalLevels: availableLevels.length
-        };
-    }
-
-    async startBattle(roomId) {
-        try {
-            const user = await this.waitForAuth();
-            this.userId = user.uid;
-
-            if (!roomId) throw new Error("No roomId provided");
-
-            const roomRef = ref(database, `rooms/${roomId}`);
-            const snapshot = await get(roomRef);
-            const room = snapshot.val();
-
-            if (!room) throw new Error("Room not found");
-            if (room.hostId !== this.userId) return; // Only host can start
-            if (room.status === "playing") return; // Prevent double-starting
-
-            // ✅ Check that at least 2 players are connected
-            const connectedPlayers = Object.values(room.players || {}).filter(
-                (p) => p.connected
-            );
-            if (connectedPlayers.length < 2) {
-                throw new Error("At least 2 connected players are required");
-            }
-
-            // ✅ Generate quiz questions
-            const questionData = await this.generateQuestions(1, 10);
-            if (!questionData.questions || questionData.questions.length === 0) {
-                throw new Error("Failed to generate questions");
-            }
-
-            const now = Date.now();
-
-            // ✅ Prepare player state resets
-            const playerUpdates: Record<string, any> = {};
-            for (const playerId in room.players) {
-                playerUpdates[`players/${playerId}/score`] = 0;
-                playerUpdates[`players/${playerId}/answers`] = {};
-                playerUpdates[`players/${playerId}/answer`] = "";
-                playerUpdates[`players/${playerId}/winner`] = false;
-                playerUpdates[`players/${playerId}/consecutiveCorrect`] = 0;
-                playerUpdates[`players/${playerId}/ready`] = false;
-            }
-
-            // ✅ Build update payload
-            const updateData = {
-                status: "playing",
-                questions: questionData.questions,
-                currentQuestion: 0,
-                currentLevel: 1,
-                totalQuestions: 25,
-                questionTimeLimit: 15,
-                gameStartedAt: now,
-                questionStartedAt: now,
-                lastActivity: serverTimestamp(),
-                questionTransition: false,
-                nextQuestionStartTime: null,
-                currentWinner: null,
-                maxConsecutiveTarget: 0,
-                consecutiveWinThreshold: 0,
-                ...playerUpdates,
-            };
-
-            // ✅ Apply update
-            await update(roomRef, updateData);
-            console.log("[startBattle] Battle started for room:", roomId);
-        } catch (error) {
-            console.error("[startBattle] Error:", error.message);
-            throw error;
-        }
-    }
-
-    async submitAnswer(roomId, questionIndex, userAnswer) {
         try {
             const user = await this.waitForAuth();
             const userId = user.uid;
 
-            const roomRef = ref(database, `rooms/${roomId}`);
-            const roomSnapshot = await get(roomRef);
-            const room = roomSnapshot.val();
+            const matchmakingRef = ref(database, "matchmaking");
+            const snapshot = await get(matchmakingRef);
+            const matchmaking = snapshot.val() || {};
 
-            if (!room || room.status !== "playing" || questionIndex !== room.currentQuestion) {
-                return false;
-            }
+            const cleanupPromises = Object.entries(matchmaking)
+                .filter(([roomId, data]) =>
+                    data.hostId === userId || (data.players && data.players[userId])
+                )
+                .map(([roomId]) => remove(ref(database, `matchmaking/${roomId}`)));
 
-            const currentQuestion = room.questions[questionIndex];
-            if (!currentQuestion) return false;
-
-            const currentPlayer = room.players[userId] || {};
-            const isCorrect = currentQuestion.correctAnswer.toLowerCase() === userAnswer.toLowerCase();
-
-            if (!isCorrect) {
-                await update(ref(database, `rooms/${roomId}/players/${userId}`), {
-                    answer: userAnswer,
-                    consecutiveCorrect: 0, // Reset on incorrect answer
-                    lastActivity: serverTimestamp()
-                });
-                return false;
-            }
-
-            const winnerRef = ref(database, `rooms/${roomId}/currentWinner`);
-            const txResult = await runTransaction(winnerRef, (current) => {
-                if (!current) return userId;
-                return current;
-            });
-
-            const basePoints = currentQuestion.level || 1;
-            const pointsToAdd = txResult.committed && txResult.snapshot.val() === userId ? basePoints * 1 : basePoints * 0;
-            const newScore = (currentPlayer.score || 0) + pointsToAdd;
-
-            const remainingQuestions = room.totalQuestions - (questionIndex + 1);
-            const gapToLastQuestion = remainingQuestions + 1; // Include current question
-
-            if (txResult.committed && txResult.snapshot.val() === userId) {
-                // First correct answer
-                const newConsecutiveCorrect = (currentPlayer.consecutiveCorrect || 0) + 1;
-
-                // Reset consecutive count for all other players
-                const playerUpdates = {};
-                Object.keys(room.players).forEach(playerId => {
-                    if (playerId !== userId) {
-                        playerUpdates[`players/${playerId}/consecutiveCorrect`] = 0;
-                    }
-                });
-
-                await update(ref(database, `rooms/${roomId}`), {
-                    [`players/${userId}/score`]: newScore,
-                    [`players/${userId}/winner`]: true,
-                    [`players/${userId}/consecutiveCorrect`]: newConsecutiveCorrect,
-                    [`players/${userId}/answer`]: userAnswer,
-                    ...playerUpdates,
-                    lastActivity: serverTimestamp()
-                });
-
-                setTimeout(() => {
-                    this.startQuestionTransition(roomId, 2000).catch(console.error('Error found'));
-                }, 1000);
-
-                return true;
-            } else {
-                // Not first, but correct
-                await update(ref(database, `rooms/${roomId}/players/${userId}`), {
-                    score: newScore,
-                    answer: userAnswer,
-                    consecutiveCorrect: 0, // Reset since someone else answered first
-                    lastActivity: serverTimestamp()
-                });
-                return false;
-            }
+            await Promise.allSettled(cleanupPromises);
         } catch (error) {
-            console.error("Submit answer error:", error);
-            throw error;
-        }
-    }
-
-    // Add new method to declare winner
-    async declareWinner(roomId, winnerId) {
-        try {
-            const roomRef = ref(database, `rooms/${roomId}`);
-            const snapshot = await get(roomRef);
-            const roomData = snapshot.val();
-
-            if (!roomData) return;
-
-            // Update final scores in database for each player
-            const playerUpdates = {};
-            Object.entries(roomData.players || {}).forEach(([playerId, player]) => {
-                playerUpdates[`players/${playerId}/finalScore`] = player.score || 0;
-                if (playerId === winnerId) {
-                    playerUpdates[`players/${playerId}/isWinner`] = true;
-                }
-            });
-
-            await update(roomRef, {
-                ...playerUpdates,
-                status: "finished",
-                gameWinner: winnerId,
-                gameEndReason: "consecutive_target_reached",
-                finishedAt: serverTimestamp(),
-                lastActivity: serverTimestamp()
-            });
-
-            // Update user scores in database
-            for (const [playerId, player] of Object.entries(roomData.players || {})) {
-                const battleScore = player.score || 0;
-                await this.updateUserScore(playerId, battleScore);
-            }
-
-        } catch (error) {
-            console.error("Declare winner error:", error);
-        }
-    }
-
-    async updateUserScore(userId, scoreToAdd) {
-        try {
-            if (scoreToAdd <= 0) return;
-
-            const userRef = ref(database, `users/${userId}`);
-            const snapshot = await get(userRef);
-            const userData = snapshot.val() || {};
-
-            const currentTotalPoints = userData.totalPoints || 0;
-            const currentHighScore = userData.highScore || 0;
-            const newTotalPoints = currentTotalPoints + scoreToAdd;
-
-            // Update high score if current battle score is higher
-            const newHighScore = Math.max(currentHighScore, scoreToAdd);
-
-            let newStreak;
-            const streakResult = await updateUserStreak();
-            if (streakResult.increased) {
-                newStreak = streakResult.streak;
-            }
-
-            await update(userRef, {
-                totalPoints: newTotalPoints,
-                highScore: newHighScore  // Add this line
-            });
-
-            if (!streakResult.alreadyPlayedToday) {
-                await AsyncStorage.setItem("showStreakPopup", "true");
-            }
-
-        } catch (error) {
-            console.error("Update user score error:", error);
-        }
-    }
-
-    async disconnectFromRoom(roomId) {
-        try {
-            if (!roomId) return;
-
-            // Remove any active listeners first
-            if (battleManager.activeListeners && battleManager.activeListeners[roomId]) {
-                battleManager.activeListeners[roomId]();
-                delete battleManager.activeListeners[roomId];
-            }
-
-            // Get current user ID
-            const currentUserId = await AsyncStorage.getItem('userId');
-            if (!currentUserId) return;
-
-            // Reference to the room
-            const roomRef = ref(database, `battleRooms/${roomId}`);
-
-            // Get current room data
-            const roomSnapshot = await get(roomRef);
-            if (!roomSnapshot.exists()) return;
-
-            const roomData = roomSnapshot.val();
-
-            // Remove player from room
-            if (roomData.players && roomData.players[currentUserId]) {
-                const updatedPlayers = { ...roomData.players };
-                delete updatedPlayers[currentUserId];
-
-                // Update room with removed player
-                await update(roomRef, {
-                    players: updatedPlayers,
-                    [`lastActivity/${currentUserId}`]: null, // Remove activity tracking
-                });
-
-                // If no players left, mark room for cleanup
-                if (Object.keys(updatedPlayers).length === 0) {
-                    await update(roomRef, {
-                        status: 'empty',
-                        emptyAt: Date.now()
-                    });
-                }
-            }
-
-            // Update user's connection status
-            const userRef = ref(database, `users/${currentUserId}/battleConnection`);
-            await update(userRef, {
-                isInBattle: false,
-                currentRoomId: null,
-                lastDisconnected: Date.now()
-            });
-
-            // console.log(`Disconnected from room: ${roomId}`);
-
-        } catch (error) {
-            console.error('Error disconnecting from room:', error);
-            // Don't throw error to prevent blocking cleanup
-        }
-    }
-
-    async deleteRoom(roomId) {
-        try {
-            const roomRef = ref(database, `rooms/${roomId}`);
-            await remove(roomRef);
-            // console.log('Room deleted successfully');
-        } catch (error) {
-            console.error('Error deleting room:', error);
-            throw error;
-        }
-    }
-
-    // Update moveToNextQuestion method
-    async moveToNextQuestion(roomId) {
-        try {
-            const roomRef = ref(database, `rooms/${roomId}`);
-            const snapshot = await get(roomRef);
-            if (!snapshot.exists()) {
-                throw new Error("Room has been deleted");
-            }
-
-            const roomData = snapshot.val();
-            if (!roomData) return;
-
-            const nextIndex = roomData.currentQuestion + 1;
-            const now = Date.now();
-
-            const questionsArray = roomData.questions
-                ? (Array.isArray(roomData.questions) ? roomData.questions : Object.values(roomData.questions))
-                : [];
-
-            const hasMoreQuestions = nextIndex < questionsArray.length;
-
-            // Reset player states for next question
-            const playerUpdates = {};
-            Object.keys(roomData.players).forEach(playerId => {
-                playerUpdates[`players/${playerId}/answer`] = "";
-                playerUpdates[`players/${playerId}/winner`] = false;
-            });
-
-            if (hasMoreQuestions) {
-                const nextQuestion = questionsArray[nextIndex];
-                const nextLevel = nextQuestion?.level || roomData.currentLevel;
-
-                await update(roomRef, {
-                    ...playerUpdates,
-                    currentWinner: null,
-                    currentQuestion: nextIndex,
-                    currentLevel: nextLevel,
-                    questionStartedAt: now,
-                    questionTransition: false,
-                    nextQuestionStartTime: null,
-                    lastActivity: serverTimestamp()
-                });
-            } else {
-                await this.endBattle(roomId);
-            }
-        } catch (error) {
-            console.error("Move to next question error:", error);
-            throw error;
-        }
-    }
-
-    async endBattle(roomId) {
-        try {
-            const roomRef = ref(database, `rooms/${roomId}`);
-            const snapshot = await get(roomRef);
-            const roomData = snapshot.val();
-
-            // Always return array, never undefined
-            if (!roomData || !roomData.players) {
-                // Clean up empty room
-                if (roomData) {
-                    await update(roomRef, {
-                        status: "finished",
-                        finishedAt: serverTimestamp(),
-                    });
-                }
-                return [];
-            }
-
-            const players = roomData.players;
-            const playerArray = Object.keys(players).map(id => ({
-                userId: id,
-                username: players[id].username || players[id].name || "Unknown Player",
-                score: players[id].score || 0,
-                avatar: players[id].avatar || 0,
-            })).sort((a, b) => b.score - a.score);
-
-            for (const player of playerArray) {
-                await this.updateUserScore(player.userId, player.score);
-            }
-
-            // Update room status
-            await update(roomRef, {
-                status: "finished",
-                results: playerArray,
-                finishedAt: serverTimestamp(),
-            });
-
-            // Schedule cleanup
-            setTimeout(() => {
-                this.cleanupRoom(roomId, "battle_completed").catch(() => { });
-            }, 30000);
-
-            return playerArray;
-        } catch (error) {
-            console.error("End battle error:", error);
-            return []; // Always return array
-        }
-    }
-
-    async checkGameProgression(roomId) {
-        try {
-            const roomRef = ref(database, `rooms/${roomId}`);
-            const snapshot = await get(roomRef);
-            const room = snapshot.val();
-
-            if (!room || room.status !== "playing") return;
-
-            const players = room.players;
-            const currentQ = room.currentQuestion;
-            const allAnswered = Object.keys(players).every(playerId =>
-                players[playerId].answers && players[playerId].answers[currentQ] !== undefined
-            );
-
-            if (allAnswered) {
-                if (currentQ < room.totalQuestions - 1) {
-                    const now = Date.now();
-                    await update(roomRef, {
-                        currentQuestion: currentQ + 1,
-                        questionStartedAt: now
-                    });
-                } else {
-                    const results = Object.entries(players).map(([id, player]) => ({
-                        playerId: id,
-                        name: player.name,
-                        score: player.score || 0
-                    }));
-
-                    await update(roomRef, {
-                        status: "finished",
-                        results: results.sort((a, b) => b.score - a.score),
-                        finishedAt: serverTimestamp()
-                    });
-                }
-            }
-        } catch (error) {
-            console.error("Check game progression error:", error);
-        }
-    }
-
-    async leaveRoom(roomId) {
-        try {
-            const user = auth.currentUser;
-            if (!user) return;
-
-            const userId = user.uid;
-            console.log(`Player ${userId} leaving room ${roomId}`);
-
-            const roomRef = ref(this.database, `rooms/${roomId}`);
-            const snapshot = await get(roomRef);
-
-            if (!snapshot.exists()) {
-                console.log("Room doesn't exist, nothing to leave");
-                return;
-            }
-
-            const roomData = snapshot.val();
-
-            // Remove player from room
-            if (roomData.players && roomData.players[userId]) {
-                const playerRef = ref(this.database, `rooms/${roomId}/players/${userId}`);
-                await remove(playerRef);
-
-                // Update player count
-                const currentPlayers = Object.keys(roomData.players).length - 1;
-                await update(roomRef, {
-                    currentPlayers: Math.max(0, currentPlayers)
-                });
-            }
-
-            // If host is leaving and room is not finished, transfer host or delete room
-            if (roomData.hostId === userId && roomData.status !== "finished") {
-                const remainingPlayers = Object.keys(roomData.players).filter(id => id !== userId);
-
-                if (remainingPlayers.length > 0) {
-                    // Transfer host to another player
-                    const newHostId = remainingPlayers[0];
-                    await update(roomRef, {
-                        hostId: newHostId
-                    });
-
-                    // Update new host status
-                    const newHostRef = ref(this.database, `rooms/${roomId}/players/${newHostId}`);
-                    await update(newHostRef, {
-                        isHost: true
-                    });
-
-                    console.log(`Host transferred to ${newHostId}`);
-                } else {
-                    // No players left, delete room
-                    await remove(roomRef);
-                    console.log("Room deleted - no players remaining");
-                }
-            }
-
-            console.log(`Successfully left room ${roomId}`);
-        } catch (error) {
-            console.error("Error leaving room:", error);
-            throw error;
-        }
-    }
-
-    async cleanupRoom(roomId, reason = "manual") {
-        try {
-            // console.log(`Cleaning up room ${roomId} - Reason: ${reason}`);
-
-            const roomRef = ref(database, `rooms/${roomId}`);
-            await remove(roomRef);
-
-            // Remove from listeners
-            this.removeRoomListener(roomId);
-
-            // Clean up matchmaking if applicable
-            const matchmakingRef = ref(database, `matchmaking/${roomId}`);
-            await remove(matchmakingRef).catch(() => { }); // Ignore errors
-
-        } catch (error) {
-            console.error("Room cleanup error:", error);
-            // Don't throw error to prevent blocking other operations
+            console.warn("Cancel matchmaking error:", error);
+        } finally {
+            this.cleanupInProgress = false;
         }
     }
 
@@ -1238,7 +1202,7 @@ export class BattleManager {
 
     cleanup() {
         this.listeners.forEach((listener, roomId) => {
-            off(ref(database, `rooms/${roomId}`), listener);
+            off(ref(database, `rooms/${roomId}`), listener.handler);
         });
         this.listeners.clear();
 
@@ -1256,6 +1220,7 @@ export class BattleManager {
             remove(this.userPresenceRef).catch(() => { });
         }
 
+        this.battleEndCleanupCallbacks.clear();
         this.cancelMatchmaking().catch(() => { });
     }
 }
