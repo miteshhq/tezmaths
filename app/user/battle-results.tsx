@@ -381,7 +381,7 @@ export default function BattleResultsScreen() {
     } catch (error) {
       console.warn("Navigation cleanup error:", error);
       // Navigate anyway
-      router.replace("/user/multiplayer-mode-selection");
+      router.replace("/user/home");
     }
   }, [performCleanup]);
 
