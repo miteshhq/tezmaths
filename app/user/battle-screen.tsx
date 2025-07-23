@@ -205,7 +205,7 @@ export default function BattleScreen() {
     if (roomData?.hostId === userId && !roomData.questionTransition) {
       // Show "better luck" message first
       setShowBetterLuckMessage(true);
-      setBetterLuckCountdown(3);
+      setBetterLuckCountdown(1);
 
       const countdownInterval = setInterval(() => {
         setBetterLuckCountdown((prev) => {
@@ -216,7 +216,7 @@ export default function BattleScreen() {
             // Start question transition
             if (roomData?.hostId === userId) {
               battleManager
-                .startQuestionTransition(roomId as string, 2000)
+                .startQuestionTransition(roomId as string, 1000)
                 .catch(console.error);
             }
             return 0;

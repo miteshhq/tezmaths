@@ -981,7 +981,7 @@ export class BattleManager {
         }
     }
 
-    async startQuestionTransition(roomId, duration = 3000) {
+    async startQuestionTransition(roomId, duration = 1000) {
         try {
             const now = Date.now();
             const nextQuestionStartTime = now + duration;
