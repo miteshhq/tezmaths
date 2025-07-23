@@ -111,7 +111,6 @@ export default function TabsLayout() {
         <Tabs.Screen name="battle-results" options={{ href: null }} />
         <Tabs.Screen name="battle-room" options={{ href: null }} />
         <Tabs.Screen name="battle-screen" options={{ href: null }} />
-        <Tabs.Screen name="matching-screen" options={{ href: null }} />
         <Tabs.Screen
           name="multiplayer-mode-selection"
           options={{ href: null }}
