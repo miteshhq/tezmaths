@@ -95,6 +95,8 @@ export default function MultiplayerModeSelection() {
     setIsLoading(true);
     setRandomMode({ searching: true, countdown: 30 });
 
+    await battleManager.resetUserBattleState();
+
     // Countdown timer
     countdownIntervalRef.current = setInterval(() => {
       setRandomMode((prev) => {
@@ -142,6 +144,8 @@ export default function MultiplayerModeSelection() {
   // Cancel Random Search
   const handleCancelRandomSearch = useCallback(async () => {
     console.log("Cancelling random search");
+
+    await battleManager.resetUserBattleState();
 
     if (countdownIntervalRef.current) {
       clearInterval(countdownIntervalRef.current);

@@ -12,6 +12,7 @@ import {
 import { auth, database } from "../../firebase/firebaseConfig";
 import { battleManager } from "../../utils/battleManager";
 import useBattleStartListener from "../../utils/battlelistner";
+import { useFocusEffect } from "expo-router";
 
 interface RoomPlayer {
   name: string;
@@ -53,6 +54,7 @@ export default function BattleRoom() {
   const [isMounted, setIsMounted] = useState(false);
   const [battleStarting, setBattleStarting] = useState(false);
   const [opponentFound, setOpponentFound] = useState(false);
+  const startTriggered = useRef(false);
   const [battleStartAttempted, setBattleStartAttempted] = useState(false);
 
   const userId = auth.currentUser?.uid;
@@ -99,6 +101,16 @@ export default function BattleRoom() {
   }, [roomId]);
 
   useBattleStartListener(roomId as string, isHost === "true");
+
+  // Reset state & listeners on focus
+  useFocusEffect(
+    useCallback(() => {
+      setOpponentFound(false);
+      startTriggered.current = false;
+      battleManager.resetUserBattleState();
+      return () => battleManager.resetUserBattleState();
+    }, [])
+  );
 
   // Handle matchmaking timeout
   useEffect(() => {
@@ -174,52 +186,33 @@ export default function BattleRoom() {
     };
   }, [roomId]);
 
-  // Auto-start battle for matchmaking rooms
   useEffect(() => {
     if (
       room?.matchmakingRoom &&
       Object.keys(room.players || {}).length === 2 &&
-      room.status === "waiting"
+      room.status === "waiting" &&
+      !startTriggered.current
     ) {
-      const players = Object.values(room.players || {}) as RoomPlayer[];
-      const readyAndConnectedCount = players.filter(
-        (p: RoomPlayer) => p.ready && p.connected
+      const connectedCnt = Object.values(room.players || {}).filter(
+        (p) => p.connected
       ).length;
+      const isHost = room.hostId === userId;
 
-      if (readyAndConnectedCount === 2 && room.hostId === userId) {
-        const startBattle = async () => {
-          try {
-            setBattleStarting(true);
-            setBattleStartAttempted(true);
-            await battleManager.startBattle(roomId);
-          } catch (error) {
-            console.error("Battle start failed:", error);
-            setBattleStarting(false);
-            setBattleStartAttempted(false);
-            Alert.alert("Battle Start Failed", error.message, [
-              {
-                text: "Try Again",
-                onPress: () => setBattleStartAttempted(false),
-              },
-              {
-                text: "Go Back",
-                onPress: () =>
-                  router.replace("/user/multiplayer-mode-selection"),
-              },
-            ]);
-          }
-        };
-        startBattle();
+      // Only trigger once when two connected and I'm host
+      if (connectedCnt === 2 && isHost) {
+        startTriggered.current = true;
+        setOpponentFound(true);
+        setBattleStarting(true);
+        setBattleStartAttempted(true);
+        battleManager.startBattle(roomId).catch((error) => {
+          console.error("Battle start failed:", error);
+          setBattleStarting(false);
+          setBattleStartAttempted(false);
+          startTriggered.current = false;
+        });
       }
     }
-  }, [
-    room?.matchmakingRoom,
-    room?.players,
-    room?.status,
-    room?.hostId,
-    userId,
-    roomId,
-  ]);
+  }, [room, roomId, userId]);
 
   // Main room listener
   useEffect(() => {

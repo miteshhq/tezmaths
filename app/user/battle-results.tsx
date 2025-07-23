@@ -371,7 +371,7 @@ export default function BattleResultsScreen() {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Navigate back to multiplayer selection
-      router.replace("/user/multiplayer-mode-selection");
+      router.replace("/user/home");
     } catch (error) {
       console.warn("Navigation cleanup error:", error);
       // Navigate anyway

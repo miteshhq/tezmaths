@@ -8,6 +8,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // === EXTERNAL UTILITY FUNCTIONS ===
 
+const FIXED_POINT_PER_QUESTINON = 4;
+
 // Firebase reference utilities
 const createRoomRef = (roomId) => ref(database, `rooms/${roomId}`);
 const createUserRef = (userId) => ref(database, `users/${userId}`);
@@ -82,7 +84,7 @@ const generateFallbackQuestions = (count = 25) => {
         question: `${i + 1} + ${i + 5}`,
         correctAnswer: `${(i + 1) + (i + 5)}`,
         timeLimit: 15,
-        points: 1, // Fixed 1 point for all questions
+        points: FIXED_POINT_PER_QUESTINON,
         explanation: `Add ${i + 1} and ${i + 5} together`,
         level: Math.floor(i / 5) + 1
     }));
@@ -96,7 +98,7 @@ const processQuizData = (quizzesData, startLevel, maxLevels) => {
         const level = quiz.level || 1;
         if (level >= startLevel && level <= maxLevels) {
             levelSettings[level] = {
-                pointsPerQuestion: 1, // Fixed 1 point per question
+                pointsPerQuestion: FIXED_POINT_PER_QUESTINON
             };
 
             if (quiz.questions) {
@@ -108,7 +110,7 @@ const processQuizData = (quizzesData, startLevel, maxLevels) => {
                             question: q.questionText,
                             correctAnswer: q.correctAnswer.toString(),
                             timeLimit: 15,
-                            points: 1, // Fixed 1 point for all questions
+                            points: FIXED_POINT_PER_QUESTINON,
                             explanation: q.explanation || "",
                             level: level
                         });
@@ -227,20 +229,25 @@ const logOperation = (operation, roomId = null, details = "") => {
     console.log(`[${operation}]${roomInfo} ${details}`);
 };
 
-// Matchmaking utilities
+const HOST_TIMEOUT_MS = 45_000; // 45 s since lastActivity
+
 const findAvailableMatchmakingRoom = (roomsData, userId, maxPlayers) => {
-    let foundRoom = null;
-    if (roomsData) {
-        Object.entries(roomsData).forEach(([roomId, roomData]) => {
-            const playerCount = Object.keys(roomData.players || {}).length;
-            if ((roomData.matchmakingRoom || roomData.roomName === "Random Battle")
-                && playerCount < maxPlayers
-                && roomData.hostId !== userId) {
-                foundRoom = { roomId, roomData };
-            }
-        });
-    }
-    return foundRoom;
+    if (!roomsData) return null;
+
+    const now = Date.now();
+    return Object.entries(roomsData)
+        .filter(([_, room]) => (
+            (room.matchmakingRoom || room.roomName === "Random Battle") &&
+            Object.keys(room.players || {}).length < maxPlayers &&
+            room.hostId !== userId &&
+            // host still connected
+            room.players?.[room.hostId]?.connected === true &&
+            // host ping within 45 s
+            (now - (room.lastActivity || 0)) < HOST_TIMEOUT_MS
+        ))
+        // take the oldest room first for fairness
+        .sort(([, a], [, b]) => (a.createdAt || 0) - (b.createdAt || 0))
+        .map(([roomId, roomData]) => ({ roomId, roomData }))[0] || null;
 };
 
 const createMatchmakingRoomData = (userId, userData, maxPlayers) => {
@@ -472,7 +479,7 @@ export class BattleManager {
                 question: `${finalQuestions.length + 1} × 2`,
                 correctAnswer: `${(finalQuestions.length + 1) * 2}`,
                 timeLimit: 15,
-                points: 1, // Fixed 1 point
+                points: FIXED_POINT_PER_QUESTINON,
                 explanation: `Multiply ${finalQuestions.length + 1} by 2`,
                 level: 1
             };
@@ -486,7 +493,7 @@ export class BattleManager {
             levelInfo: availableLevels.map(level => ({
                 level: level,
                 questionCount: questionsByLevel[level]?.length || 0,
-                pointsPerQuestion: 1, // Fixed 1 point per question
+                pointsPerQuestion: FIXED_POINT_PER_QUESTINON,
                 usedInBattle: finalQuestions.filter(q => q.level === level).length
             })),
             totalLevels: availableLevels.length
@@ -546,6 +553,7 @@ export class BattleManager {
                 logOperation("findRandomMatch", foundRoom.roomId, "Joining existing room");
                 const userData = await this.getUserData(userId);
                 const playerData = createPlayerData({ ...userData, userId }, false, true);
+                playerData.ready = true;
 
                 await update(createPlayerRef(foundRoom.roomId, userId), playerData);
                 return { roomId: foundRoom.roomId, isHost: false };
@@ -793,7 +801,7 @@ export class BattleManager {
             });
 
             // FIXED: Always award 1 point regardless of level
-            const pointsToAdd = txResult.committed && txResult.snapshot.val() === userId ? 1 : 0;
+            const pointsToAdd = txResult.committed && txResult.snapshot.val() === userId ? FIXED_POINT_PER_QUESTINON : 0;
             const newScore = (currentPlayer.score || 0) + pointsToAdd;
 
             if (txResult.committed && txResult.snapshot.val() === userId) {
@@ -1023,6 +1031,21 @@ export class BattleManager {
         try {
             const user = await this.waitForAuth();
             const userId = user.uid;
+
+            // ❶ Promote new host if the old host is offline and game not started
+            const { data: roomData } = await safeGet(createRoomRef(roomId));
+            if (roomData &&
+                roomData.status === "waiting" &&
+                connected === true &&            // we’re coming online
+                roomData.hostId !== userId &&    // we are NOT already host
+                roomData.players?.[roomData.hostId]?.connected === false) {
+
+                await update(createRoomRef(roomId), {
+                    hostId: userId,              // make this player the new host
+                    [`players/${userId}/isHost`]: true
+                });
+                console.log(`[updatePlayerConnection] Promoted ${userId} to host of ${roomId}`);
+            }
 
             await update(createPlayerRef(roomId, userId), {
                 connected,
