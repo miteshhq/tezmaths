@@ -33,6 +33,7 @@ interface Player {
   winner?: boolean;
   points?: number;
   consecutiveCorrect?: number;
+  connected?: boolean;
 }
 
 interface Question {
@@ -54,8 +55,7 @@ interface RoomData {
   players?: { [key: string]: Player };
   questions?: Question[];
   currentWinner?: string;
-  consecutiveWinThreshold?: number;
-  maxConsecutiveTarget?: number;
+  gameEndReason?: string;
 }
 
 const avatarImages = (avatar: number | string) => {
@@ -167,14 +167,30 @@ export default function BattleScreen() {
     useState(false);
   const [countdownValue, setCountdownValue] = useState(0);
 
-  const [battleStartTime, setBattleStartTime] = useState<number>(0);
-  const battleStartTimeRef = useRef<number>(0);
-  const isFirstQuestionRef = useRef(true);
   const timerRef = useRef(null);
-
   const [backHandlerActive, setBackHandlerActive] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
+
+  // Simplified timer management
+  const timerManager = useRef({
+    mainTimer: null,
+    transitionTimer: null,
+    questionTimer: null,
+  });
 
   const cleanupTimers = useCallback(() => {
+    Object.values(timerManager.current).forEach((timer) => {
+      if (timer) {
+        clearInterval(timer);
+        clearTimeout(timer);
+      }
+    });
+    timerManager.current = {
+      mainTimer: null,
+      transitionTimer: null,
+      questionTimer: null,
+    };
+
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -184,12 +200,6 @@ export default function BattleScreen() {
       submitTimeoutRef.current = null;
     }
   }, []);
-
-  const timerManager = useRef({
-    mainTimer: null,
-    transitionTimer: null,
-    questionTimer: null,
-  });
 
   const handleTimeExpiry = useCallback(() => {
     if (roomData?.hostId === userId && !roomData.questionTransition) {
@@ -219,50 +229,6 @@ export default function BattleScreen() {
       timerManager.current.transitionTimer = countdownInterval;
     }
   }, [roomData?.hostId, roomData?.questionTransition, userId, roomId]);
-
-  const startQuestionTimer = useCallback(() => {
-    // Clear any existing timers
-    Object.values(timerManager.current).forEach((timer) => {
-      if (timer) clearInterval(timer);
-    });
-
-    if (!roomData?.questionStartedAt || roomData.questionTransition) return;
-
-    const startTime = roomData.questionStartedAt;
-    const timeLimit = roomData.questionTimeLimit || 15;
-
-    const updateTimer = () => {
-      const now = Date.now();
-      const elapsed = Math.floor((now - startTime) / 1000);
-      const remaining = Math.max(0, timeLimit - elapsed);
-
-      setTimeLeft(remaining);
-
-      if (remaining <= 0) {
-        // Clear timer when time runs out
-        if (timerManager.current.mainTimer) {
-          clearInterval(timerManager.current.mainTimer);
-          timerManager.current.mainTimer = null;
-        }
-
-        // Handle time expiry only once
-        if (!timeExpiryHandled.current) {
-          timeExpiryHandled.current = true;
-          handleTimeExpiry();
-        }
-      }
-    };
-
-    // Initial update
-    updateTimer();
-
-    // Set up interval
-    timerManager.current.mainTimer = setInterval(updateTimer, 1000);
-  }, [
-    roomData?.questionStartedAt,
-    roomData?.questionTransition,
-    roomData?.questionTimeLimit,
-  ]);
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -314,36 +280,7 @@ export default function BattleScreen() {
   ]);
 
   useEffect(() => {
-    if (
-      timeLeft === 0 &&
-      !roomData?.questionTransition &&
-      !roomData?.currentWinner
-    ) {
-      const fallbackTimeout = setTimeout(() => {
-        if (roomData?.hostId === userId) {
-          battleManager.startQuestionTransition(roomId as string, 1000);
-        }
-      }, 5000);
-
-      return () => clearTimeout(fallbackTimeout);
-    }
-  }, [
-    timeLeft,
-    roomData?.questionTransition,
-    roomData?.currentWinner,
-    roomData?.hostId,
-    userId,
-    roomId,
-  ]);
-
-  useEffect(() => {
     if (roomData?.currentQuestion !== undefined) {
-      if (isFirstQuestionRef.current && roomData.currentQuestion === 0) {
-        const startTime = Date.now();
-        setBattleStartTime(startTime);
-        battleStartTimeRef.current = startTime;
-        isFirstQuestionRef.current = false;
-      }
       setUserAnswer("");
       setFeedback("");
       setIsAnswered(false);
@@ -371,8 +308,7 @@ export default function BattleScreen() {
       const transitionTimeLeft = roomData.nextQuestionStartTime - now;
 
       if (transitionTimeLeft > 0) {
-        // timeoutId =
-        setTimeout(() => {
+        timeoutId = setTimeout(() => {
           battleManager.moveToNextQuestion(roomId as string).catch((error) => {
             console.error("Failed to move to next question:", error);
           });
@@ -396,28 +332,12 @@ export default function BattleScreen() {
   ]);
 
   useEffect(() => {
-    return () => {
-      cleanupTimers();
-      // Clear all other timeouts
-      timeExpiryHandled.current = false;
-    };
-  }, [cleanupTimers]);
-
-  useEffect(() => {
     if (roomData?.questionTransition) {
       setShowBetterLuckMessage(false);
       setBetterLuckCountdown(0);
       setFeedback("");
     }
   }, [roomData?.questionTransition]);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (submitTimeoutRef.current) clearTimeout(submitTimeoutRef.current);
-      timeExpiryHandled.current = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!roomData?.nextQuestionStartTime) {
@@ -443,51 +363,7 @@ export default function BattleScreen() {
     return () => clearInterval(interval);
   }, [roomData?.nextQuestionStartTime]);
 
-  useEffect(() => {
-    if (roomData?.status === "finished") {
-      // Clear the cleanup flag to allow normal result navigation
-      cleanupExecutedRef.current = false;
-
-      const navigateToResults = async () => {
-        try {
-          const playerArray = await battleManager.endBattle(roomId as string);
-
-          const battleEndTime = Date.now();
-          let totalBattleTimeMs = 0;
-          if (battleStartTimeRef.current > 0) {
-            const rawTimeMs = battleEndTime - battleStartTimeRef.current;
-            const maxReasonableTime = 2 * 60 * 60 * 1000;
-            const minReasonableTime = 1000;
-            if (
-              rawTimeMs >= minReasonableTime &&
-              rawTimeMs <= maxReasonableTime
-            ) {
-              totalBattleTimeMs = rawTimeMs;
-            } else {
-              console.warn(`Invalid battle time: ${rawTimeMs}ms`);
-              totalBattleTimeMs = 0;
-            }
-          }
-
-          router.replace({
-            pathname: "/user/battle-results",
-            params: {
-              roomId: roomId,
-              players: JSON.stringify(playerArray || []),
-              totalQuestions: roomData.totalQuestions?.toString() || "0",
-              currentUserId: userId,
-              totalBattleTime: totalBattleTimeMs.toString(),
-            },
-          });
-        } catch (error) {
-          console.error("Navigate to results error:", error);
-          router.replace("/user/multiplayer-mode-selection");
-        }
-      };
-      navigateToResults();
-    }
-  }, [roomData?.status, userId, roomId]);
-
+  // CRITICAL FIX: Enhanced room listener with opponent detection
   useEffect(() => {
     if (!roomId) return;
 
@@ -499,11 +375,50 @@ export default function BattleScreen() {
 
         if (!data) {
           // Room no longer exists - navigate away if not already leaving
-          if (!backHandlerActive && !cleanupExecutedRef.current) {
+          if (!backHandlerActive && !isLeaving) {
             console.log("Room no longer exists, navigating away");
             router.replace("/user/multiplayer-mode-selection");
           }
           setNetworkError(true);
+          return;
+        }
+
+        // OPPONENT DETECTION: Check if opponent left during battle
+        if (data.status === "playing" && data.players) {
+          const connectedPlayers = Object.values(data.players).filter(
+            (p: any) => p.connected
+          );
+          if (connectedPlayers.length < 2) {
+            Alert.alert(
+              "Opponent Left",
+              "Your opponent has left the battle. The game will end now.",
+              [
+                {
+                  text: "OK",
+                  onPress: () => {
+                    router.replace("/user/multiplayer-mode-selection");
+                  },
+                },
+              ]
+            );
+            return;
+          }
+        }
+
+        // Check for host leaving
+        if (data.gameEndReason === "host_left") {
+          Alert.alert(
+            "Host Left",
+            "The host has left the battle. The game has ended.",
+            [
+              {
+                text: "OK",
+                onPress: () => {
+                  router.replace("/user/multiplayer-mode-selection");
+                },
+              },
+            ]
+          );
           return;
         }
 
@@ -515,7 +430,7 @@ export default function BattleScreen() {
         setNetworkError(true);
 
         // Navigate away on persistent errors
-        if (!backHandlerActive && !cleanupExecutedRef.current) {
+        if (!backHandlerActive && !isLeaving) {
           setTimeout(() => {
             router.replace("/user/multiplayer-mode-selection");
           }, 3000);
@@ -526,29 +441,34 @@ export default function BattleScreen() {
     return () => {
       unsubscribe();
     };
-  }, [roomId, backHandlerActive]);
+  }, [roomId, backHandlerActive, isLeaving]);
+
+  useEffect(() => {
+    if (roomData?.status === "finished") {
+      const navigateToResults = async () => {
+        try {
+          const playerArray = await battleManager.endBattle(roomId as string);
+
+          router.replace({
+            pathname: "/user/battle-results",
+            params: {
+              roomId: roomId,
+              players: JSON.stringify(playerArray || []),
+              totalQuestions: roomData.totalQuestions?.toString() || "0",
+              currentUserId: userId,
+            },
+          });
+        } catch (error) {
+          console.error("Navigate to results error:", error);
+          router.replace("/user/multiplayer-mode-selection");
+        }
+      };
+      navigateToResults();
+    }
+  }, [roomData?.status, userId, roomId]);
 
   const otherWinnerAnnouncedRef = useRef(false);
   const inputRef = useRef<TextInput>(null);
-
-  useEffect(() => {
-    return () => {
-      // Clear all timers
-      Object.values(timerManager.current).forEach((timer) => {
-        if (timer) clearInterval(timer);
-      });
-
-      // Reset timer manager
-      timerManager.current = {
-        mainTimer: null,
-        transitionTimer: null,
-        questionTimer: null,
-      };
-
-      // Reset flags
-      timeExpiryHandled.current = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!roomData?.players) return;
@@ -588,6 +508,10 @@ export default function BattleScreen() {
 
         if (remaining <= 0) {
           cleanupTimers();
+          if (!timeExpiryHandled.current) {
+            timeExpiryHandled.current = true;
+            handleTimeExpiry();
+          }
         }
       };
 
@@ -603,6 +527,7 @@ export default function BattleScreen() {
     roomData?.questionTransition,
     roomData?.status,
     cleanupTimers,
+    handleTimeExpiry,
   ]);
 
   useEffect(() => {
@@ -614,99 +539,24 @@ export default function BattleScreen() {
     }
   }, [roomData?.currentQuestion, roomData?.questionTransition]);
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      // Make cleanup synchronous to avoid race conditions
-      if (cleanupExecutedRef.current) return;
-      cleanupExecutedRef.current = true;
-
       console.log("Battle screen cleanup starting");
+      cleanupTimers();
 
-      try {
-        if (roomId) {
-          // Remove room listener immediately
-          battleManager.removeRoomListener(roomId as string);
-
-          // Clear all timers
-          cleanupTimers();
-          Object.values(timerManager.current).forEach((timer) => {
-            if (timer) clearInterval(timer);
-          });
-
-          // Update connection status synchronously (fire and forget)
-          battleManager
-            .updatePlayerConnection(roomId as string, false)
-            .catch(() => {});
-
-          // Only leave room if it wasn't a manual leave
-          if (!backHandlerActive) {
-            // Check room status asynchronously but don't block cleanup
-            battleManager
-              .validateRoomExists(roomId as string)
-              .then((validation) => {
-                if (
-                  validation.exists &&
-                  validation.roomData?.status !== "finished"
-                ) {
-                  battleManager.leaveRoom(roomId as string).catch(() => {});
-                }
-              })
-              .catch(() => {});
-          }
-        }
-
-        console.log("Battle screen cleanup completed");
-      } catch (error) {
-        console.warn("Battle screen cleanup error:", error);
+      if (roomId && !isLeaving) {
+        battleManager.removeRoomListener(roomId as string);
+        battleManager
+          .updatePlayerConnection(roomId as string, false)
+          .catch(() => {});
       }
     };
-  }, [roomId, cleanupTimers, backHandlerActive]);
+  }, [roomId, cleanupTimers, isLeaving]);
 
-  useEffect(() => {
-    if (roomData?.status === "finished") {
-      const navigateToResults = async () => {
-        try {
-          const playerArray = await battleManager.endBattle(roomId as string);
-
-          const battleEndTime = Date.now();
-          let totalBattleTimeMs = 0;
-          if (battleStartTimeRef.current > 0) {
-            const rawTimeMs = battleEndTime - battleStartTimeRef.current;
-            const maxReasonableTime = 2 * 60 * 60 * 1000;
-            const minReasonableTime = 1000;
-            if (
-              rawTimeMs >= minReasonableTime &&
-              rawTimeMs <= maxReasonableTime
-            ) {
-              totalBattleTimeMs = rawTimeMs;
-            } else {
-              console.warn(`Invalid battle time: ${rawTimeMs}ms`);
-              totalBattleTimeMs = 0;
-            }
-          }
-
-          router.replace({
-            pathname: "/user/battle-results",
-            params: {
-              roomId: roomId,
-              players: JSON.stringify(playerArray || []),
-              totalQuestions: roomData.totalQuestions?.toString() || "0",
-              currentUserId: userId,
-              totalBattleTime: totalBattleTimeMs.toString(),
-            },
-          });
-        } catch (error) {
-          router.replace("/user/multiplayer-mode-selection");
-        }
-      };
-      navigateToResults();
-    }
-  }, [roomData?.status, userId, roomId]);
-
-  const cleanupExecutedRef = useRef(false);
-
+  // FIXED: Reliable leave button functionality
   const handleRoomLeave = useCallback(() => {
-    if (backHandlerActive) return;
+    if (isLeaving) return;
 
     Alert.alert("Leave Battle", "Are you sure you want to leave the battle?", [
       {
@@ -717,21 +567,20 @@ export default function BattleScreen() {
         text: "Leave",
         style: "destructive",
         onPress: async () => {
+          setIsLeaving(true);
           setBackHandlerActive(true);
+
           try {
-            // First remove all listeners immediately
+            // Clean up timers immediately
+            cleanupTimers();
+
+            // Remove room listener
             battleManager.removeRoomListener(roomId as string);
 
-            // Clear all timers
-            cleanupTimers();
-            Object.values(timerManager.current).forEach((timer) => {
-              if (timer) clearInterval(timer);
-            });
-
-            // Update connection status first
+            // Update connection status
             await battleManager.updatePlayerConnection(roomId as string, false);
 
-            // Then leave the room
+            // Leave the room
             await battleManager.leaveRoom(roomId as string);
 
             // Navigate away
@@ -740,13 +589,11 @@ export default function BattleScreen() {
             console.error("Leave room error:", error);
             // Always navigate away even if there's an error
             router.replace("/user/multiplayer-mode-selection");
-          } finally {
-            setBackHandlerActive(false);
           }
         },
       },
     ]);
-  }, [roomId, backHandlerActive, cleanupTimers]);
+  }, [roomId, cleanupTimers, isLeaving]);
 
   useFocusEffect(
     useCallback(() => {
@@ -816,13 +663,12 @@ export default function BattleScreen() {
         await SoundManager.playSound("wrongAnswerSoundEffect");
       }
 
-      // Calculate points
-      const basePoints = roomData.currentLevel || 1;
-      const pointsEarned = isFirstCorrect ? basePoints : 0;
+      // FIXED: Always show 1 point earned
+      const pointsEarned = isFirstCorrect ? 1 : 0;
 
       // Set appropriate feedback
       if (isFirstCorrect) {
-        setFeedback(`✅ Correct! You got it first! +${pointsEarned} points`);
+        setFeedback(`✅ Correct! You got it first! +${pointsEarned} point`);
       } else {
         setFeedback("✅ Correct! Someone else got it first.");
       }
@@ -1088,8 +934,8 @@ export default function BattleScreen() {
                   key={`winner-${index}`}
                   className="text-green-500 text-center mt-4"
                 >
-                  🏆 {typedPlayer.username || typedPlayer.name} got it right! (+
-                  {currentQuestion?.points || 1} pts)
+                  🏆 {typedPlayer.username || typedPlayer.name} got it right!
+                  (+1 pt)
                 </Text>
               );
             }

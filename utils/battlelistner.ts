@@ -25,7 +25,7 @@ const useBattleStartListener = (roomId, isHost) => {
 
       console.log(`[useBattleStartListener] Room update - Status: ${roomData.status}, Questions: ${roomData.questions?.length || 0}`);
 
-      // Navigate to battle screen when status changes to "playing" and we have questions
+      // ENHANCED: Navigate to battle screen when status changes to "playing" and we have questions
       if (
         roomData.status === "playing" && 
         roomData.questions && 
@@ -36,16 +36,14 @@ const useBattleStartListener = (roomId, isHost) => {
         
         console.log(`[useBattleStartListener] Navigating to battle screen for room: ${roomId}`);
         
-        // Small delay to ensure state is properly set
-        setTimeout(() => {
-          router.replace({
-            pathname: "/user/battle-screen",
-            params: {
-              roomId: roomId,
-              isHost: isHost ? "true" : "false",
-            },
-          });
-        }, 500);
+        // Navigate immediately for better responsiveness
+        router.replace({
+          pathname: "/user/battle-screen",
+          params: {
+            roomId: roomId,
+            isHost: isHost ? "true" : "false",
+          },
+        });
       }
 
       // Handle battle end - navigate back to multiplayer selection

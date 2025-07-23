@@ -47,6 +47,20 @@ export default function MultiplayerModeSelection() {
   const roomListenerRef = useRef(null);
   const countdownIntervalRef = useRef(null);
 
+  // CRITICAL FIX: Reset battle state on component mount
+  useEffect(() => {
+    const resetBattleState = async () => {
+      try {
+        await battleManager.resetUserBattleState();
+        console.log("Battle state reset on multiplayer mode selection mount");
+      } catch (error) {
+        console.warn("Error resetting battle state:", error);
+      }
+    };
+
+    resetBattleState();
+  }, []);
+
   // Simple cleanup - only what's necessary
   const performCleanup = useCallback(async () => {
     console.log("Performing simple cleanup");

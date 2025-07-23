@@ -38,6 +38,7 @@ interface Room {
 export default function BattleRoom() {
   const router = useRouter();
   const { roomId, isHost } = useLocalSearchParams();
+
   useEffect(() => {
     if (!roomId) {
       Alert.alert("Error", "Room not found.");
@@ -50,64 +51,39 @@ export default function BattleRoom() {
   const [error, setError] = useState(null);
   const [matchmakingTimeout, setMatchmakingTimeout] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  const [isNavigating, setIsNavigating] = useState(false);
   const [battleStarting, setBattleStarting] = useState(false);
   const [opponentFound, setOpponentFound] = useState(false);
-  const [autoReadyToggled, setAutoReadyToggled] = useState(false);
-  const [playersInRoom, setPlayersInRoom] = useState({});
-
   const [battleStartAttempted, setBattleStartAttempted] = useState(false);
 
-  const [navigationLock, setNavigationLock] = useState(false);
-
   const userId = auth.currentUser?.uid;
-  const navigationRef = useRef(false);
   const timeoutRef = useRef(null);
   const battleStartTimeoutRef = useRef(null);
-  const battleNavigationTimeoutRef = useRef(null);
   const cleanupRef = useRef(false);
 
-  const [navigationState, setNavigationState] = useState({
-    isNavigating: false,
-    lastNavigation: 0,
-    navigationLock: false,
-  });
-
-  const roomListenerRef = useRef<(() => void) | null>(null);
-
+  // Simplified cleanup function
   const performCleanup = useCallback(async () => {
     if (cleanupRef.current) return;
     cleanupRef.current = true;
 
-    console.log("Performing comprehensive battle room cleanup");
+    console.log("Battle room cleanup starting");
 
     try {
       // Clear all timeouts
-      [timeoutRef, battleStartTimeoutRef, battleNavigationTimeoutRef].forEach(
-        (ref) => {
-          if (ref.current) {
-            clearTimeout(ref.current);
-            ref.current = null;
-          }
-        }
-      );
-
-      // Remove listeners with error handling
-      if (roomListenerRef.current) {
-        try {
-          roomListenerRef.current();
-        } catch (error) {
-          console.warn("Error removing room listener:", error);
-        }
-        roomListenerRef.current = null;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      if (battleStartTimeoutRef.current) {
+        clearTimeout(battleStartTimeoutRef.current);
+        battleStartTimeoutRef.current = null;
       }
 
       // Update connection status
-      if (roomId && !navigationState.isNavigating) {
+      if (roomId) {
         await battleManager.updatePlayerConnection(roomId, false);
       }
 
-      // Reset all states
+      // Reset states
       setBattleStarting(false);
       setBattleStartAttempted(false);
       setMatchmakingTimeout(false);
@@ -115,170 +91,14 @@ export default function BattleRoom() {
     } catch (error) {
       console.error("Cleanup error:", error);
     } finally {
-      // Ensure cleanup flag is reset
+      // Reset cleanup flag after a delay
       setTimeout(() => {
         cleanupRef.current = false;
       }, 1000);
     }
-  }, [roomId, navigationState.isNavigating]);
+  }, [roomId]);
 
   useBattleStartListener(roomId as string, isHost === "true");
-
-  useEffect(() => {
-    if (!roomId) return;
-
-    const roomRef = ref(database, `rooms/${roomId}/players`);
-
-    const handleSnapshot = (snapshot: any) => {
-      try {
-        if (!snapshot || typeof snapshot.val !== "function") {
-          console.warn("Invalid snapshot received:", snapshot);
-          setPlayersInRoom({});
-          return;
-        }
-
-        const data = snapshot.val();
-        setPlayersInRoom(data || {}); // fallback if null
-      } catch (err) {
-        console.error("Failed to process player data:", err);
-        setPlayersInRoom({}); // fallback to prevent crash
-      }
-    };
-
-    onValue(roomRef, handleSnapshot);
-
-    return () => {
-      try {
-        off(roomRef, "value", handleSnapshot);
-      } catch (error) {
-        console.warn("Error detaching Firebase listener:", error);
-      }
-    };
-  }, [roomId]);
-
-  useEffect(() => {
-    const unsubscribe = battleManager.listenToRoom(roomId, (roomData) => {
-      if (!roomData) return;
-
-      if (roomData.status === "playing") {
-        // Auto-navigate for non-hosts
-        router.replace({
-          pathname: "/user/battle-room",
-          params: { roomId },
-        });
-      }
-    });
-
-    return () => unsubscribe();
-  }, [roomId]);
-
-  useEffect(() => {
-    const connectToRoom = async () => {
-      if (roomId) {
-        await battleManager.updatePlayerConnection(roomId, true);
-      }
-    };
-
-    connectToRoom();
-
-    return () => {
-      if (roomId) {
-        battleManager.updatePlayerConnection(roomId, false);
-      }
-    };
-  }, [roomId]);
-
-  useEffect(() => {
-    setIsMounted(true);
-    setBattleStartAttempted(false);
-    return () => {
-      setIsMounted(false);
-      navigationRef.current = false;
-      setBattleStartAttempted(false);
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      if (battleStartTimeoutRef.current) {
-        clearTimeout(battleStartTimeoutRef.current);
-      }
-      if (battleNavigationTimeoutRef.current) {
-        clearTimeout(battleNavigationTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const safeNavigate = useCallback(
-    (path: string, force = false) => {
-      const now = Date.now();
-
-      // Prevent rapid navigation attempts
-      if (
-        !force &&
-        (navigationState.isNavigating ||
-          navigationState.navigationLock ||
-          now - navigationState.lastNavigation < 1000)
-      ) {
-        console.log("Navigation blocked - too soon or already navigating");
-        return false;
-      }
-
-      setNavigationState((prev) => ({
-        ...prev,
-        isNavigating: true,
-        navigationLock: true,
-        lastNavigation: now,
-      }));
-
-      try {
-        // Perform cleanup before navigation
-        performCleanup();
-
-        // Navigate with small delay to ensure cleanup completes
-        setTimeout(() => {
-          router.replace(path);
-
-          // Reset navigation state after successful navigation
-          setTimeout(() => {
-            setNavigationState((prev) => ({
-              ...prev,
-              isNavigating: false,
-              navigationLock: false,
-            }));
-          }, 1500);
-        }, 300);
-
-        return true;
-      } catch (error) {
-        console.error("Navigation error:", error);
-        setNavigationState((prev) => ({
-          ...prev,
-          isNavigating: false,
-          navigationLock: false,
-        }));
-        return false;
-      }
-    },
-    [navigationState, performCleanup]
-  );
-
-  useEffect(() => {
-    if (!room?.matchmakingRoom || !roomId) return;
-
-    // Fallback battle start if auto-start fails
-    const fallbackTimer = setTimeout(() => {
-      if (
-        room.status === "waiting" &&
-        Object.keys(room.players || {}).length === 2 &&
-        room.hostId === userId &&
-        !battleStartAttempted
-      ) {
-        // console.log("Fallback: Starting battle manually");
-        handleStartBattle();
-      }
-    }, 10000); // 10 second fallback
-
-    return () => clearTimeout(fallbackTimer);
-  }, [room, roomId, userId, battleStartAttempted]);
 
   // Handle matchmaking timeout
   useEffect(() => {
@@ -299,16 +119,7 @@ export default function BattleRoom() {
     if (playerCount === 1) {
       timeoutRef.current = setTimeout(async () => {
         if (isMounted && Object.keys(room.players || {}).length < 2) {
-          //   console.log("Matchmaking timeout triggered");
-
-          // Clean up the room entirely
-          try {
-            await battleManager.deleteRoom(roomId); // Add this method to battleManager
-            setMatchmakingTimeout(true);
-          } catch (error) {
-            console.error("Failed to delete room:", error);
-            setMatchmakingTimeout(true);
-          }
+          setMatchmakingTimeout(true);
         }
       }, 30000);
     }
@@ -339,27 +150,31 @@ export default function BattleRoom() {
   }, [roomId]);
 
   useEffect(() => {
+    setIsMounted(true);
     return () => {
-      // Clean up all timeouts and states
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      if (battleStartTimeoutRef.current)
-        clearTimeout(battleStartTimeoutRef.current);
-      if (battleNavigationTimeoutRef.current)
-        clearTimeout(battleNavigationTimeoutRef.current);
+      setIsMounted(false);
+      performCleanup();
+    };
+  }, [performCleanup]);
 
-      // Reset all battle-related states
-      setBattleStarting(false);
-      setBattleStartAttempted(false);
-      setMatchmakingTimeout(false);
-      setOpponentFound(false);
+  // Connect to room
+  useEffect(() => {
+    const connectToRoom = async () => {
+      if (roomId) {
+        await battleManager.updatePlayerConnection(roomId, true);
+      }
+    };
 
-      // Update connection status
+    connectToRoom();
+
+    return () => {
       if (roomId) {
         battleManager.updatePlayerConnection(roomId, false);
       }
     };
-  }, []);
+  }, [roomId]);
 
+  // Auto-start battle for matchmaking rooms
   useEffect(() => {
     if (
       room?.matchmakingRoom &&
@@ -372,13 +187,15 @@ export default function BattleRoom() {
       ).length;
 
       if (readyAndConnectedCount === 2 && room.hostId === userId) {
-        // console.log("Starting battle immediately with 2 ready players...");
         const startBattle = async () => {
           try {
+            setBattleStarting(true);
+            setBattleStartAttempted(true);
             await battleManager.startBattle(roomId);
-            safeNavigate(`/user/battle-screen?roomId=${roomId}&question=0`);
           } catch (error) {
             console.error("Battle start failed:", error);
+            setBattleStarting(false);
+            setBattleStartAttempted(false);
             Alert.alert("Battle Start Failed", error.message, [
               {
                 text: "Try Again",
@@ -386,7 +203,8 @@ export default function BattleRoom() {
               },
               {
                 text: "Go Back",
-                onPress: () => safeNavigate("/user/multiplayer-mode-selection"),
+                onPress: () =>
+                  router.replace("/user/multiplayer-mode-selection"),
               },
             ]);
           }
@@ -401,87 +219,7 @@ export default function BattleRoom() {
     room?.hostId,
     userId,
     roomId,
-    safeNavigate,
   ]);
-
-  useEffect(() => {
-    const checkInitialStatus = async () => {
-      const roomSnap = await get(ref(database, `rooms/${roomId}`));
-      const roomData = roomSnap.val();
-      if (roomData?.status === "playing") {
-        console.log("Room already started, navigating...");
-        router.replace(`/user/battle-screen?roomId=${roomId}`);
-      }
-    };
-
-    checkInitialStatus();
-  }, []);
-
-  // Enhanced fallback navigation timer
-  useEffect(() => {
-    if (battleStarting && room?.matchmakingRoom && battleStartAttempted) {
-      const fallbackTimer = setTimeout(() => {
-        // console.log("=== FALLBACK TIMER TRIGGERED ===");
-        // console.log("Room status:", room?.status);
-        // console.log("Has questions:", !!room?.questions);
-        // console.log("Questions length:", room?.questions?.length);
-
-        if (
-          room?.status === "playing" &&
-          room?.questions &&
-          room?.questions.length > 0
-        ) {
-          //   console.log("Room is ready, forcing navigation...");
-          safeNavigate(`/user/battle-screen?roomId=${roomId}&question=0`);
-        } else {
-          //   console.log("Battle failed to start properly, resetting...");
-          setBattleStarting(false);
-          setBattleStartAttempted(false);
-          Alert.alert(
-            "Battle Failed",
-            "Unable to start battle. Please try again.",
-            [
-              {
-                text: "Retry",
-                onPress: () => {
-                  setBattleStartAttempted(false);
-                },
-              },
-              {
-                text: "Go Back",
-                onPress: () => safeNavigate("/user/multiplayer-mode-selection"),
-              },
-            ]
-          );
-        }
-      }, 8000); // 8 seconds
-
-      return () => clearTimeout(fallbackTimer);
-    }
-  }, [
-    battleStarting,
-    room?.matchmakingRoom,
-    battleStartAttempted,
-    room?.status,
-    room?.questions,
-    roomId,
-  ]);
-
-  useEffect(() => {
-    const handleConnection = async () => {
-      if (roomId) {
-        await battleManager.updatePlayerConnection(roomId, true);
-      }
-    };
-
-    handleConnection();
-
-    return () => {
-      if (roomId) {
-        battleManager.updatePlayerConnection(roomId, false);
-      }
-    };
-  }, [roomId]);
 
   // Main room listener
   useEffect(() => {
@@ -490,11 +228,11 @@ export default function BattleRoom() {
     const validateAndListen = async () => {
       try {
         const roomExists = await battleManager.validateRoomExists(roomId);
-        if (!roomExists) {
+        if (!roomExists.exists) {
           Alert.alert("Room Expired", "This battle room no longer exists", [
             {
               text: "OK",
-              onPress: () => safeNavigate("/user/multiplayer-mode-selection"),
+              onPress: () => router.replace("/user/multiplayer-mode-selection"),
             },
           ]);
           return;
@@ -503,31 +241,13 @@ export default function BattleRoom() {
         const unsubscribe = battleManager.listenToRoom(
           roomId,
           async (roomData) => {
-            if (!isMounted || navigationRef.current) return;
-
             setRoom(roomData);
             setLoading(false);
-
-            // ✅ Auto toggle ready ONCE on join
-            if (
-              roomData.players &&
-              roomData.players[userId] &&
-              !roomData.players[userId].ready &&
-              !autoReadyToggled
-            ) {
-              try {
-                await battleManager.toggleReady(roomId);
-                setAutoReadyToggled(true); // Prevent re-toggling
-              } catch (err) {
-                console.error("Auto toggleReady failed:", err);
-              }
-            }
           }
         );
 
         return () => {
           if (unsubscribe) unsubscribe();
-          battleManager.updatePlayerConnection(roomId, false);
         };
       } catch (error) {
         if (error.message.includes("permission")) {
@@ -542,21 +262,22 @@ export default function BattleRoom() {
     };
 
     validateAndListen();
-  }, [roomId, isMounted, safeNavigate, autoReadyToggled]);
+  }, [roomId, isMounted]);
 
+  // Listen for battle start
   useEffect(() => {
-    if (!roomId || navigationLock) return;
+    if (!roomId) return;
 
     const roomRef = ref(database, `rooms/${roomId}`);
 
     const handleSnapshot = (snapshot) => {
       const roomData = snapshot.val();
-      if (!roomData || navigationLock) return;
+      if (!roomData) return;
 
-      // Only navigate on status change to playing
-      if (roomData.status === "playing" && !navigationLock) {
+      // Navigate when battle starts
+      if (roomData.status === "playing") {
         console.log("Room status changed to playing - navigating");
-        safeNavigate({
+        router.replace({
           pathname: "/user/battle-screen",
           params: { roomId, isHost },
         });
@@ -572,16 +293,15 @@ export default function BattleRoom() {
         console.warn("Error unsubscribing:", error);
       }
     };
-  }, [roomId, isHost, navigationLock, safeNavigate]);
+  }, [roomId, isHost]);
 
   const handleStartBattle = async () => {
-    if (isNavigating || battleStarting) return;
+    if (battleStarting) return;
 
     try {
       setBattleStarting(true);
       setBattleStartAttempted(true);
-      await battleManager.startBattle(roomId); // ⬅️ triggers `status: "playing"`
-      // no need to manually navigate — listener handles that
+      await battleManager.startBattle(roomId);
     } catch (error) {
       console.error("Start battle error:", error);
       setBattleStarting(false);
@@ -590,6 +310,7 @@ export default function BattleRoom() {
     }
   };
 
+  // FIXED: Ready/Unready button functionality
   const toggleReady = async () => {
     try {
       await battleManager.toggleReady(roomId);
@@ -601,6 +322,7 @@ export default function BattleRoom() {
 
   const handleLeaveRoom = async () => {
     try {
+      await performCleanup();
       await battleManager.leaveRoom(roomId);
       router.replace("/user/multiplayer-mode-selection");
     } catch (error) {
@@ -660,7 +382,7 @@ export default function BattleRoom() {
           <TouchableOpacity
             className="bg-red-500 px-6 py-3 rounded-lg"
             onPress={() => {
-              performCleanup(); // ADD THIS LINE
+              performCleanup();
               router.replace("/user/multiplayer-mode-selection");
             }}
           >
@@ -670,7 +392,6 @@ export default function BattleRoom() {
       );
     }
 
-    // For matchmaking rooms, update the "Starting Battle..." section:
     if (battleStarting || room.status === "playing") {
       return (
         <View className="flex-1 justify-center items-center">
@@ -715,7 +436,6 @@ export default function BattleRoom() {
       );
     }
 
-    // Show opponent found only when confirmed
     return (
       <View className="flex-1 justify-center items-center">
         <ActivityIndicator size="large" color="#10B981" />
@@ -809,6 +529,3 @@ export default function BattleRoom() {
     </ScrollView>
   );
 }
-// function onValue(roomRef: DatabaseReference, arg1: (snapshot: any) => void) {
-//   throw new Error("Function not implemented.");
-// }

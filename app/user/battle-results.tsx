@@ -85,15 +85,7 @@ const avatarImages = (avatar: number | string) => {
 
 export default function BattleResultsScreen() {
   const params = useLocalSearchParams();
-  const { roomId, players, totalQuestions, currentUserId, totalBattleTime } =
-    params;
-
-  const totalGameTimeMs =
-    Number.parseInt(
-      Array.isArray(totalBattleTime)
-        ? totalBattleTime[0]
-        : totalBattleTime || "0"
-    ) || 0;
+  const { roomId, players, totalQuestions, currentUserId } = params;
 
   const viewShotRef = useRef<ViewShot>(null);
   const cleanupExecuted = useRef(false);
@@ -101,7 +93,6 @@ export default function BattleResultsScreen() {
   const soundPlayed = useRef(false);
 
   // State management
-  const [isPopupVisible, setPopupVisible] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [userData, setUserData] = useState<UserData>({
     avatar: 0,
@@ -115,9 +106,9 @@ export default function BattleResultsScreen() {
     isValid: false,
   });
   const [errorMessage, setErrorMessage] = useState("");
-
   const [isNavigating, setIsNavigating] = useState(false);
 
+  // ENHANCED CLEANUP: Complete battle state reset
   const performCleanup = useCallback(async () => {
     console.log("Battle results cleanup starting");
 
@@ -152,6 +143,9 @@ export default function BattleResultsScreen() {
           }
         }
       }
+
+      // CRITICAL: Reset all battle manager state
+      await battleManager.resetUserBattleState();
 
       console.log("Battle results cleanup completed");
     } catch (error) {
@@ -374,14 +368,14 @@ export default function BattleResultsScreen() {
       await performCleanup();
 
       // Small delay to ensure cleanup completes
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Navigate back to multiplayer selection
       router.replace("/user/multiplayer-mode-selection");
     } catch (error) {
       console.warn("Navigation cleanup error:", error);
       // Navigate anyway
-      router.replace("/user/home");
+      router.replace("/user/multiplayer-mode-selection");
     }
   }, [performCleanup]);
 
@@ -432,21 +426,6 @@ export default function BattleResultsScreen() {
         {elements}
       </View>
     );
-  };
-
-  const formatTime = (milliseconds: number) => {
-    const totalSeconds = Math.floor(milliseconds / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-
-    if (hours >= 1) {
-      return `${hours}h ${minutes}m ${seconds}s`;
-    } else if (minutes >= 1) {
-      return `${minutes}m ${seconds}s`;
-    } else {
-      return `${seconds}s`;
-    }
   };
 
   const getMotivationalQuote = () => {
@@ -510,7 +489,6 @@ export default function BattleResultsScreen() {
       console.error("Share error:", error);
     } finally {
       setIsSharing(false);
-      setPopupVisible(false); // Close popup after sharing
     }
   };
 
@@ -604,10 +582,6 @@ export default function BattleResultsScreen() {
               ))}
             </ScrollView>
 
-            <Text className="text-primary text-base font-medium text-center mb-2">
-              Time Spent: {formatTime(totalGameTimeMs)}
-            </Text>
-
             <Text className="text-2xl mt-2 mb-2 font-black text-center text-white py-2 px-4 mx-auto bg-primary rounded-xl">
               Download Now
             </Text>
@@ -640,7 +614,7 @@ export default function BattleResultsScreen() {
 
           <TouchableOpacity
             className="py-3 px-6 border border-black rounded-full flex-1 ml-1"
-            onPress={shareImageAndText} // Change this from handleShare to shareImageAndText
+            onPress={shareImageAndText}
             disabled={isSharing}
             activeOpacity={0.7}
           >

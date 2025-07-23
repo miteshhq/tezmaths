@@ -82,7 +82,7 @@ const generateFallbackQuestions = (count = 25) => {
         question: `${i + 1} + ${i + 5}`,
         correctAnswer: `${(i + 1) + (i + 5)}`,
         timeLimit: 15,
-        points: Math.floor(i / 5) + 1,
+        points: 1, // Fixed 1 point for all questions
         explanation: `Add ${i + 1} and ${i + 5} together`,
         level: Math.floor(i / 5) + 1
     }));
@@ -96,7 +96,7 @@ const processQuizData = (quizzesData, startLevel, maxLevels) => {
         const level = quiz.level || 1;
         if (level >= startLevel && level <= maxLevels) {
             levelSettings[level] = {
-                pointsPerQuestion: Number.parseInt(quiz.pointsPerQuestion) || level,
+                pointsPerQuestion: 1, // Fixed 1 point per question
             };
 
             if (quiz.questions) {
@@ -108,7 +108,7 @@ const processQuizData = (quizzesData, startLevel, maxLevels) => {
                             question: q.questionText,
                             correctAnswer: q.correctAnswer.toString(),
                             timeLimit: 15,
-                            points: levelSettings[level].pointsPerQuestion,
+                            points: 1, // Fixed 1 point for all questions
                             explanation: q.explanation || "",
                             level: level
                         });
@@ -273,8 +273,6 @@ const createBattleInitData = (questionData, now) => {
         questionTransition: false,
         nextQuestionStartTime: null,
         currentWinner: null,
-        maxConsecutiveTarget: 5,
-        consecutiveWinThreshold: 3,
         gameEndReason: null,
         gameWinner: null,
         finishedAt: null
@@ -423,7 +421,7 @@ export class BattleManager {
 
     async handleHostExit(roomId) {
         try {
-            logOperation("handleHostExit", roomId, "Host leaving");
+            logOperation("handleHostExit", roomId, "Host leaving during battle");
 
             await safeUpdate(createRoomRef(roomId), {
                 hostLeft: true,
@@ -432,6 +430,7 @@ export class BattleManager {
                 finishedAt: serverTimestamp()
             });
 
+            // Clean up after 5 seconds
             setTimeout(() => {
                 this.cleanupRoom(roomId, "host_exit").catch(() => { });
             }, 5000);
@@ -468,6 +467,18 @@ export class BattleManager {
         const battleQuestions = collectQuestionsFromLevels(questionsByLevel, availableLevels);
         const finalQuestions = shuffleArray(battleQuestions).slice(0, 25);
 
+        while (finalQuestions.length < 25) {
+            const fallbackQuestion = {
+                question: `${finalQuestions.length + 1} × 2`,
+                correctAnswer: `${(finalQuestions.length + 1) * 2}`,
+                timeLimit: 15,
+                points: 1, // Fixed 1 point
+                explanation: `Multiply ${finalQuestions.length + 1} by 2`,
+                level: 1
+            };
+            finalQuestions.push(fallbackQuestion);
+        }
+
         logOperation("generateQuestions", null, `Generated ${finalQuestions.length} questions`);
 
         return {
@@ -475,7 +486,7 @@ export class BattleManager {
             levelInfo: availableLevels.map(level => ({
                 level: level,
                 questionCount: questionsByLevel[level]?.length || 0,
-                pointsPerQuestion: levelSettings[level]?.pointsPerQuestion || level,
+                pointsPerQuestion: 1, // Fixed 1 point per question
                 usedInBattle: finalQuestions.filter(q => q.level === level).length
             })),
             totalLevels: availableLevels.length
@@ -657,11 +668,7 @@ export class BattleManager {
         try {
             const { data: roomData, exists } = await safeGet(createRoomRef(roomId));
 
-            if (!exists) {
-                throw new Error("Room has been deleted");
-            }
-
-            if (!roomData) return;
+            if (!exists || !roomData) return;
 
             const nextIndex = roomData.currentQuestion + 1;
             const now = Date.now();
@@ -670,7 +677,9 @@ export class BattleManager {
                 ? (Array.isArray(roomData.questions) ? roomData.questions : Object.values(roomData.questions))
                 : [];
 
-            const hasMoreQuestions = nextIndex < Math.min(questionsArray.length, 25);
+            // CRITICAL FIX: Ensure all 25 questions are played
+            const totalQuestions = 25;
+            const hasMoreQuestions = nextIndex < totalQuestions && nextIndex < questionsArray.length;
             const playerUpdates = createPlayerResetUpdates(roomData.players);
 
             if (hasMoreQuestions) {
@@ -688,9 +697,9 @@ export class BattleManager {
                     lastActivity: serverTimestamp()
                 });
 
-                logOperation("moveToNextQuestion", roomId, `Moved to question ${nextIndex + 1} of 25`);
+                logOperation("moveToNextQuestion", roomId, `Moved to question ${nextIndex + 1} of ${totalQuestions}`);
             } else {
-                logOperation("moveToNextQuestion", roomId, "Reached question limit, ending battle");
+                logOperation("moveToNextQuestion", roomId, "All 25 questions completed, ending battle");
                 await this.endBattle(roomId);
             }
         } catch (error) {
@@ -783,8 +792,8 @@ export class BattleManager {
                 return current;
             });
 
-            const basePoints = currentQuestion.level || 1;
-            const pointsToAdd = txResult.committed && txResult.snapshot.val() === userId ? basePoints * 1 : basePoints * 0;
+            // FIXED: Always award 1 point regardless of level
+            const pointsToAdd = txResult.committed && txResult.snapshot.val() === userId ? 1 : 0;
             const newScore = (currentPlayer.score || 0) + pointsToAdd;
 
             if (txResult.committed && txResult.snapshot.val() === userId) {
@@ -806,15 +815,10 @@ export class BattleManager {
                     lastActivity: serverTimestamp()
                 });
 
-                if (newConsecutiveCorrect >= 5) {
-                    setTimeout(() => {
-                        this.declareWinner(roomId, userId);
-                    }, 1000);
-                } else {
-                    setTimeout(() => {
-                        this.startQuestionTransition(roomId, 2000).catch(console.error);
-                    }, 1000);
-                }
+                // CRITICAL FIX: Remove early winner logic - let all 25 questions play
+                setTimeout(() => {
+                    this.startQuestionTransition(roomId, 2000).catch(console.error);
+                }, 1000);
 
                 return true;
             } else {
@@ -832,36 +836,51 @@ export class BattleManager {
         }
     }
 
-    async declareWinner(roomId, winnerId) {
+    async toggleReady(roomId) {
         try {
+            const user = await this.waitForAuth();
+            const userId = user.uid;
+
+            if (!roomId) {
+                throw new Error("No room ID provided");
+            }
+
             const { data: roomData, exists } = await safeGet(createRoomRef(roomId));
+            if (!exists || !roomData?.players?.[userId]) {
+                throw new Error("Player not found in room");
+            }
 
-            if (!exists || !roomData) return;
+            const currentReadyStatus = roomData.players[userId].ready || false;
+            const newReadyStatus = !currentReadyStatus;
 
-            const playerUpdates = {};
-            Object.entries(roomData.players || {}).forEach(([playerId, player]) => {
-                playerUpdates[`players/${playerId}/finalScore`] = player.score || 0;
-                if (playerId === winnerId) {
-                    playerUpdates[`players/${playerId}/isWinner`] = true;
-                }
-            });
-
-            await update(createRoomRef(roomId), {
-                ...playerUpdates,
-                status: "finished",
-                gameWinner: winnerId,
-                gameEndReason: "consecutive_target_reached",
-                finishedAt: serverTimestamp(),
+            await update(createPlayerRef(roomId, userId), {
+                ready: newReadyStatus,
                 lastActivity: serverTimestamp()
             });
 
-            for (const [playerId, player] of Object.entries(roomData.players || {})) {
-                const battleScore = player.score || 0;
-                await this.updateUserScore(playerId, battleScore);
-            }
-
+            logOperation("toggleReady", roomId, `Player ${userId} ready status: ${newReadyStatus}`);
         } catch (error) {
-            console.error("Declare winner error:", error);
+            console.error("[toggleReady] Error:", error);
+            throw error;
+        }
+    }
+
+    async resetUserBattleState() {
+        try {
+            // Clear all listeners
+            this.listeners.forEach((listener, roomId) => {
+                try {
+                    off(listener.ref, "value", listener.handler);
+                } catch (error) {
+                    console.warn("Error removing listener:", error);
+                }
+            });
+            this.listeners.clear();
+            this.activeRooms.clear();
+
+            console.log("Battle state reset completed");
+        } catch (error) {
+            console.error("Battle state reset error:", error);
         }
     }
 
@@ -941,7 +960,8 @@ export class BattleManager {
 
         const handler = (snapshot) => {
             const roomData = snapshot.val();
-            callback(roomData);
+            // Enhanced callback with opponent detection
+            this.handleRoomUpdate(roomData, callback);
         };
 
         this.listeners.set(roomId, { ref: roomRef, handler });
@@ -950,6 +970,19 @@ export class BattleManager {
         return () => {
             this.removeRoomListener(roomId);
         };
+    }
+
+    handleRoomUpdate(roomData, callback) {
+        // Check for opponent leaving during battle
+        if (roomData && roomData.status === "playing") {
+            const connectedPlayers = Object.values(roomData.players || {}).filter(p => p.connected);
+            if (connectedPlayers.length < 2) {
+                // Set room as finished due to player leaving
+                roomData.gameEndReason = "opponent_left";
+                roomData.status = "finished";
+            }
+        }
+        callback(roomData);
     }
 
     removeRoomListener(roomId) {
