@@ -67,47 +67,60 @@ export default function BattleRoom() {
   const battleNavigationTimeoutRef = useRef(null);
   const cleanupRef = useRef(false);
 
+  const [navigationState, setNavigationState] = useState({
+    isNavigating: false,
+    lastNavigation: 0,
+    navigationLock: false,
+  });
+
   const roomListenerRef = useRef<(() => void) | null>(null);
 
-  const performCleanup = useCallback(() => {
+  const performCleanup = useCallback(async () => {
     if (cleanupRef.current) return;
     cleanupRef.current = true;
 
-    console.log("Performing battle room cleanup");
+    console.log("Performing comprehensive battle room cleanup");
 
-    // Clear all timeouts
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-    if (battleStartTimeoutRef.current) {
-      clearTimeout(battleStartTimeoutRef.current);
-      battleStartTimeoutRef.current = null;
-    }
-    if (battleNavigationTimeoutRef.current) {
-      clearTimeout(battleNavigationTimeoutRef.current);
-      battleNavigationTimeoutRef.current = null;
-    }
+    try {
+      // Clear all timeouts
+      [timeoutRef, battleStartTimeoutRef, battleNavigationTimeoutRef].forEach(
+        (ref) => {
+          if (ref.current) {
+            clearTimeout(ref.current);
+            ref.current = null;
+          }
+        }
+      );
 
-    // Remove listeners
-    if (roomListenerRef.current) {
-      roomListenerRef.current();
-      roomListenerRef.current = null;
-    }
+      // Remove listeners with error handling
+      if (roomListenerRef.current) {
+        try {
+          roomListenerRef.current();
+        } catch (error) {
+          console.warn("Error removing room listener:", error);
+        }
+        roomListenerRef.current = null;
+      }
 
-    // Reset states
-    setBattleStarting(false);
-    setBattleStartAttempted(false);
-    setMatchmakingTimeout(false);
-    setOpponentFound(false);
-    setNavigationLock(false);
-    setIsNavigating(false);
+      // Update connection status
+      if (roomId && !navigationState.isNavigating) {
+        await battleManager.updatePlayerConnection(roomId, false);
+      }
 
-    // Update connection if roomId exists
-    if (roomId) {
-      battleManager.updatePlayerConnection(roomId, false).catch(console.warn);
+      // Reset all states
+      setBattleStarting(false);
+      setBattleStartAttempted(false);
+      setMatchmakingTimeout(false);
+      setOpponentFound(false);
+    } catch (error) {
+      console.error("Cleanup error:", error);
+    } finally {
+      // Ensure cleanup flag is reset
+      setTimeout(() => {
+        cleanupRef.current = false;
+      }, 1000);
     }
-  }, [roomId]);
+  }, [roomId, navigationState.isNavigating]);
 
   useBattleStartListener(roomId as string, isHost === "true");
 
@@ -195,21 +208,57 @@ export default function BattleRoom() {
   }, []);
 
   const safeNavigate = useCallback(
-    (path) => {
-      if (navigationLock) {
-        console.log("Navigation blocked - already navigating");
-        return;
+    (path: string, force = false) => {
+      const now = Date.now();
+
+      // Prevent rapid navigation attempts
+      if (
+        !force &&
+        (navigationState.isNavigating ||
+          navigationState.navigationLock ||
+          now - navigationState.lastNavigation < 1000)
+      ) {
+        console.log("Navigation blocked - too soon or already navigating");
+        return false;
       }
 
-      setNavigationLock(true);
+      setNavigationState((prev) => ({
+        ...prev,
+        isNavigating: true,
+        navigationLock: true,
+        lastNavigation: now,
+      }));
 
-      // Use replace instead of push to prevent stack buildup
-      router.replace(path);
+      try {
+        // Perform cleanup before navigation
+        performCleanup();
 
-      // Reset lock after navigation
-      setTimeout(() => setNavigationLock(false), 1000);
+        // Navigate with small delay to ensure cleanup completes
+        setTimeout(() => {
+          router.replace(path);
+
+          // Reset navigation state after successful navigation
+          setTimeout(() => {
+            setNavigationState((prev) => ({
+              ...prev,
+              isNavigating: false,
+              navigationLock: false,
+            }));
+          }, 1500);
+        }, 300);
+
+        return true;
+      } catch (error) {
+        console.error("Navigation error:", error);
+        setNavigationState((prev) => ({
+          ...prev,
+          isNavigating: false,
+          navigationLock: false,
+        }));
+        return false;
+      }
     },
-    [navigationLock]
+    [navigationState, performCleanup]
   );
 
   useEffect(() => {
@@ -271,6 +320,23 @@ export default function BattleRoom() {
       }
     };
   }, [room?.matchmakingRoom, room?.players, isMounted, roomId]);
+
+  useEffect(() => {
+    if (!roomId) return;
+
+    const checkRoomExists = async () => {
+      const snap = await get(ref(database, `rooms/${roomId}`));
+      if (!snap.exists()) {
+        Alert.alert(
+          "Room Not Available",
+          "This room has been deleted or expired."
+        );
+        router.replace("/user/multiplayer-mode-selection");
+      }
+    };
+
+    checkRoomExists();
+  }, [roomId]);
 
   useEffect(() => {
     return () => {

@@ -185,6 +185,85 @@ export default function BattleScreen() {
     }
   }, []);
 
+  const timerManager = useRef({
+    mainTimer: null,
+    transitionTimer: null,
+    questionTimer: null,
+  });
+
+  const handleTimeExpiry = useCallback(() => {
+    if (roomData?.hostId === userId && !roomData.questionTransition) {
+      // Show "better luck" message first
+      setShowBetterLuckMessage(true);
+      setBetterLuckCountdown(3);
+
+      const countdownInterval = setInterval(() => {
+        setBetterLuckCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(countdownInterval);
+            setShowBetterLuckMessage(false);
+
+            // Start question transition
+            if (roomData?.hostId === userId) {
+              battleManager
+                .startQuestionTransition(roomId as string, 2000)
+                .catch(console.error);
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      // Cleanup interval reference
+      timerManager.current.transitionTimer = countdownInterval;
+    }
+  }, [roomData?.hostId, roomData?.questionTransition, userId, roomId]);
+
+  const startQuestionTimer = useCallback(() => {
+    // Clear any existing timers
+    Object.values(timerManager.current).forEach((timer) => {
+      if (timer) clearInterval(timer);
+    });
+
+    if (!roomData?.questionStartedAt || roomData.questionTransition) return;
+
+    const startTime = roomData.questionStartedAt;
+    const timeLimit = roomData.questionTimeLimit || 15;
+
+    const updateTimer = () => {
+      const now = Date.now();
+      const elapsed = Math.floor((now - startTime) / 1000);
+      const remaining = Math.max(0, timeLimit - elapsed);
+
+      setTimeLeft(remaining);
+
+      if (remaining <= 0) {
+        // Clear timer when time runs out
+        if (timerManager.current.mainTimer) {
+          clearInterval(timerManager.current.mainTimer);
+          timerManager.current.mainTimer = null;
+        }
+
+        // Handle time expiry only once
+        if (!timeExpiryHandled.current) {
+          timeExpiryHandled.current = true;
+          handleTimeExpiry();
+        }
+      }
+    };
+
+    // Initial update
+    updateTimer();
+
+    // Set up interval
+    timerManager.current.mainTimer = setInterval(updateTimer, 1000);
+  }, [
+    roomData?.questionStartedAt,
+    roomData?.questionTransition,
+    roomData?.questionTimeLimit,
+  ]);
+
   useEffect(() => {
     const loadUserData = async () => {
       try {
@@ -365,6 +444,51 @@ export default function BattleScreen() {
   }, [roomData?.nextQuestionStartTime]);
 
   useEffect(() => {
+    if (roomData?.status === "finished") {
+      // Clear the cleanup flag to allow normal result navigation
+      cleanupExecutedRef.current = false;
+
+      const navigateToResults = async () => {
+        try {
+          const playerArray = await battleManager.endBattle(roomId as string);
+
+          const battleEndTime = Date.now();
+          let totalBattleTimeMs = 0;
+          if (battleStartTimeRef.current > 0) {
+            const rawTimeMs = battleEndTime - battleStartTimeRef.current;
+            const maxReasonableTime = 2 * 60 * 60 * 1000;
+            const minReasonableTime = 1000;
+            if (
+              rawTimeMs >= minReasonableTime &&
+              rawTimeMs <= maxReasonableTime
+            ) {
+              totalBattleTimeMs = rawTimeMs;
+            } else {
+              console.warn(`Invalid battle time: ${rawTimeMs}ms`);
+              totalBattleTimeMs = 0;
+            }
+          }
+
+          router.replace({
+            pathname: "/user/battle-results",
+            params: {
+              roomId: roomId,
+              players: JSON.stringify(playerArray || []),
+              totalQuestions: roomData.totalQuestions?.toString() || "0",
+              currentUserId: userId,
+              totalBattleTime: totalBattleTimeMs.toString(),
+            },
+          });
+        } catch (error) {
+          console.error("Navigate to results error:", error);
+          router.replace("/user/multiplayer-mode-selection");
+        }
+      };
+      navigateToResults();
+    }
+  }, [roomData?.status, userId, roomId]);
+
+  useEffect(() => {
     if (!roomId) return;
 
     const roomRef = ref(database, `rooms/${roomId}`);
@@ -374,6 +498,11 @@ export default function BattleScreen() {
         const data = snapshot.val();
 
         if (!data) {
+          // Room no longer exists - navigate away if not already leaving
+          if (!backHandlerActive && !cleanupExecutedRef.current) {
+            console.log("Room no longer exists, navigating away");
+            router.replace("/user/multiplayer-mode-selection");
+          }
           setNetworkError(true);
           return;
         }
@@ -384,19 +513,42 @@ export default function BattleScreen() {
       (error) => {
         console.error("Database listener error:", error);
         setNetworkError(true);
+
+        // Navigate away on persistent errors
+        if (!backHandlerActive && !cleanupExecutedRef.current) {
+          setTimeout(() => {
+            router.replace("/user/multiplayer-mode-selection");
+          }, 3000);
+        }
       }
     );
 
     return () => {
       unsubscribe();
-      if (roomId) {
-        battleManager.updatePlayerConnection(roomId as string, false);
-      }
     };
-  }, [roomId]);
+  }, [roomId, backHandlerActive]);
 
   const otherWinnerAnnouncedRef = useRef(false);
   const inputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    return () => {
+      // Clear all timers
+      Object.values(timerManager.current).forEach((timer) => {
+        if (timer) clearInterval(timer);
+      });
+
+      // Reset timer manager
+      timerManager.current = {
+        mainTimer: null,
+        transitionTimer: null,
+        questionTimer: null,
+      };
+
+      // Reset flags
+      timeExpiryHandled.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!roomData?.players) return;
@@ -464,41 +616,51 @@ export default function BattleScreen() {
 
   useEffect(() => {
     return () => {
-      const cleanup = async () => {
-        console.log("Battle screen cleanup starting");
+      // Make cleanup synchronous to avoid race conditions
+      if (cleanupExecutedRef.current) return;
+      cleanupExecutedRef.current = true;
 
-        try {
-          if (roomId) {
-            // Remove room listener
-            battleManager.removeRoomListener(roomId as string);
+      console.log("Battle screen cleanup starting");
 
-            // Update connection status
-            await battleManager.updatePlayerConnection(roomId as string, false);
+      try {
+        if (roomId) {
+          // Remove room listener immediately
+          battleManager.removeRoomListener(roomId as string);
 
-            // Check room status before leaving
-            const roomRef = ref(database, `rooms/${roomId}`);
-            const snapshot = await get(roomRef);
+          // Clear all timers
+          cleanupTimers();
+          Object.values(timerManager.current).forEach((timer) => {
+            if (timer) clearInterval(timer);
+          });
 
-            if (snapshot.exists()) {
-              const roomData = snapshot.val();
+          // Update connection status synchronously (fire and forget)
+          battleManager
+            .updatePlayerConnection(roomId as string, false)
+            .catch(() => {});
 
-              // Only leave if room is not finished (to avoid conflicts with results screen)
-              if (roomData.status !== "finished") {
-                await battleManager.leaveRoom(roomId as string);
-                console.log("Left room during battle cleanup");
-              }
-            }
+          // Only leave room if it wasn't a manual leave
+          if (!backHandlerActive) {
+            // Check room status asynchronously but don't block cleanup
+            battleManager
+              .validateRoomExists(roomId as string)
+              .then((validation) => {
+                if (
+                  validation.exists &&
+                  validation.roomData?.status !== "finished"
+                ) {
+                  battleManager.leaveRoom(roomId as string).catch(() => {});
+                }
+              })
+              .catch(() => {});
           }
-
-          console.log("Battle screen cleanup completed");
-        } catch (error) {
-          console.warn("Battle screen cleanup error:", error);
         }
-      };
 
-      cleanup();
+        console.log("Battle screen cleanup completed");
+      } catch (error) {
+        console.warn("Battle screen cleanup error:", error);
+      }
     };
-  }, [roomId]);
+  }, [roomId, cleanupTimers, backHandlerActive]);
 
   useEffect(() => {
     if (roomData?.status === "finished") {
@@ -541,7 +703,7 @@ export default function BattleScreen() {
     }
   }, [roomData?.status, userId, roomId]);
 
-  // handle battle leave
+  const cleanupExecutedRef = useRef(false);
 
   const handleRoomLeave = useCallback(() => {
     if (backHandlerActive) return;
@@ -557,10 +719,26 @@ export default function BattleScreen() {
         onPress: async () => {
           setBackHandlerActive(true);
           try {
-            await battleManager.leaveRoom(roomId);
+            // First remove all listeners immediately
+            battleManager.removeRoomListener(roomId as string);
+
+            // Clear all timers
+            cleanupTimers();
+            Object.values(timerManager.current).forEach((timer) => {
+              if (timer) clearInterval(timer);
+            });
+
+            // Update connection status first
+            await battleManager.updatePlayerConnection(roomId as string, false);
+
+            // Then leave the room
+            await battleManager.leaveRoom(roomId as string);
+
+            // Navigate away
             router.replace("/user/multiplayer-mode-selection");
           } catch (error) {
             console.error("Leave room error:", error);
+            // Always navigate away even if there's an error
             router.replace("/user/multiplayer-mode-selection");
           } finally {
             setBackHandlerActive(false);
@@ -568,9 +746,7 @@ export default function BattleScreen() {
         },
       },
     ]);
-  }, [roomId, backHandlerActive]);
-
-  // Handle hardware back press
+  }, [roomId, backHandlerActive, cleanupTimers]);
 
   useFocusEffect(
     useCallback(() => {
@@ -601,14 +777,9 @@ export default function BattleScreen() {
   };
 
   const handleAnswerSubmit = async (answer: string) => {
-    if (
-      !roomData ||
-      !roomData.questions ||
-      !userId ||
-      isAnswered ||
-      isProcessing
-    )
+    if (!roomData?.questions || !userId || isAnswered || isProcessing) {
       return;
+    }
 
     const currentQuestion = roomData.questions[roomData.currentQuestion];
     if (!currentQuestion) return;
@@ -616,10 +787,14 @@ export default function BattleScreen() {
     const normalizedAnswer = answer.trim().toLowerCase();
     const normalizedCorrect = currentQuestion.correctAnswer.toLowerCase();
 
+    // Immediate feedback for wrong answers
     if (normalizedAnswer !== normalizedCorrect) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setFeedback("❌ Wrong answer, try again");
       setUserAnswer("");
+
+      // Clear feedback after 2 seconds
+      setTimeout(() => setFeedback(""), 2000);
       return;
     }
 
@@ -634,29 +809,32 @@ export default function BattleScreen() {
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
+      // Play appropriate sound
       if (isFirstCorrect) {
         await SoundManager.playSound("rightAnswerSoundEffect");
       } else {
         await SoundManager.playSound("wrongAnswerSoundEffect");
       }
 
+      // Calculate points
       const basePoints = roomData.currentLevel || 1;
-      const pointsEarned = isFirstCorrect ? basePoints * 1 : basePoints * 0;
+      const pointsEarned = isFirstCorrect ? basePoints : 0;
 
+      // Set appropriate feedback
       if (isFirstCorrect) {
-        setFeedback(
-          `✅ Correct! ${
-            isFirstCorrect ? "You got it first! " : ""
-          }+${pointsEarned} points`
-        );
+        setFeedback(`✅ Correct! You got it first! +${pointsEarned} points`);
       } else {
-        setFeedback("✅ Correct!");
+        setFeedback("✅ Correct! Someone else got it first.");
       }
 
       setIsAnswered(true);
+
+      // Clear feedback after showing for a while
+      setTimeout(() => setFeedback(""), 3000);
     } catch (error) {
       console.error("Answer submission error:", error);
-      setFeedback("Error submitting answer");
+      setFeedback("❌ Error submitting answer. Please try again.");
+      setTimeout(() => setFeedback(""), 2000);
     } finally {
       setIsProcessing(false);
     }
