@@ -655,7 +655,7 @@ export default function BattleScreen() {
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        handleRoomLeave();
+        setShowLeaveModal(true);
         return true; // Always prevent default
       };
 
@@ -665,7 +665,7 @@ export default function BattleScreen() {
       );
 
       return () => subscription.remove();
-    }, [handleRoomLeave])
+    }, [])
   );
 
   // Update handleInputChange
