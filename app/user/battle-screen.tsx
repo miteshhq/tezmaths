@@ -20,6 +20,7 @@ import Svg, { Circle } from "react-native-svg";
 import SoundManager from "../../components/soundManager";
 import { auth, database } from "../../firebase/firebaseConfig";
 import { battleManager } from "../../utils/battleManager";
+import LeaveConfirmationModal from "@/components/LeaveConfirmationModal";
 
 import { get } from "firebase/database";
 
@@ -170,6 +171,8 @@ export default function BattleScreen() {
   const timerRef = useRef(null);
   const [backHandlerActive, setBackHandlerActive] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
 
   // Simplified timer management
   const timerManager = useRef({
@@ -553,6 +556,47 @@ export default function BattleScreen() {
     };
   }, [roomId, cleanupTimers, isLeaving]);
 
+  const confirmLeave = useCallback(async () => {
+    if (isLeaving) return;
+    setIsLeaving(true);
+    setBackHandlerActive(true); // mute listener side-effects
+    setShowLeaveModal(false);
+
+    // 1️⃣ stop UI timers & listeners right now
+    cleanupTimers();
+    battleManager.removeRoomListener(roomId as string);
+
+    try {
+      // 2️⃣ update DB (host vs. player) – do NOT await navigation
+      const results =
+        roomData?.status === "playing"
+          ? await battleManager.leaveDuringBattle(roomId as string)
+          : await battleManager.leaveRoom(roomId as string);
+
+      // 3️⃣ navigate – host and player share the same code path
+      router.replace({
+        pathname:
+          roomData?.status === "playing"
+            ? "/user/battle-results"
+            : "/user/multiplayer-mode-selection",
+        params:
+          roomData?.status === "playing"
+            ? {
+                roomId,
+                players: JSON.stringify(results ?? []),
+                totalQuestions: (roomData?.totalQuestions ?? 0).toString(),
+                currentUserId: userId,
+                endReason:
+                  roomData?.hostId === userId ? "host_left" : "player_left",
+              }
+            : {},
+      });
+    } catch (e) {
+      console.error("[confirmLeave] error", e);
+      router.replace("/user/multiplayer-mode-selection");
+    }
+  }, [isLeaving, roomId, roomData, userId, cleanupTimers]);
+
   const handleRoomLeave = useCallback(() => {
     if (isLeaving) return;
 
@@ -861,7 +905,7 @@ export default function BattleScreen() {
                   Battle Mode
                 </Text>
               </View>
-              <TouchableOpacity onPress={handleRoomLeave}>
+              <TouchableOpacity onPress={() => setShowLeaveModal(true)}>
                 <View className="flex-row items-center bg-red-500 px-3 py-1 rounded-full">
                   <Text className="text-white text-sm font-black">Leave</Text>
                 </View>
@@ -975,6 +1019,11 @@ export default function BattleScreen() {
           )}
         </View>
       </ScrollView>
+      <LeaveConfirmationModal
+        visible={showLeaveModal}
+        onCancel={() => setShowLeaveModal(false)}
+        onConfirm={confirmLeave}
+      />
     </View>
   );
 }
