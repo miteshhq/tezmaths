@@ -935,7 +935,7 @@ export default function BattleScreen() {
                   className="text-green-500 text-center mt-4"
                 >
                   🏆 {typedPlayer.username || typedPlayer.name} got it right!
-                  (+1 pt)
+                  (+4 pt)
                 </Text>
               );
             }
