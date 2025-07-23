@@ -43,6 +43,8 @@ export default function MultiplayerModeSelection() {
 
   const [isLoading, setIsLoading] = useState(false);
 
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
   // Single listener ref
   const roomListenerRef = useRef(null);
   const countdownIntervalRef = useRef(null);
@@ -393,6 +395,21 @@ export default function MultiplayerModeSelection() {
     return () => backHandler.remove();
   }, [performCleanup, router]);
 
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardDidShow", () => {
+      setKeyboardHeight(300);
+    });
+
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   return (
     <View className="flex-1 bg-white">
       <ImageBackground
@@ -414,7 +431,10 @@ export default function MultiplayerModeSelection() {
       <ScrollView
         className="bg-white"
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 100 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingBottom: keyboardHeight > 0 ? keyboardHeight : 100,
+        }}
         showsVerticalScrollIndicator={false}
       >
         <View className="px-5 py-6">
