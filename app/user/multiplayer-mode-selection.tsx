@@ -399,12 +399,12 @@ export default function MultiplayerModeSelection() {
         source={require("../../assets/gradient.jpg")}
         style={{ overflow: "hidden", marginTop: 20 }}
       >
-        <View className="px-6 py-6">
-          <View className="flex-row justify-center items-center gap-3">
+        <View className="px-4 py-4">
+          <View className="flex-row justify-center items-center gap-2">
             <Image
               source={require("../../assets/icons/swords.png")}
-              style={{ width: 32, height: 32 }}
-              tintColor="#FFFFFF"
+              style={{ width: 24, height: 24 }}
+              tintColor="#FF6B35"
             />
             <Text className="text-white text-3xl font-black">Battle Mode</Text>
           </View>
@@ -418,7 +418,7 @@ export default function MultiplayerModeSelection() {
         showsVerticalScrollIndicator={false}
       >
         <View className="px-5 py-6">
-          <View className="flex-col justify-center items-center mb-6">
+          <View className="flex-col justify-center items-center mb-0">
             <Text className="text-custom-purple text-3xl font-black text-center">
               Choose Your Battle Mode!
             </Text>
@@ -431,12 +431,12 @@ export default function MultiplayerModeSelection() {
 
         <View className="px-5 flex flex-col gap-6">
           {/* Random Player Mode */}
-          <View className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-            <View className="w-full h-2 bg-primary"></View>
-            <View className="p-6 flex flex-col items-center gap-5">
+          <View className="bg-white rounded-2xl border border-black overflow-hidden">
+            <View className="w-full h-8 bg-primary"></View>
+            <View className="p-6 py-4 flex flex-col items-center gap-5">
               <View className="flex flex-col items-center gap-2">
                 <Text className="text-2xl text-custom-purple font-black">
-                  🎯 Random Player
+                  Random Player
                 </Text>
                 <Text className="text-sm text-center text-custom-purple leading-5">
                   Get matched with a random opponent for an exciting battle!
@@ -492,12 +492,12 @@ export default function MultiplayerModeSelection() {
           </View>
 
           {/* Quiz Code Mode */}
-          <View className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-            <View className="w-full h-2 bg-primary"></View>
-            <View className="p-6 flex flex-col items-center gap-5">
+          <View className="bg-white rounded-2xl border border-black overflow-hidden">
+            <View className="w-full h-8 bg-primary"></View>
+            <View className="p-6 py-4 flex flex-col items-center gap-5">
               <View className="flex flex-col items-center gap-2">
                 <Text className="text-2xl text-custom-purple font-black">
-                  🔑 Quiz Code
+                  Quiz Code
                 </Text>
                 <Text className="text-sm text-center text-custom-purple leading-5">
                   Join a specific battle using a quiz code from your friend!
@@ -530,9 +530,9 @@ export default function MultiplayerModeSelection() {
               ) : (
                 <View className="w-full flex flex-col gap-4">
                   <TextInput
-                    className="border-2 border-custom-purple rounded-xl px-4 py-4 text-center text-lg font-bold text-custom-purple bg-light-orange"
+                    className="border-2 border-custom-purple rounded-xl px-4 py-4 text-center text-lg font-bold text-black bg-light-orange"
                     placeholder="Enter Quiz Code"
-                    placeholderTextColor="#76184F"
+                    placeholderTextColor="#000"
                     value={quizCodeMode.code}
                     onChangeText={handleQuizCodeInput}
                     maxLength={8}
@@ -586,9 +586,9 @@ export default function MultiplayerModeSelection() {
           </View>
 
           {/* Create Room Mode */}
-          <View className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-            <View className="w-full h-2 bg-primary"></View>
-            <View className="p-6 flex flex-col items-center gap-5">
+          <View className="bg-white rounded-2xl border border-black overflow-hidden">
+            <View className="w-full h-8 bg-primary"></View>
+            <View className="p-6 py-4 flex flex-col items-center gap-5">
               <View className="flex flex-col items-center gap-2">
                 <Text className="text-2xl text-custom-purple font-black">
                   🏠 Create Room
@@ -624,9 +624,9 @@ export default function MultiplayerModeSelection() {
               ) : (
                 <View className="w-full flex flex-col gap-4">
                   <TextInput
-                    className="border-2 border-custom-purple rounded-xl px-4 py-4 text-center text-lg text-custom-purple bg-light-orange"
+                    className="border-2 border-custom-purple rounded-xl px-4 py-4 text-center text-lg text-black bg-light-orange"
                     placeholder="Enter Room Name (Optional)"
-                    placeholderTextColor="#76184F"
+                    placeholderTextColor="#000"
                     value={createRoomMode.name}
                     onChangeText={(text) =>
                       setCreateRoomMode((prev) => ({ ...prev, name: text }))
