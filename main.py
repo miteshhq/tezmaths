@@ -49,12 +49,12 @@ def find_and_extract_files(target_files, root_dir='.', output_file='raw.txt'):
 if __name__ == "__main__":
     # Define the files you want to search for
     files_to_find = [
-        'battle-room.tsx',
+        # 'battle-room.tsx',
         'battle-screen.tsx',
-        'multiplayer-mode-selection.tsx',
+        # 'multiplayer-mode-selection.tsx',
         'battleManager.js',
-        'battle-results.tsx',        
-        'battlelistner.ts',                
+        # 'battle-results.tsx',        
+        # 'battlelistner.ts',                
     ]
     
     # Start the search from current directory

@@ -363,7 +363,6 @@ export default function BattleScreen() {
     return () => clearInterval(interval);
   }, [roomData?.nextQuestionStartTime]);
 
-  // CRITICAL FIX: Enhanced room listener with opponent detection
   useEffect(() => {
     if (!roomId) return;
 
@@ -383,43 +382,43 @@ export default function BattleScreen() {
           return;
         }
 
-        // OPPONENT DETECTION: Check if opponent left during battle
-        if (data.status === "playing" && data.players) {
-          const connectedPlayers = Object.values(data.players).filter(
-            (p: any) => p.connected
-          );
-          if (connectedPlayers.length < 2) {
-            Alert.alert(
-              "Opponent Left",
-              "Your opponent has left the battle. The game will end now.",
-              [
-                {
-                  text: "OK",
-                  onPress: () => {
-                    router.replace("/user/multiplayer-mode-selection");
-                  },
+        // FIXED: Handle battle end scenarios without multiple popups
+        if (data.status === "finished" && !isLeaving) {
+          const endReason = data.gameEndReason;
+
+          if (
+            endReason === "host_left" ||
+            endReason === "insufficient_players"
+          ) {
+            setIsLeaving(true); // Prevent multiple triggers
+
+            setTimeout(() => {
+              router.replace({
+                pathname: "/user/battle-results",
+                params: {
+                  roomId: roomId,
+                  players: JSON.stringify(data.results || []),
+                  totalQuestions: data.totalQuestions?.toString() || "0",
+                  currentUserId: userId,
+                  endReason: endReason,
                 },
-              ]
-            );
+              });
+            }, 1000);
             return;
           }
         }
 
-        // Check for host leaving
-        if (data.gameEndReason === "host_left") {
-          Alert.alert(
-            "Host Left",
-            "The host has left the battle. The game has ended.",
-            [
-              {
-                text: "OK",
-                onPress: () => {
-                  router.replace("/user/multiplayer-mode-selection");
-                },
-              },
-            ]
+        // OPPONENT DETECTION: Check if insufficient players during battle
+        if (data.status === "playing" && data.players && !isLeaving) {
+          const connectedPlayers = Object.values(data.players).filter(
+            (p: any) => p.connected
           );
-          return;
+
+          if (connectedPlayers.length < 2) {
+            setIsLeaving(true); // Prevent multiple triggers
+            // Battle will be ended by battleManager automatically
+            return;
+          }
         }
 
         setRoomData(data);
@@ -441,7 +440,7 @@ export default function BattleScreen() {
     return () => {
       unsubscribe();
     };
-  }, [roomId, backHandlerActive, isLeaving]);
+  }, [roomId, backHandlerActive, isLeaving, userId]);
 
   useEffect(() => {
     if (roomData?.status === "finished") {
@@ -554,7 +553,6 @@ export default function BattleScreen() {
     };
   }, [roomId, cleanupTimers, isLeaving]);
 
-  // FIXED: Reliable leave button functionality
   const handleRoomLeave = useCallback(() => {
     if (isLeaving) return;
 
@@ -574,17 +572,32 @@ export default function BattleScreen() {
             // Clean up timers immediately
             cleanupTimers();
 
-            // Remove room listener
+            // Remove room listener to prevent interference
             battleManager.removeRoomListener(roomId as string);
 
-            // Update connection status
-            await battleManager.updatePlayerConnection(roomId as string, false);
+            // Check if battle is active and handle accordingly
+            if (roomData?.status === "playing") {
+              // Leave during active battle - should end and show results
+              const finalResults = await battleManager.leaveDuringBattle(
+                roomId as string
+              );
 
-            // Leave the room
-            await battleManager.leaveRoom(roomId as string);
-
-            // Navigate away
-            router.replace("/user/multiplayer-mode-selection");
+              // Navigate to battle results with current data
+              router.replace({
+                pathname: "/user/battle-results",
+                params: {
+                  roomId: roomId,
+                  players: JSON.stringify(finalResults || []),
+                  totalQuestions: roomData.totalQuestions?.toString() || "0",
+                  currentUserId: userId,
+                  endReason: "player_left",
+                },
+              });
+            } else {
+              // Leave during waiting phase - just leave room
+              await battleManager.leaveRoom(roomId as string);
+              router.replace("/user/multiplayer-mode-selection");
+            }
           } catch (error) {
             console.error("Leave room error:", error);
             // Always navigate away even if there's an error
@@ -593,7 +606,7 @@ export default function BattleScreen() {
         },
       },
     ]);
-  }, [roomId, cleanupTimers, isLeaving]);
+  }, [roomId, cleanupTimers, isLeaving, roomData, userId]);
 
   useFocusEffect(
     useCallback(() => {
