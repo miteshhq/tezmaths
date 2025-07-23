@@ -850,7 +850,7 @@ export default function BattleScreen() {
             <Text className="text-white text-3xl font-black">
               Level {roomData?.currentLevel || 1}
             </Text>
-            <View className="flex-row items-center gap-4">
+            <View className="flex-row items-center gap-2">
               <View className="flex-row items-center bg-primary px-3 py-1 rounded-full">
                 <Text className="text-white text-sm font-black">
                   {roomData?.players?.[userId!]?.score || 0} pts
@@ -863,9 +863,7 @@ export default function BattleScreen() {
               </View>
               <TouchableOpacity onPress={handleRoomLeave}>
                 <View className="flex-row items-center bg-red-500 px-3 py-1 rounded-full">
-                  <Text className="flex-row items-center text-white px-3 py-1 rounded-full">
-                    Leave
-                  </Text>
+                  <Text className="text-white text-sm font-black">Leave</Text>
                 </View>
               </TouchableOpacity>
             </View>
