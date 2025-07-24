@@ -302,12 +302,14 @@ export default function QuizScreen() {
   const handleTimeUp = useCallback(async () => {
     if (!isQuizActive || isProcessing || showExplanation) return;
     setIsProcessing(true);
+    stopTimer();
     setIsTimeOut(true);
+    setIsAnswerWrong(true);
     setShowExplanation(true);
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     await SoundManager.playSound("wrongAnswerSoundEffect");
     setIsProcessing(false);
-  }, [isQuizActive, isProcessing, showExplanation]);
+  }, [isQuizActive, isProcessing, showExplanation, stopTimer]);
 
   // **HANDLE ANSWER SUBMISSION**
   const handleSubmitAnswer = useCallback(
@@ -367,7 +369,7 @@ export default function QuizScreen() {
     }, 100);
   }, [startTimer]);
 
-    // **HANDLE GAME END**
+  // **HANDLE GAME END**
   const handleGameEnd = useCallback(
     async (
       finalScore?: number,
@@ -517,8 +519,6 @@ export default function QuizScreen() {
       handleGameEnd,
     ]
   );
-
-
 
   // **HANDLE INPUT CHANGE**
   const handleInputChange = useCallback(
