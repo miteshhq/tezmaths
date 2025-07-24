@@ -51,6 +51,23 @@ export default function SignUpScreen() {
     };
   }, []);
 
+  function getFriendlyErrorMessage(error) {
+    const errorMap = {
+      "auth/email-already-in-use": "Email already in use.",
+      "auth/invalid-email": "Invalid email address.",
+      "auth/weak-password": "Password is too weak.",
+      "auth/network-request-failed": "Network error. Please try again.",
+      "auth/operation-not-allowed": "Sign-up not allowed. Contact support.",
+      "auth/too-many-requests": "Too many requests. Please try later.",
+      "auth/user-not-found": "No account found with this email.",
+      "auth/wrong-password": "Incorrect password.",
+    };
+    if (error.code && errorMap[error.code]) {
+      return errorMap[error.code];
+    }
+    return error.message || "An error occurred. Please try again.";
+  }
+
   const handleUserRedirect = useCallback(
     async (user, userData) => {
       if (userData.isnewuser === true || userData.isnewuser === undefined) {
@@ -210,7 +227,7 @@ export default function SignUpScreen() {
       }
     } catch (error) {
       // console.error("Sign-up failed:", error.message);
-      setErrorMessage(error.message);
+      setErrorMessage(getFriendlyErrorMessage(error));
     }
   }, [email, password, validateForm, router]);
 
