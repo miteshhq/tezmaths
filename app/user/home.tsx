@@ -39,6 +39,7 @@ interface UserData {
   avatar?: number;
   referrals: number;
   totalPoints: number;
+  highScore: number;
   streak: number;
   currentLevel: number;
   highestCompletedLevelCompleted: number;
@@ -158,6 +159,7 @@ export default function HomeScreen() {
       fullName: userData.fullName || "Unavailable",
       referrals: userData.referrals || 0,
       totalPoints: userData.totalPoints || 0,
+      highScore: userData.highScore || 0,
       streak: userData.streak || 0,
       currentLevel: userData.currentLevel || 1,
       highestCompletedLevelCompleted:
@@ -217,9 +219,9 @@ export default function HomeScreen() {
     setFullName(userData.fullName);
     setReferrals(userData.referrals || 0);
     setUserPoints(
-      userData.totalPoints % 1 !== 0
-        ? Math.round(userData.totalPoints * 10) / 10
-        : userData.totalPoints || 0
+      userData.highScore % 1 !== 0
+        ? Math.round(userData.highScore * 10) / 10
+        : userData.highScore || 0
     );
     setUserStreak(userData.streak || 0);
     setCurrentLevel(userData.currentLevel || 1);
@@ -412,6 +414,7 @@ export default function HomeScreen() {
           avatar: data.avatar || 0,
           referrals: data.referrals || 0,
           totalPoints: data.totalPoints || 0,
+          highScore: data.highScore || 0,
           streak: data.streak || 0,
           currentLevel: data.currentLevel || 1,
           highestCompletedLevelCompleted:
@@ -701,7 +704,7 @@ export default function HomeScreen() {
             <View className="bg-custom-gray rounded-full w-16 h-16 flex justify-center items-center mb-2">
               <Text className="text-2xl">💎</Text>
             </View>
-            <Text className="text-sm">Points</Text>
+            <Text className="text-sm">High Score</Text>
             <Text className="text-primary text-lg font-bold">{userPoints}</Text>
           </View>
 
