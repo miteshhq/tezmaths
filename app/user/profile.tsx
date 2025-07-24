@@ -26,6 +26,7 @@ import {
 } from "react-native";
 import SoundManager from "../../components/soundManager";
 import { auth, database } from "../../firebase/firebaseConfig";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
 const shareConfig = {
   additionalText:
@@ -315,6 +316,16 @@ export default function ProfileScreen() {
       // Firebase logout
       await signOut(auth);
 
+      // Clear Google Sign-In session to force account chooser
+      try {
+        await GoogleSignin.signOut();
+      } catch (googleError) {
+        console.log(
+          "[PROFILE] Google Sign-In already signed out or not configured:",
+          googleError
+        );
+      }
+
       // Clear async storage
       await AsyncStorage.removeItem("userData");
       await AsyncStorage.removeItem(LEVEL_STORAGE_KEY);
@@ -421,9 +432,7 @@ export default function ProfileScreen() {
                     ? Math.round(userData.highScore * 10) / 10
                     : userData.highScore || 0}
                 </Text>
-                <Text className="text-custom-purple text-lg">
-                  High Score
-                </Text>
+                <Text className="text-custom-purple text-lg">High Score</Text>
               </View>
               <View className="items-center">
                 <Text className="text-2xl font-black text-custom-purple">
