@@ -298,18 +298,47 @@ export default function QuizScreen() {
     timerAnimation.stopAnimation();
   }, [timerAnimation]);
 
-  // **HANDLE TIME UP**
-  const handleTimeUp = useCallback(async () => {
-    if (!isQuizActive || isProcessing || showExplanation) return;
-    setIsProcessing(true);
-    stopTimer();
-    setIsTimeOut(true);
-    setIsAnswerWrong(true);
-    setShowExplanation(true);
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    await SoundManager.playSound("wrongAnswerSoundEffect");
-    setIsProcessing(false);
-  }, [isQuizActive, isProcessing, showExplanation, stopTimer]);
+  const handleTimeUp = useCallback(() => {
+    setTimeLeft((currentTime) => {
+      if (currentTime <= 0) return 0;
+
+      // Use functional updates to avoid stale closures
+      setIsProcessing((currentProcessing) => {
+        if (currentProcessing) return currentProcessing;
+
+        setIsQuizActive((currentActive) => {
+          if (!currentActive) return currentActive;
+
+          setShowExplanation((currentShow) => {
+            if (currentShow) return currentShow;
+
+            // Stop timer and show explanation
+            if (timerRef.current) {
+              clearInterval(timerRef.current);
+              timerRef.current = null;
+            }
+            timerAnimation.stopAnimation();
+
+            setIsTimeOut(true);
+            setIsAnswerWrong(true);
+            setIsProcessing(false);
+
+            // Play feedback
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            SoundManager.playSound("wrongAnswerSoundEffect");
+
+            return true; // Show explanation
+          });
+
+          return false; // Quiz no longer active
+        });
+
+        return true; // Set processing to true temporarily
+      });
+
+      return 0;
+    });
+  }, [timerAnimation]);
 
   // **HANDLE ANSWER SUBMISSION**
   const handleSubmitAnswer = useCallback(
