@@ -738,7 +738,7 @@ export default function QuizScreen() {
             onChangeText={handleInputChange}
             onSubmitEditing={handleManualSubmit}
             placeholder="Type Your Answer"
-            placeholderTextColor="#777"
+            placeholderTextColor="#555"
             keyboardType="numeric"
             returnKeyType="done"
             editable={isInputEditable}

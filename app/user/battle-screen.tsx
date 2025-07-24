@@ -957,6 +957,7 @@ export default function BattleScreen() {
               value={userAnswer}
               onChangeText={handleInputChange}
               placeholder="Type Your Answer"
+              placeholderTextColor="#555"
               keyboardType="numeric"
               editable={
                 !isAnswered &&
