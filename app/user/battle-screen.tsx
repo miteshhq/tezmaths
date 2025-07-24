@@ -5,7 +5,6 @@ import { onValue, ref } from "firebase/database";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   BackHandler,
   Image,
@@ -21,8 +20,6 @@ import SoundManager from "../../components/soundManager";
 import { auth, database } from "../../firebase/firebaseConfig";
 import { battleManager } from "../../utils/battleManager";
 import LeaveConfirmationModal from "@/components/LeaveConfirmationModal";
-
-import { get } from "firebase/database";
 
 // Type definitions
 interface Player {
@@ -234,6 +231,16 @@ export default function BattleScreen() {
   }, [roomData?.hostId, roomData?.questionTransition, userId, roomId]);
 
   useEffect(() => {
+    // Reset all navigation and state flags when entering new battle
+    setIsLeaving(false);
+    setBackHandlerActive(false);
+    setShowLeaveModal(false);
+
+    // Reset any other battle-specific state
+    setTimeLeft(0);
+  }, [roomId]);
+
+  useEffect(() => {
     const loadUserData = async () => {
       try {
         const cachedData = await AsyncStorage.getItem("userData");
@@ -353,7 +360,7 @@ export default function BattleScreen() {
     const interval = setInterval(() => {
       const now = Date.now();
       const timeLeft = Math.max(0, roomData.nextQuestionStartTime! - now);
-      const seconds = Math.ceil(timeLeft / 1000);
+      const seconds = Math.floor(timeLeft / 3000);
 
       setCountdownValue(seconds);
 
@@ -544,7 +551,6 @@ export default function BattleScreen() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      console.log("Battle screen cleanup starting");
       cleanupTimers();
 
       if (roomId && !isLeaving) {
@@ -554,10 +560,11 @@ export default function BattleScreen() {
           .catch(() => {});
       }
     };
-  }, [roomId, cleanupTimers, isLeaving]);
+  }, [roomId, cleanupTimers]);
 
   const confirmLeave = useCallback(async () => {
     if (isLeaving) return;
+
     setIsLeaving(true);
     setBackHandlerActive(true); // mute listener side-effects
     setShowLeaveModal(false);
@@ -596,61 +603,6 @@ export default function BattleScreen() {
       router.replace("/user/multiplayer-mode-selection");
     }
   }, [isLeaving, roomId, roomData, userId, cleanupTimers]);
-
-  const handleRoomLeave = useCallback(() => {
-    if (isLeaving) return;
-
-    Alert.alert("Leave Battle", "Are you sure you want to leave the battle?", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Leave",
-        style: "destructive",
-        onPress: async () => {
-          setIsLeaving(true);
-          setBackHandlerActive(true);
-
-          try {
-            // Clean up timers immediately
-            cleanupTimers();
-
-            // Remove room listener to prevent interference
-            battleManager.removeRoomListener(roomId as string);
-
-            // Check if battle is active and handle accordingly
-            if (roomData?.status === "playing") {
-              // Leave during active battle - should end and show results
-              const finalResults = await battleManager.leaveDuringBattle(
-                roomId as string
-              );
-
-              // Navigate to battle results with current data
-              router.replace({
-                pathname: "/user/battle-results",
-                params: {
-                  roomId: roomId,
-                  players: JSON.stringify(finalResults || []),
-                  totalQuestions: roomData.totalQuestions?.toString() || "0",
-                  currentUserId: userId,
-                  endReason: "player_left",
-                },
-              });
-            } else {
-              // Leave during waiting phase - just leave room
-              await battleManager.leaveRoom(roomId as string);
-              router.replace("/user/multiplayer-mode-selection");
-            }
-          } catch (error) {
-            console.error("Leave room error:", error);
-            // Always navigate away even if there's an error
-            router.replace("/user/multiplayer-mode-selection");
-          }
-        },
-      },
-    ]);
-  }, [roomId, cleanupTimers, isLeaving, roomData, userId]);
 
   useFocusEffect(
     useCallback(() => {
