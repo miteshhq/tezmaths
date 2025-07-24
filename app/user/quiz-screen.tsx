@@ -37,72 +37,73 @@ interface Question {
   timeLimit: number;
 }
 
-// Circular Progress Component
-const CircularProgress = ({
-  size,
-  progress,
-  strokeWidth,
-  color,
-  text,
-}: {
-  size: number;
-  progress: number;
-  strokeWidth: number;
-  color: string;
-  text?: string;
-}) => {
-  const radius = (size - strokeWidth) / 2;
-  const circumference = radius * 2 * Math.PI;
-  const strokeDashoffset = circumference * (1 - progress);
+const CircularProgress = React.memo(
+  ({
+    size,
+    progress,
+    strokeWidth,
+    color,
+    text,
+  }: {
+    size: number;
+    progress: number;
+    strokeWidth: number;
+    color: string;
+    text?: string;
+  }) => {
+    const radius = (size - strokeWidth) / 2;
+    const circumference = radius * 2 * Math.PI;
+    const strokeDashoffset = circumference * (1 - progress);
 
-  return (
-    <View style={{ position: "relative", width: size, height: size }}>
-      <Svg width={size} height={size}>
-        <Circle
-          stroke="#e0e0e0"
-          fill="none"
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          strokeWidth={strokeWidth}
-        />
-        <Circle
-          stroke={color}
-          fill="none"
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          strokeWidth={strokeWidth}
-          strokeDasharray={`${circumference} ${circumference}`}
-          strokeDashoffset={strokeDashoffset}
-          strokeLinecap="round"
-          rotation="-90"
-          origin={`${size / 2}, ${size / 2}`}
-        />
-      </Svg>
-      {text && (
-        <View
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <Text
-            style={{ fontWeight: "bold", fontSize: 14 }}
-            className="text-primary"
+    return (
+      <View style={{ position: "relative", width: size, height: size }}>
+        <Svg width={size} height={size}>
+          <Circle
+            stroke="#e0e0e0"
+            fill="none"
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            strokeWidth={strokeWidth}
+          />
+          <Circle
+            stroke={color}
+            fill="none"
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            strokeWidth={strokeWidth}
+            strokeDasharray={`${circumference} ${circumference}`}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            rotation="-90"
+            origin={`${size / 2}, ${size / 2}`}
+          />
+        </Svg>
+        {text && (
+          <View
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              justifyContent: "center",
+              alignItems: "center",
+            }}
           >
-            {text}
-          </Text>
-        </View>
-      )}
-    </View>
-  );
-};
+            <Text
+              style={{ fontWeight: "bold", fontSize: 14 }}
+              className="text-primary"
+            >
+              {text}
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  }
+);
 
 export default function QuizScreen() {
   const params = useLocalSearchParams();
@@ -299,45 +300,23 @@ export default function QuizScreen() {
   }, [timerAnimation]);
 
   const handleTimeUp = useCallback(() => {
-    setTimeLeft((currentTime) => {
-      if (currentTime <= 0) return 0;
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    timerAnimation.stopAnimation();
 
-      // Use functional updates to avoid stale closures
-      setIsProcessing((currentProcessing) => {
-        if (currentProcessing) return currentProcessing;
+    // Batch state updates to prevent multiple re-renders
+    setTimeLeft(0);
+    setIsTimeOut(true);
+    setIsAnswerWrong(true);
+    setShowExplanation(true);
+    setIsQuizActive(false);
+    setIsProcessing(false);
 
-        setIsQuizActive((currentActive) => {
-          if (!currentActive) return currentActive;
-
-          setShowExplanation((currentShow) => {
-            if (currentShow) return currentShow;
-
-            // Stop timer and show explanation
-            if (timerRef.current) {
-              clearInterval(timerRef.current);
-              timerRef.current = null;
-            }
-            timerAnimation.stopAnimation();
-
-            setIsTimeOut(true);
-            setIsAnswerWrong(true);
-            setIsProcessing(false);
-
-            // Play feedback
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            SoundManager.playSound("wrongAnswerSoundEffect");
-
-            return true; // Show explanation
-          });
-
-          return false; // Quiz no longer active
-        });
-
-        return true; // Set processing to true temporarily
-      });
-
-      return 0;
-    });
+    // Play feedback
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    SoundManager.playSound("wrongAnswerSoundEffect");
   }, [timerAnimation]);
 
   // **HANDLE ANSWER SUBMISSION**
@@ -592,24 +571,23 @@ export default function QuizScreen() {
     handleSubmitAnswer,
   ]);
 
-  // **HANDLE QUIT QUIZ**
   const handleQuitQuiz = useCallback(() => {
     Alert.alert(
       "Quit Quiz?",
-      "Are you sure you want to quit? Your progress will be lost.",
+      "Are you sure you want to quit? Your progress will be saved.",
       [
         { text: "Resume", style: "cancel" },
         {
           text: "Quit",
           style: "destructive",
           onPress: () => {
-            cleanupQuiz();
-            router.push("/user/home");
+            // Call handleGameEnd to save progress before quitting
+            handleGameEnd(accumulatedScore + quizScore, correctAnswers, false);
           },
         },
       ]
     );
-  }, [cleanupQuiz]);
+  }, [handleGameEnd, accumulatedScore, quizScore, correctAnswers]);
 
   // **HANDLE QUIZ INITIALIZATION**
   const handleQuizInit = useCallback(async () => {
@@ -703,16 +681,14 @@ export default function QuizScreen() {
     };
   }, [cleanupQuiz]);
 
-  // **TIMER COLOR**
-  const getTimerColor = () => {
+  const getTimerColor = useCallback(() => {
     const percentage = timeLeft / QUIZ_TIME_LIMIT;
     if (percentage > 0.6) return "#10B981";
     if (percentage > 0.3) return "#F59E0B";
     return "#EF4444";
-  };
+  }, [timeLeft]);
 
-  // **RENDER QUESTION**
-  const renderQuestion = () => {
+  const renderQuestion = useCallback(() => {
     if (!questions[currentQuestionIndex]) {
       return (
         <View className="bg-white overflow-hidden rounded-2xl border border-black min-h-[200px] justify-center items-center">
@@ -723,6 +699,7 @@ export default function QuizScreen() {
     const question = questions[currentQuestionIndex];
     const isInputEditable =
       isQuizActive && !showExplanation && !isProcessing && isScreenFocused;
+
     return (
       <View className="bg-white overflow-hidden rounded-2xl border border-black">
         <Text className="text-3xl font-black bg-light-orange px-2 py-6 text-custom-purple text-center">
@@ -747,12 +724,24 @@ export default function QuizScreen() {
         </View>
       </View>
     );
-  };
+  }, [
+    questions,
+    currentQuestionIndex,
+    isQuizActive,
+    showExplanation,
+    isProcessing,
+    isScreenFocused,
+    userAnswer,
+    isAnswerWrong,
+    handleInputChange,
+    handleManualSubmit,
+  ]);
 
-  // **RENDER EXPLANATION**
-  const renderExplanation = () => {
+  const renderExplanation = useCallback(() => {
     if (!showExplanation || !questions[currentQuestionIndex]) return null;
+
     const question = questions[currentQuestionIndex];
+
     return (
       <View className="bg-white border border-black p-0 rounded-2xl mt-4 overflow-hidden">
         <View className="flex-row items-center mb-2 p-4 border-b bg-light-orange">
@@ -765,9 +754,15 @@ export default function QuizScreen() {
             Explanation
           </Text>
           {question.explanation && (
-            <Text className="text-primary text-xl font-bold mb-4 text-center">
-              {question.explanation}
-            </Text>
+            <ScrollView
+              style={{ maxHeight: 200 }}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled={true}
+            >
+              <Text className="text-primary text-xl font-bold mb-4 text-center">
+                {question.explanation}
+              </Text>
+            </ScrollView>
           )}
           <TouchableOpacity
             className="bg-primary px-6 py-3 rounded-xl"
@@ -778,7 +773,13 @@ export default function QuizScreen() {
         </View>
       </View>
     );
-  };
+  }, [
+    showExplanation,
+    questions,
+    currentQuestionIndex,
+    isTimeOut,
+    handleGameEnd,
+  ]);
 
   // **RENDER LOADING**
   if (loading) {
@@ -857,7 +858,11 @@ export default function QuizScreen() {
       </ImageBackground>
 
       {/* Main Content */}
-      <ScrollView className="flex-1 bg-white">
+      <ScrollView
+        className="flex-1 bg-white"
+        key={`question-${currentQuestionIndex}`}
+        keyboardShouldPersistTaps="handled"
+      >
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           className="flex-1 bg-white p-4"
