@@ -13,7 +13,8 @@ type SoundKey =
   | "wrongAnswerSoundEffect"
   | "clappingSoundEffect"
   | "victorySoundEffect"
-  | "failSoundEffect";
+  | "failSoundEffect"
+  | "levelTransitionSound";
 
 const FADE_INTERVAL_MS = 50;
 
@@ -40,6 +41,7 @@ async function fadeVolume(
 const SoundManager = {
   sounds: {
     levelSoundEffect: require("../assets/audio/level.mp3"),
+    levelTransitionSound: require("../assets/audio/next-level.mp3"),
     rightAnswerSoundEffect: require("../assets/audio/rightAnswer.mp3"),
     wrongAnswerSoundEffect: require("../assets/audio/wrongAnswer.mp3"),
     clappingSoundEffect: require("../assets/audio/clapping.mp3"),

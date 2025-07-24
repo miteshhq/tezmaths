@@ -148,7 +148,10 @@ export default function QuizScreen() {
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   // Animated values (kept for timer, but no question transitions)
+  // --- fix: always create new animation for each question
   const timerAnimation = useRef(new Animated.Value(1)).current;
+  const timerAnimationRef = useRef(new Animated.Value(1));
+  const [timerKey, setTimerKey] = useState(0); // for forcing Animated.View re-render
 
   // **CORE CLEANUP FUNCTION**
   const cleanupQuiz = useCallback(() => {
@@ -178,6 +181,7 @@ export default function QuizScreen() {
     if (params.isSelectedLevel === "true") {
       setAccumulatedScore(0);
     }
+    setTimerKey((k) => k + 1); // Reset timer bar animation key
   }, [cleanupQuiz, params.isSelectedLevel]);
 
   // **LOAD USER DATA**
@@ -263,34 +267,6 @@ export default function QuizScreen() {
     }
   }, [currentLevel, params.isSelectedLevel]);
 
-  // **TIMER MANAGEMENT**
-  const startTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    setTimeLeft(QUIZ_TIME_LIMIT);
-    timerAnimation.setValue(1);
-    Animated.timing(timerAnimation, {
-      toValue: 0,
-      duration: QUIZ_TIME_LIMIT * 1000,
-      useNativeDriver: false,
-    }).start();
-    timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
-          }
-          handleTimeUp();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }, [timerAnimation]);
-
   const stopTimer = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -306,7 +282,6 @@ export default function QuizScreen() {
     }
     timerAnimation.stopAnimation();
 
-    // Batch state updates to prevent multiple re-renders
     setTimeLeft(0);
     setIsTimeOut(true);
     setIsAnswerWrong(true);
@@ -314,10 +289,40 @@ export default function QuizScreen() {
     setIsQuizActive(false);
     setIsProcessing(false);
 
-    // Play feedback
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     SoundManager.playSound("wrongAnswerSoundEffect");
   }, [timerAnimation]);
+
+  const startTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    setTimeLeft(QUIZ_TIME_LIMIT);
+
+    // reset to a brand‑new Animated.Value
+    timerAnimationRef.current = new Animated.Value(1);
+    // force Animated.View remount
+    setTimerKey((k) => k + 1);
+
+    Animated.timing(timerAnimationRef.current, {
+      toValue: 0,
+      duration: QUIZ_TIME_LIMIT * 1000,
+      useNativeDriver: false,
+    }).start();
+
+    timerRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current!);
+          timerRef.current = null;
+          handleTimeUp();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, [handleTimeUp]);
 
   // **HANDLE ANSWER SUBMISSION**
   const handleSubmitAnswer = useCallback(
@@ -375,6 +380,7 @@ export default function QuizScreen() {
     setTimeout(() => {
       inputRef.current?.focus();
     }, 100);
+    // Reset timer animation (handled by timerKey and startTimer)
   }, [startTimer]);
 
   // **HANDLE GAME END**
@@ -500,17 +506,24 @@ export default function QuizScreen() {
         }
         const newAccumulatedScore = accumulatedScore + levelScore;
         setAccumulatedScore(newAccumulatedScore);
+
+        // ---- LEVEL TRANSITION SOUND SUPPORT ----
         if (nextLevelExists && levelCorrectAnswers === questions.length) {
-          router.replace({
-            pathname: "/user/quiz-screen",
-            params: {
-              level: nextLevel.toString(),
-              isSelectedLevel: "false",
-              accumulatedScore: newAccumulatedScore.toString(),
-              gameStartTime: gameStartTime.toString(),
-              reload: Date.now().toString(),
-            },
-          });
+          // Play level transition sound ONLY
+          SoundManager.stopAllSounds();
+          SoundManager.playSound("levelTransitionSound");
+          setTimeout(() => {
+            router.replace({
+              pathname: "/user/quiz-screen",
+              params: {
+                level: nextLevel.toString(),
+                isSelectedLevel: "false",
+                accumulatedScore: newAccumulatedScore.toString(),
+                gameStartTime: gameStartTime.toString(),
+                reload: Date.now().toString(),
+              },
+            });
+          }, 700); // small delay to let the transition sound play (adjust to taste)
         } else {
           handleGameEnd(newAccumulatedScore, levelCorrectAnswers, true);
         }
@@ -581,7 +594,6 @@ export default function QuizScreen() {
           text: "Quit",
           style: "destructive",
           onPress: () => {
-            // Call handleGameEnd to save progress before quitting
             handleGameEnd(accumulatedScore + quizScore, correctAnswers, false);
           },
         },
@@ -606,6 +618,9 @@ export default function QuizScreen() {
     resetQuizState();
     await loadUserData();
     await loadQuestions();
+
+    // Stop transition sound (for next/this level) immediately when new level starts
+    SoundManager.stopAllSounds();
   }, [
     params.isSelectedLevel,
     params.gameStartTime,
@@ -754,15 +769,23 @@ export default function QuizScreen() {
             Explanation
           </Text>
           {question.explanation && (
-            <ScrollView
-              style={{ maxHeight: 200 }}
-              showsVerticalScrollIndicator={false}
-              nestedScrollEnabled={true}
-            >
-              <Text className="text-primary text-xl font-bold mb-4 text-center">
-                {question.explanation}
-              </Text>
-            </ScrollView>
+            // --- fix: make explanation area scrollable and outer scroll disables bounce,
+            // allow inner ScrollView ONLY to scroll (works both iOS & Android)
+            <View style={{ maxHeight: 200, width: "100%" }}>
+              <ScrollView
+                showsVerticalScrollIndicator={true}
+                nestedScrollEnabled={true}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{
+                  flexGrow: 1,
+                  justifyContent: "center",
+                }}
+              >
+                <Text className="text-primary text-xl font-bold mb-4 text-center">
+                  {question.explanation}
+                </Text>
+              </ScrollView>
+            </View>
           )}
           <TouchableOpacity
             className="bg-primary px-6 py-3 rounded-xl"
@@ -862,6 +885,9 @@ export default function QuizScreen() {
         className="flex-1 bg-white"
         key={`question-${currentQuestionIndex}`}
         keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ flexGrow: 1 }}
+        scrollEnabled={true}
+        bounces={false}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -884,11 +910,14 @@ export default function QuizScreen() {
                 <Text className="text-primary font-bold">{timeLeft}s</Text>
               </View>
               <View className="bg-gray-300 h-4 rounded-full overflow-hidden">
+                {/* Horizontal Animated Timer Bar - fixes: add timerKey to ensure resetting between questions */}
                 <Animated.View
-                  className="h-full rounded-full"
+                  key={timerKey}
                   style={{
                     backgroundColor: getTimerColor(),
-                    width: timerAnimation.interpolate({
+                    height: 16,
+                    borderRadius: 8,
+                    width: timerAnimationRef.current.interpolate({
                       inputRange: [0, 1],
                       outputRange: ["0%", "100%"],
                     }),
