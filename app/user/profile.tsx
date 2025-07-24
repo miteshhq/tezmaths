@@ -417,11 +417,13 @@ export default function ProfileScreen() {
             <View className="flex-row justify-between p-4">
               <View className="items-center">
                 <Text className="text-2xl font-black text-custom-purple">
-                  {userData.totalPoints % 1 !== 0
-                    ? Math.round(userData.totalPoints * 10) / 10
-                    : userData.totalPoints || 0}
+                  {userData.highScore % 1 !== 0
+                    ? Math.round(userData.highScore * 10) / 10
+                    : userData.highScore || 0}
                 </Text>
-                <Text className="text-custom-purple text-lg">Score</Text>
+                <Text className="text-custom-purple text-lg">
+                  High Score
+                </Text>
               </View>
               <View className="items-center">
                 <Text className="text-2xl font-black text-custom-purple">

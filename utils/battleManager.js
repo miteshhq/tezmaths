@@ -1007,9 +1007,7 @@ export class BattleManager {
             const currentUserData = userData || {};
 
             const currentTotalPoints = currentUserData.totalPoints || 0;
-            const currentHighScore = currentUserData.highScore || 0;
             const newTotalPoints = currentTotalPoints + scoreToAdd;
-            const newHighScore = Math.max(currentHighScore, scoreToAdd);
 
             let newStreak;
             const streakResult = await updateUserStreak();
@@ -1019,7 +1017,6 @@ export class BattleManager {
 
             await update(createUserRef(userId), {
                 totalPoints: newTotalPoints,
-                highScore: newHighScore
             });
 
             if (!streakResult.alreadyPlayedToday) {

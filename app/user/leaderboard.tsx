@@ -214,7 +214,7 @@ export default function LeaderboardScreen() {
                 {item.highScore % 1 !== 0
                   ? Math.round(item.highScore * 10) / 10
                   : item.highScore || 0}{" "}
-                points
+                Highest Score
               </Text>
             </View>
           </View>
