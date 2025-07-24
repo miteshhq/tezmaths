@@ -1,17 +1,19 @@
 import { FontAwesome } from "@expo/vector-icons";
-import { Tabs, useRouter } from "expo-router";
+import { Tabs, useRouter, useSegments } from "expo-router";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react"; // Add useRef
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Dimensions,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
-  TouchableNativeFeedback,
   View,
+  Pressable,
+  ImageBackground,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../firebase/firebaseConfig";
@@ -19,27 +21,89 @@ import { auth } from "../../firebase/firebaseConfig";
 const { width } = Dimensions.get("window");
 const ACTIVE_COLOR = "#F97316";
 
-// Custom touchable component that handles platform-specific ripple effect
-const CustomTouchable = ({ children, ...props }) => {
-  if (Platform.OS === "android") {
-    return (
-      <TouchableNativeFeedback
-        {...props}
-        background={TouchableNativeFeedback.Ripple("transparent", false)}
-      >
-        {children}
-      </TouchableNativeFeedback>
-    );
-  }
-  return <TouchableOpacity {...props}>{children}</TouchableOpacity>;
-};
-
 export default function AdminTabsLayout() {
   const router = useRouter();
+  const segments = useSegments();
+  const tabHistory = useRef<string[]>(["dashboard"]); // Track tab history
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
+
+  // Track tab navigation for proper back button behavior
+  useEffect(() => {
+    const currentRoute = segments[segments.length - 1];
+    const adminTabRoutes = [
+      "dashboard",
+      "user-management",
+      "question-management",
+      "video-management",
+      "referral-points",
+    ];
+
+    if (adminTabRoutes.includes(currentRoute)) {
+      const lastRoute = tabHistory.current[tabHistory.current.length - 1];
+      if (currentRoute !== lastRoute) {
+        tabHistory.current.push(currentRoute);
+        // Keep history manageable (max 10 entries)
+        if (tabHistory.current.length > 10) {
+          tabHistory.current = tabHistory.current.slice(-10);
+        }
+      }
+    }
+  }, [segments]);
+
+  // Enhanced back button handler with tab history
+  useEffect(() => {
+    const backAction = () => {
+      const currentRoute = segments[segments.length - 1];
+      const adminTabRoutes = [
+        "dashboard",
+        "user-management",
+        "question-management",
+        "video-management",
+        "referral-points",
+      ];
+
+      if (adminTabRoutes.includes(currentRoute)) {
+        // On dashboard tab or no history, show exit alert
+        if (currentRoute === "dashboard" || tabHistory.current.length <= 1) {
+          Alert.alert(
+            "Exit Admin Panel",
+            "Are you sure you want to quit the admin panel?",
+            [
+              { text: "Cancel", style: "cancel" },
+              { text: "Logout", onPress: () => handleLogout() },
+              { text: "Quit", onPress: () => BackHandler.exitApp() },
+            ]
+          );
+          return true;
+        }
+
+        // If we have tab history to go back to
+        if (tabHistory.current.length > 1) {
+          // Remove current route
+          tabHistory.current.pop();
+          // Get previous route
+          const previousRoute =
+            tabHistory.current[tabHistory.current.length - 1];
+          // Navigate to previous tab
+          router.push(`/admin/${previousRoute}` as any);
+          return true;
+        }
+      }
+
+      // For non-tab screens, allow default back behavior
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [segments, router]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -210,19 +274,25 @@ export default function AdminTabsLayout() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
       <View style={styles.root}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push("/admin/dashboard")}>
-            <Text style={styles.headerText}>Tezmaths Admin Panel</Text>
-          </TouchableOpacity>
-          <View className="flex-row items-center">
-            {/* <Text className="text-white mr-3 text-sm">
-              {currentUser?.email}
-            </Text> */}
-            <TouchableOpacity onPress={handleLogoutConfirm}>
-              <Text style={styles.headerText}>Logout</Text>
-            </TouchableOpacity>
+        <ImageBackground
+          source={require("../../assets/gradient.jpg")}
+          style={{ overflow: "hidden", marginTop: 20 }}
+        >
+          <View className="px-4 py-4">
+            <View className="flex-row justify-between items-center">
+              <TouchableOpacity onPress={() => router.push("/admin/dashboard")}>
+                <Text className="text-white text-3xl font-black">
+                  Admin Panel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleLogoutConfirm}>
+                <View className="bg-red-600 py-1 pt-0.5 px-4 rounded-lg">
+                  <Text className="text-white font-bold">Logout</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        </ImageBackground>
 
         <Tabs
           screenOptions={{
@@ -231,16 +301,33 @@ export default function AdminTabsLayout() {
             tabBarActiveTintColor: ACTIVE_COLOR,
             tabBarInactiveTintColor: "#aaaaaa",
             tabBarStyle: styles.tabBar,
-            tabBarItemStyle: { width: "100%", height: "100%" },
-            tabBarButton: (props) => <CustomTouchable {...props} />,
+            tabBarItemStyle: styles.tabBarItem,
+            tabBarButton: (props: any) => {
+              const { onPress, children, ...rest } = props;
+              return (
+                <Pressable
+                  android_ripple={{ color: "#F97316" }}
+                  onPress={onPress}
+                  style={styles.tabButton}
+                  {...rest}
+                >
+                  {children}
+                </Pressable>
+              );
+            },
           }}
+          initialRouteName="dashboard"
         >
           <Tabs.Screen
             name="dashboard"
             options={{
               title: "Dashboard",
-              tabBarIcon: ({ color, size }) => (
-                <FontAwesome name="home" size={size} color={color} />
+              tabBarIcon: ({ color, size, focused }) => (
+                <FontAwesome
+                  name="home"
+                  size={focused ? size + 2 : size}
+                  color={focused ? ACTIVE_COLOR : color}
+                />
               ),
             }}
           />
@@ -248,8 +335,12 @@ export default function AdminTabsLayout() {
             name="user-management"
             options={{
               title: "Users",
-              tabBarIcon: ({ color, size }) => (
-                <FontAwesome name="user" size={size} color={color} />
+              tabBarIcon: ({ color, size, focused }) => (
+                <FontAwesome
+                  name="user"
+                  size={focused ? size + 2 : size}
+                  color={focused ? ACTIVE_COLOR : color}
+                />
               ),
             }}
           />
@@ -257,8 +348,12 @@ export default function AdminTabsLayout() {
             name="question-management"
             options={{
               title: "Questions",
-              tabBarIcon: ({ color, size }) => (
-                <FontAwesome name="question-circle" size={size} color={color} />
+              tabBarIcon: ({ color, size, focused }) => (
+                <FontAwesome
+                  name="question-circle"
+                  size={focused ? size + 2 : size}
+                  color={focused ? ACTIVE_COLOR : color}
+                />
               ),
             }}
           />
@@ -266,8 +361,12 @@ export default function AdminTabsLayout() {
             name="video-management"
             options={{
               title: "Videos",
-              tabBarIcon: ({ color, size }) => (
-                <FontAwesome name="video-camera" size={size} color={color} />
+              tabBarIcon: ({ color, size, focused }) => (
+                <FontAwesome
+                  name="video-camera"
+                  size={focused ? size + 2 : size}
+                  color={focused ? ACTIVE_COLOR : color}
+                />
               ),
             }}
           />
@@ -275,8 +374,12 @@ export default function AdminTabsLayout() {
             name="referral-points"
             options={{
               title: "Referrals",
-              tabBarIcon: ({ color, size }) => (
-                <FontAwesome name="star" size={size} color={color} />
+              tabBarIcon: ({ color, size, focused }) => (
+                <FontAwesome
+                  name="star"
+                  size={focused ? size + 2 : size}
+                  color={focused ? ACTIVE_COLOR : color}
+                />
               ),
             }}
           />
@@ -287,7 +390,7 @@ export default function AdminTabsLayout() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#FFF2CC" },
+  root: { flex: 1, backgroundColor: "#fff" },
   header: {
     height: 60,
     backgroundColor: ACTIVE_COLOR,
@@ -303,10 +406,22 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     backgroundColor: "#fff",
-    borderColor: "#3b3b3b",
-    flexDirection: "row",
-    alignItems: "center",
-    height: 60,
+    borderTopWidth: 1,
+    borderTopColor: "#e0e0e0",
+    height: 70,
     paddingTop: 10,
+    paddingBottom: 10,
+  },
+  tabBarItem: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  tabButton: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginHorizontal: 4,
   },
 });
