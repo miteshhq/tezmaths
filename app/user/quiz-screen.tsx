@@ -771,7 +771,7 @@ export default function QuizScreen() {
           {question.explanation && (
             // --- fix: make explanation area scrollable and outer scroll disables bounce,
             // allow inner ScrollView ONLY to scroll (works both iOS & Android)
-            <View style={{ maxHeight: 200, width: "100%" }}>
+            <View style={{ width: "100%" }}>
               <ScrollView
                 showsVerticalScrollIndicator={true}
                 nestedScrollEnabled={true}
