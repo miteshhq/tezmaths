@@ -191,7 +191,7 @@ export default function LevelSelect() {
       const soundTimer = setTimeout(async () => {
         if (isScreenActiveRef.current) {
           try {
-            await SoundManager.playSound("levelSoundEffect", {
+            SoundManager.playSound("levelSoundEffect", {
               isLooping: true,
               volume: 0.7,
             });
@@ -228,44 +228,42 @@ export default function LevelSelect() {
   const handleContinue = () => {
     handleLevelSelect(currentLevel);
   };
-   
-  const handleBack = async () => {
-  Alert.alert(
-    "Quit Game?",
-    "Are you sure you want to quit? Your progress will be lost.",
-    [
-      {
-        text: "Resume",
-        style: "cancel", // just closes the dialog
-      },
-      {
-        text: "Quit",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await SoundManager.nukeSounds(); // stop all game sounds
-            router.back(); // go back to previous screen
-          } catch (error) {
-            router.back(); // still try to go back on error
-          }
-        },
-      },
-    ],
-    { cancelable: true }
-  );
-};
 
-  useEffect(() => {
-  const onBackPress = () => {
-    handleBack();
-    return true; // prevent default behavior
+  const handleBack = async () => {
+    Alert.alert(
+      "Quit Game?",
+      "Are you sure you want to quit? Your progress will be lost.",
+      [
+        {
+          text: "Resume",
+          style: "cancel", // just closes the dialog
+        },
+        {
+          text: "Quit",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await SoundManager.nukeSounds(); // stop all game sounds
+              router.back(); // go back to previous screen
+            } catch (error) {
+              router.back(); // still try to go back on error
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
-  const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-  return () => sub.remove();
-}, []);
+  useEffect(() => {
+    const onBackPress = () => {
+      handleBack();
+      return true; // prevent default behavior
+    };
 
-
+    const sub = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+    return () => sub.remove();
+  }, []);
 
   // if (loading) {
   //   return (
