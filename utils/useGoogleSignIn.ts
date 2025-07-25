@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { auth, database } from '../firebase/firebaseConfig';
 import { ref, get, set } from 'firebase/database';
