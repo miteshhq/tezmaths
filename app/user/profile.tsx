@@ -318,7 +318,9 @@ export default function ProfileScreen() {
 
       // Clear Google Sign-In session to force account chooser
       try {
+        await GoogleSignin.revokeAccess();
         await GoogleSignin.signOut();
+        await auth().signOut();
       } catch (googleError) {
         console.log(
           "[PROFILE] Google Sign-In already signed out or not configured:",

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { auth, database } from '../firebase/firebaseConfig';
 import { ref, get, set } from 'firebase/database';
@@ -69,7 +69,7 @@ export const useSimpleGoogleSignIn = () => {
             });
 
             // Trigger the sign-in flow
-            const signInResult = await GoogleSignin.signIn();
+            const signInResult = await GoogleSignin.signIn({ prompt: 'select_account'});
 
             // Extract ID token (handling both old and new versions of the library)
             let idToken = signInResult.data?.idToken;
@@ -153,8 +153,11 @@ export const useSimpleGoogleSignIn = () => {
 
     const signOut = async (): Promise<void> => {
         try {
-            // Sign out from both Google and Firebase
+             // 1. Revoke granted consent
+            await GoogleSignin.revokeAccess();
+            // 2. Sign out of Google SDK
             await GoogleSignin.signOut();
+            // 3. Sign out of Firebase
             await auth.signOut();
         } catch (error) {
             // Silently handle sign out errors
