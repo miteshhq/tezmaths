@@ -260,7 +260,7 @@ export default function BattleScreen() {
           // Clear navigation stack to prevent going back to old battle results
           router.replace("/user/multiplayer-mode-selection");
           setTimeout(() => {
-            router.push(`/user/battle?roomId=${roomId}`);
+            router.push(`/user/battle-screen?roomId=${roomId}`);
           }, 100);
         }
       }
