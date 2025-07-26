@@ -717,13 +717,13 @@ export default function QuizScreen() {
 
     return (
       <View className="bg-white overflow-hidden rounded-2xl border border-black">
-        <Text className="text-3xl font-black bg-light-orange px-2 py-6 text-custom-purple text-center">
+        <Text className="text-2xl font-black bg-light-orange px-2 py-6 text-custom-purple text-center">
           What is {question.questionText}?
         </Text>
-        <View className="p-10">
+        <View className="p-5">
           <TextInput
             ref={inputRef}
-            className={`bg-custom-gray p-4 rounded-xl text-xl text-center border ${
+            className={`bg-custom-gray p-4 py-2 rounded-xl text-xl text-center border ${
               isAnswerWrong ? "border-red-500" : "border-gray-100"
             } ${isProcessing ? "opacity-50" : ""}`}
             value={userAnswer}
@@ -765,11 +765,11 @@ export default function QuizScreen() {
           </Text>
         </View>
         <View className="flex flex-col items-center gap-2 p-4">
-          <Text className="text-custom-purple text-3xl font-black mb-2">
+          <Text className="text-custom-purple text-2xl font-black mb-2">
             Explanation
           </Text>
           {question.explanation && (
-            <View style={{ maxHeight: 200, width: "100%" }}>
+            <View style={{ maxHeight: 150, width: "100%" }}>
               <ScrollView
                 showsVerticalScrollIndicator={true}
                 nestedScrollEnabled={true}
@@ -781,7 +781,7 @@ export default function QuizScreen() {
                   backgroundColor: "#fafafa",
                 }}
               >
-                <Text className="text-primary text-xl font-bold mb-4 text-center p-2">
+                <Text className="text-primary text-base font-medium mb-4 text-center p-2">
                   {question.explanation}
                 </Text>
               </ScrollView>
