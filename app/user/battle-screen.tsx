@@ -767,9 +767,7 @@ export default function BattleScreen() {
       // Play appropriate sound
       if (isFirstCorrect) {
         await SoundManager.playSound("rightAnswerSoundEffect");
-      } else {
-        await SoundManager.playSound("wrongAnswerSoundEffect");
-      }
+      } 
 
       const pointsEarned = isFirstCorrect ? 1 : 0;
 
