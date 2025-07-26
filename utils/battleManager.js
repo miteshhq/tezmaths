@@ -315,6 +315,8 @@ export class BattleManager {
         this.userPresenceRef = null;
         this.isInitialized = false;
         this.setupUserPresence();
+
+        this.preGenerateQuestions().catch(console.error);
     }
 
     async waitForAuth() {
@@ -511,10 +513,14 @@ export class BattleManager {
         try {
             const user = await this.waitForAuth();
             const userId = user.uid;
+
             logOperation("createRoom", null, `Creating room: ${roomName}`);
 
-            const userData = await this.getUserData(userId);
-            const roomCode = await this.generateUniqueRoomCode();
+            // Get user data and generate room code in parallel
+            const [userData, roomCode] = await Promise.all([
+                this.getUserData(userId),
+                this.generateUniqueRoomCode()
+            ]);
 
             const roomData = {
                 roomName: roomName || "Battle Room",
@@ -540,6 +546,7 @@ export class BattleManager {
             throw error;
         }
     }
+
 
     async leaveDuringBattle(roomId) {
         try {
@@ -716,6 +723,17 @@ export class BattleManager {
         throw new Error("Failed to generate unique room code");
     }
 
+    async preGenerateQuestions() {
+        try {
+            const questions = await this.generateQuestions(1, 10);
+            await AsyncStorage.setItem('preGeneratedQuestions', JSON.stringify(questions));
+            return questions;
+        } catch (error) {
+            console.error('Pre-generation failed:', error);
+            return { questions: generateFallbackQuestions(25) };
+        }
+    }
+
     async startBattle(roomId) {
         try {
             const user = await this.waitForAuth();
@@ -724,30 +742,36 @@ export class BattleManager {
             if (!roomId) throw new Error("No roomId provided");
 
             const { data: room, exists } = await safeGet(createRoomRef(roomId));
-
             if (!validateBattleStart(room, this.userId)) return;
 
-            logOperation("startBattle", roomId, "Generating questions...");
-            const questionData = await this.generateQuestions(1, 10);
+            logOperation("startBattle", roomId, "Using pre-generated questions...");
 
-            if (!questionData.questions?.length) {
-                throw new Error("Failed to generate questions");
+            // Try to get pre-generated questions first
+            let questionData;
+            try {
+                const cached = await AsyncStorage.getItem('preGeneratedQuestions');
+                questionData = cached ? JSON.parse(cached) : await this.generateQuestions(1, 10);
+            } catch {
+                questionData = { questions: generateFallbackQuestions(25) };
             }
 
-            logOperation("startBattle", roomId, `Generated ${questionData.questions.length} questions`);
+            if (!questionData.questions?.length) {
+                questionData = { questions: generateFallbackQuestions(25) };
+            }
 
             const now = Date.now();
             const playerUpdates = createBattlePlayerUpdates(room.players);
             const battleData = createBattleInitData(questionData, now);
 
-            const updateData = { ...battleData, ...playerUpdates };
-
-            await update(createRoomRef(roomId), updateData);
-
-            // Notify all players about the battle start
-            Object.keys(room.players).forEach(playerId => {
-                // Here we can use a messaging service or a simple flag update
-                update(createPlayerRef(roomId, playerId), { battleStarted: true });
+            // Single atomic update instead of multiple
+            await update(createRoomRef(roomId), {
+                ...battleData,
+                ...playerUpdates,
+                // Mark all players as battle started in one update
+                ...Object.keys(room.players).reduce((acc, playerId) => {
+                    acc[`players/${playerId}/battleStarted`] = true;
+                    return acc;
+                }, {})
             });
 
             logOperation("startBattle", roomId, "Battle started successfully");
@@ -756,6 +780,7 @@ export class BattleManager {
             throw error;
         }
     }
+
 
     async moveToNextQuestion(roomId) {
         try {
@@ -859,7 +884,6 @@ export class BattleManager {
             const userId = user.uid;
 
             const { data: room, exists } = await safeGet(createRoomRef(roomId));
-
             if (!exists || !room || room.status !== "playing" || questionIndex !== room.currentQuestion) {
                 return false;
             }
@@ -871,56 +895,54 @@ export class BattleManager {
             const isCorrect = currentQuestion.correctAnswer.toLowerCase() === userAnswer.toLowerCase();
 
             if (!isCorrect) {
-                await update(createPlayerRef(roomId, userId), {
+                // Non-blocking update for wrong answers
+                update(createPlayerRef(roomId, userId), {
                     answer: userAnswer,
                     consecutiveCorrect: 0,
                     lastActivity: serverTimestamp()
-                });
+                }).catch(console.error);
                 return false;
             }
 
-            const winnerRef = ref(database, `rooms/${roomId}/currentWinner`);
-            const txResult = await runTransaction(winnerRef, (current) => {
-                if (!current) return userId;
-                return current;
-            });
-
-            // FIXED: Always award 1 point regardless of level
-            const pointsToAdd = txResult.committed && txResult.snapshot.val() === userId ? FIXED_POINT_PER_QUESTINON : 0;
+            // Use simpler first-to-answer logic instead of transaction
+            const isFirstCorrect = !room.currentWinner;
+            const pointsToAdd = isFirstCorrect ? FIXED_POINT_PER_QUESTINON : 0;
             const newScore = (currentPlayer.score || 0) + pointsToAdd;
 
-            if (txResult.committed && txResult.snapshot.val() === userId) {
-                const newConsecutiveCorrect = (currentPlayer.consecutiveCorrect || 0) + 1;
+            if (isFirstCorrect) {
+                // Single atomic update for winner
+                const updates = {
+                    [`players/${userId}/score`]: newScore,
+                    [`players/${userId}/winner`]: true,
+                    [`players/${userId}/answer`]: userAnswer,
+                    [`players/${userId}/consecutiveCorrect`]: (currentPlayer.consecutiveCorrect || 0) + 1,
+                    currentWinner: userId,
+                    lastActivity: serverTimestamp()
+                };
 
-                const playerUpdates = {};
+                // Reset other players' consecutive correct
                 Object.keys(room.players).forEach(playerId => {
                     if (playerId !== userId) {
-                        playerUpdates[`players/${playerId}/consecutiveCorrect`] = 0;
+                        updates[`players/${playerId}/consecutiveCorrect`] = 0;
                     }
                 });
 
-                await update(createRoomRef(roomId), {
-                    [`players/${userId}/score`]: newScore,
-                    [`players/${userId}/winner`]: true,
-                    [`players/${userId}/consecutiveCorrect`]: newConsecutiveCorrect,
-                    [`players/${userId}/answer`]: userAnswer,
-                    ...playerUpdates,
-                    lastActivity: serverTimestamp()
-                });
+                await update(createRoomRef(roomId), updates);
 
-                // CRITICAL FIX: Remove early winner logic - let all 25 questions play
+                // Start transition after short delay
                 setTimeout(() => {
                     this.startQuestionTransition(roomId, 2000).catch(console.error);
                 }, 1000);
 
                 return true;
             } else {
-                await update(createPlayerRef(roomId, userId), {
+                // Non-blocking update for late correct answers
+                update(createPlayerRef(roomId, userId), {
                     score: newScore,
                     answer: userAnswer,
                     consecutiveCorrect: 0,
                     lastActivity: serverTimestamp()
-                });
+                }).catch(console.error);
                 return false;
             }
         } catch (error) {

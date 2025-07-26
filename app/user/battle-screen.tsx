@@ -54,6 +54,7 @@ interface RoomData {
   questions?: Question[];
   currentWinner?: string;
   gameEndReason?: string;
+  results?: any[]; // Added this missing property
 }
 
 const avatarImages = (avatar: number | string) => {
@@ -210,18 +211,16 @@ export default function BattleScreen() {
     battleInitialized.current = false;
     otherWinnerAnnouncedRef.current = false;
 
-    // Clear any cached battle data from AsyncStorage
-    try {
-      await AsyncStorage.multiRemove([
-        "currentBattleId",
-        "battleState",
-        "battleResults",
-        "lastBattleScore",
-        "battleProgress",
-      ]);
-    } catch (error) {
+    // Clear any cached battle data from AsyncStorage (NON-BLOCKING)
+    AsyncStorage.multiRemove([
+      "currentBattleId",
+      "battleState",
+      "battleResults",
+      "lastBattleScore",
+      "battleProgress",
+    ]).catch((error) => {
       console.error("Error clearing battle cache:", error);
-    }
+    });
 
     // Remove any existing room listeners
     if (currentRoomId.current) {
@@ -234,35 +233,35 @@ export default function BattleScreen() {
     if (roomId !== currentRoomId.current) {
       console.log(`Room changed from ${currentRoomId.current} to ${roomId}`);
       currentRoomId.current = roomId;
-      clearBattleState();
+      // Make this non-blocking
+      clearBattleState().catch(console.error);
     }
   }, [roomId, clearBattleState]);
 
-  // INITIALIZE BATTLE STATE ON MOUNT
+  // INITIALIZE BATTLE STATE ON MOUNT (SIMPLIFIED)
   useEffect(() => {
-    const initializeBattle = async () => {
+    const initializeBattle = () => {
       if (!battleInitialized.current && roomId) {
         console.log("Initializing new battle for room:", roomId);
 
-        // Clear everything first
-        await clearBattleState();
+        // Clear everything first (NON-BLOCKING)
+        clearBattleState().catch(console.error);
 
         // Reset navigation and state flags
         setIsLeaving(false);
         setBackHandlerActive(false);
         setShowLeaveModal(false);
 
-        // Mark as initialized
+        // Mark as initialized IMMEDIATELY
         battleInitialized.current = true;
 
-        // Clear any previous battle results from navigation state
-        if (router.canGoBack()) {
-          // Clear navigation stack to prevent going back to old battle results
-          router.replace("/user/multiplayer-mode-selection");
-          setTimeout(() => {
-            router.push(`/user/battle-screen?roomId=${roomId}`);
-          }, 100);
-        }
+        // REMOVE THE COMPLEX NAVIGATION LOGIC - this was causing delays
+        // if (router.canGoBack()) {
+        //   router.replace("/user/multiplayer-mode-selection");
+        //   setTimeout(() => {
+        //     router.push(`/user/battle-screen?roomId=${roomId}`);
+        //   }, 100);
+        // }
       }
     };
 
@@ -454,8 +453,9 @@ export default function BattleScreen() {
     return () => clearInterval(interval);
   }, [roomData?.nextQuestionStartTime]);
 
+  // FIREBASE LISTENER - START IMMEDIATELY (REMOVED battleInitialized.current DEPENDENCY)
   useEffect(() => {
-    if (!roomId || !battleInitialized.current) return;
+    if (!roomId) return;
 
     const roomRef = ref(database, `rooms/${roomId}`);
     const unsubscribe = onValue(
@@ -467,12 +467,24 @@ export default function BattleScreen() {
           // Room no longer exists - navigate away if not already leaving
           if (!backHandlerActive && !isLeaving) {
             console.log("Room no longer exists, navigating away");
-            clearBattleState().then(() => {
-              router.replace("/user/multiplayer-mode-selection");
-            });
+            // Make non-blocking
+            clearBattleState()
+              .then(() => {
+                router.replace("/user/multiplayer-mode-selection");
+              })
+              .catch(console.error);
           }
           setNetworkError(true);
           return;
+        }
+
+        // SET ROOM DATA IMMEDIATELY - don't wait for initialization
+        setRoomData(data);
+        setNetworkError(false);
+
+        // Mark as initialized after first successful data load
+        if (!battleInitialized.current) {
+          battleInitialized.current = true;
         }
 
         // Handle battle end scenarios without multiple popups
@@ -485,18 +497,17 @@ export default function BattleScreen() {
           ) {
             setIsLeaving(true);
 
-            setTimeout(() => {
-              router.replace({
-                pathname: "/user/battle-results",
-                params: {
-                  roomId: roomId,
-                  players: JSON.stringify(data.results || []),
-                  totalQuestions: data.totalQuestions?.toString() || "0",
-                  currentUserId: userId,
-                  endReason: endReason,
-                },
-              });
-            }, 1000);
+            // REMOVE TIMEOUT DELAY - navigate immediately
+            router.replace({
+              pathname: "/user/battle-results",
+              params: {
+                roomId: roomId,
+                players: JSON.stringify(data.results || []),
+                totalQuestions: data.totalQuestions?.toString() || "0",
+                currentUserId: userId,
+                endReason: endReason,
+              },
+            });
             return;
           }
         }
@@ -512,9 +523,6 @@ export default function BattleScreen() {
             return;
           }
         }
-
-        setRoomData(data);
-        setNetworkError(false);
       },
       (error) => {
         console.error("Database listener error:", error);
@@ -523,9 +531,11 @@ export default function BattleScreen() {
         // Navigate away on persistent errors
         if (!backHandlerActive && !isLeaving) {
           setTimeout(() => {
-            clearBattleState().then(() => {
-              router.replace("/user/multiplayer-mode-selection");
-            });
+            clearBattleState()
+              .then(() => {
+                router.replace("/user/multiplayer-mode-selection");
+              })
+              .catch(console.error);
           }, 3000);
         }
       }
@@ -534,24 +544,21 @@ export default function BattleScreen() {
     return () => {
       unsubscribe();
     };
-  }, [
-    roomId,
-    backHandlerActive,
-    isLeaving,
-    userId,
-    battleInitialized.current,
-    clearBattleState,
-  ]);
+  }, [roomId, backHandlerActive, isLeaving, userId, clearBattleState]);
 
+  // BATTLE RESULTS NAVIGATION (SIMPLIFIED)
   useEffect(() => {
-    if (roomData?.status === "finished") {
+    if (roomData?.status === "finished" && !isLeaving) {
+      setIsLeaving(true);
+
       const navigateToResults = async () => {
         try {
           const playerArray = await battleManager.endBattle(roomId as string);
 
-          // Clear battle state before navigating
-          await clearBattleState();
+          // Clear battle state before navigating (NON-BLOCKING)
+          clearBattleState().catch(console.error);
 
+          // NAVIGATE IMMEDIATELY
           router.replace({
             pathname: "/user/battle-results",
             params: {
@@ -563,13 +570,14 @@ export default function BattleScreen() {
           });
         } catch (error) {
           console.error("Navigate to results error:", error);
-          await clearBattleState();
+          clearBattleState().catch(console.error);
           router.replace("/user/multiplayer-mode-selection");
         }
       };
+
       navigateToResults();
     }
-  }, [roomData?.status, userId, roomId, clearBattleState]);
+  }, [roomData?.status, userId, roomId, clearBattleState, isLeaving]);
 
   const otherWinnerAnnouncedRef = useRef(false);
   const inputRef = useRef<TextInput>(null);
@@ -655,7 +663,7 @@ export default function BattleScreen() {
           .catch(() => {});
       }
 
-      // Clear battle state on unmount
+      // Clear battle state on unmount (NON-BLOCKING)
       clearBattleState().catch(console.error);
     };
   }, [roomId, cleanupTimers, clearBattleState, isLeaving]);
@@ -677,8 +685,8 @@ export default function BattleScreen() {
           ? await battleManager.leaveDuringBattle(roomId as string)
           : await battleManager.leaveRoom(roomId as string);
 
-      // Clear battle state before navigation
-      await clearBattleState();
+      // Clear battle state before navigation (NON-BLOCKING)
+      clearBattleState().catch(console.error);
 
       router.replace({
         pathname:
@@ -699,7 +707,7 @@ export default function BattleScreen() {
       });
     } catch (e) {
       console.error("[confirmLeave] error", e);
-      await clearBattleState();
+      clearBattleState().catch(console.error);
       router.replace("/user/multiplayer-mode-selection");
     }
   }, [isLeaving, roomId, roomData, userId, cleanupTimers, clearBattleState]);
@@ -767,7 +775,7 @@ export default function BattleScreen() {
       // Play appropriate sound
       if (isFirstCorrect) {
         await SoundManager.playSound("rightAnswerSoundEffect");
-      } 
+      }
 
       const pointsEarned = isFirstCorrect ? 1 : 0;
 
@@ -873,16 +881,17 @@ export default function BattleScreen() {
     );
   }
 
-  if (!roomData) {
+  // IMPROVED LOADING CONDITION
+  if (!roomData && !networkError) {
     return (
       <View className="flex-1 bg-primary justify-center items-center">
         <ActivityIndicator size="large" color="white" />
-        <Text className="text-white mt-4">Connecting to battle...</Text>
+        <Text className="text-white mt-4">Loading battle...</Text>
       </View>
     );
   }
 
-  if (roomData.status !== "playing") {
+  if (roomData && roomData.status !== "playing") {
     return (
       <View className="flex-1 bg-primary justify-center items-center">
         <ActivityIndicator size="large" color="white" />
@@ -893,7 +902,7 @@ export default function BattleScreen() {
     );
   }
 
-  if (!roomData.questions || roomData.questions.length === 0) {
+  if (!roomData?.questions || roomData.questions.length === 0) {
     return (
       <View className="flex-1 bg-primary justify-center items-center">
         <ActivityIndicator size="large" color="white" />
