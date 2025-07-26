@@ -7,7 +7,6 @@ import { updateUserStreak } from './streakManager';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // === EXTERNAL UTILITY FUNCTIONS ===
-
 const FIXED_POINT_PER_QUESTINON = 4;
 
 // Firebase reference utilities
@@ -78,16 +77,79 @@ const createPlayerResetUpdates = (players) => {
 // Question generation utilities
 const shuffleArray = (array) => [...array].sort(() => 0.5 - Math.random());
 
+// IMPROVED: Enhanced fallback questions with variety and uniqueness
 const generateFallbackQuestions = (count = 25) => {
     console.log(`[BattleManager] Generating ${count} fallback questions`);
-    return Array(count).fill().map((_, i) => ({
-        question: `${i + 1} + ${i + 5}`,
-        correctAnswer: `${(i + 1) + (i + 5)}`,
-        timeLimit: 15,
-        points: FIXED_POINT_PER_QUESTINON,
-        explanation: `Add ${i + 1} and ${i + 5} together`,
-        level: Math.floor(i / 5) + 1
-    }));
+
+    const operations = [
+        { op: '+', range: [1, 50] },
+        { op: '-', range: [1, 30] },
+        { op: '*', range: [1, 12] },
+        { op: '÷', range: [1, 10] }
+    ];
+
+    const questions = [];
+    const usedCombinations = new Set();
+
+    for (let i = 0; i < count; i++) {
+        let question, answer, questionText, signature;
+        let attempts = 0;
+
+        do {
+            const operation = operations[Math.floor(Math.random() * operations.length)];
+            let num1, num2;
+
+            switch (operation.op) {
+                case '+':
+                    num1 = Math.floor(Math.random() * operation.range[1]) + operation.range[0];
+                    num2 = Math.floor(Math.random() * operation.range[1]) + operation.range[0];
+                    answer = num1 + num2;
+                    questionText = `${num1} + ${num2}`;
+                    signature = `add_${num1}_${num2}`;
+                    break;
+
+                case '-':
+                    num1 = Math.floor(Math.random() * operation.range[1]) + operation.range[0] + 10;
+                    num2 = Math.floor(Math.random() * Math.min(num1, operation.range[1])) + operation.range[0];
+                    answer = num1 - num2;
+                    questionText = `${num1} - ${num2}`;
+                    signature = `sub_${num1}_${num2}`;
+                    break;
+
+                case '*':
+                    num1 = Math.floor(Math.random() * operation.range[1]) + operation.range[0];
+                    num2 = Math.floor(Math.random() * operation.range[1]) + operation.range[0];
+                    answer = num1 * num2;
+                    questionText = `${num1} × ${num2}`;
+                    signature = `mul_${num1}_${num2}`;
+                    break;
+
+                case '÷':
+                    num2 = Math.floor(Math.random() * operation.range[1]) + operation.range[0];
+                    answer = Math.floor(Math.random() * operation.range[1]) + operation.range[0];
+                    num1 = num2 * answer;
+                    questionText = `${num1} ÷ ${num2}`;
+                    signature = `div_${num1}_${num2}`;
+                    break;
+            }
+
+            attempts++;
+        } while (usedCombinations.has(signature) && attempts < 10);
+
+        usedCombinations.add(signature);
+
+        questions.push({
+            question: questionText,
+            correctAnswer: answer.toString(),
+            timeLimit: 15,
+            points: FIXED_POINT_PER_QUESTINON,
+            explanation: `Calculate ${questionText}`,
+            level: Math.floor(i / 5) + 1,
+            signature
+        });
+    }
+
+    return questions;
 };
 
 const processQuizData = (quizzesData, startLevel, maxLevels) => {
@@ -168,12 +230,6 @@ const collectQuestionsFromLevels = (questionsByLevel, availableLevels) => {
         battleQuestions.push(...shuffled.slice(0, remainingNeeded));
     }
 
-    // Add fallback questions if still not enough
-    if (battleQuestions.length < TARGET_TOTAL) {
-        const fallbackNeeded = TARGET_TOTAL - battleQuestions.length;
-        battleQuestions.push(...generateFallbackQuestions(fallbackNeeded));
-    }
-
     return battleQuestions;
 };
 
@@ -182,6 +238,7 @@ const validateRoomForJoining = (roomData, userId) => {
     if (roomData.status === "finished") {
         throw new Error("Room has ended");
     }
+
     if (roomData.status === "playing") {
         throw new Error("Game already in progress");
     }
@@ -200,6 +257,7 @@ const validateBattleStart = (room, userId) => {
         console.warn("Only host can start battle");
         return false;
     }
+
     if (room.status === "playing") {
         console.warn("Battle already started");
         return false;
@@ -314,8 +372,15 @@ export class BattleManager {
         this.activeRooms = new Set();
         this.userPresenceRef = null;
         this.isInitialized = false;
-        this.setupUserPresence();
 
+        // IMPROVED: Question caching system
+        this.questionCache = new Map();
+        this.usedQuestionSignatures = new Set();
+        this.lastCacheTime = 0;
+        this.CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+        this.setupUserPresence();
+        // Pre-generate questions in background (non-blocking)
         this.preGenerateQuestions().catch(console.error);
     }
 
@@ -353,6 +418,7 @@ export class BattleManager {
                 online: true,
                 lastSeen: serverTimestamp()
             });
+
             onDisconnect(this.userPresenceRef).remove();
         } catch (error) {
             console.error("Failed to setup user presence:", error);
@@ -367,7 +433,6 @@ export class BattleManager {
             }
 
             const { data: roomData, exists } = await safeGet(createRoomRef(roomId));
-
             if (!exists || !roomData) {
                 return { exists: false, error: "Room not found" };
             }
@@ -399,7 +464,6 @@ export class BattleManager {
             this.removeRoomListener(roomId);
 
             const { data: roomData, exists } = await safeGet(createRoomRef(roomId));
-
             if (!exists) {
                 logOperation("leaveRoom", roomId, "Room doesn't exist");
                 return;
@@ -418,7 +482,6 @@ export class BattleManager {
 
             // Check if room should be cleaned up (no players left)
             const remainingPlayers = Object.keys(roomData.players || {}).filter(id => id !== userId);
-
             if (remainingPlayers.length === 0) {
                 // No players left, clean up room
                 await this.cleanupRoom(roomId, "no_players_left");
@@ -455,58 +518,132 @@ export class BattleManager {
         }
     }
 
+    // IMPROVED: Optimized question generation with caching and exact 25 questions
     async generateQuestions(startLevel = 1, maxLevels = 10) {
-        logOperation("generateQuestions", null, "Starting question generation");
+        logOperation("generateQuestions", null, "Starting optimized question generation");
 
-        const { data: quizzesData, exists } = await safeGet(createQuizzesRef());
+        // Check cache first
+        const now = Date.now();
+        const cacheKey = `${startLevel}_${maxLevels}`;
 
-        if (!exists) {
-            logOperation("generateQuestions", null, "No quizzes found, using fallback");
-            return {
-                questions: generateFallbackQuestions(25),
+        if (this.questionCache.has(cacheKey) && (now - this.lastCacheTime) < this.CACHE_DURATION) {
+            logOperation("generateQuestions", null, "Using cached questions");
+            const cached = this.questionCache.get(cacheKey);
+
+            // Return fresh subset from cache to avoid repetition
+            const availableQuestions = cached.questions.filter(q =>
+                !this.usedQuestionSignatures.has(q.signature || `${q.question}_${q.correctAnswer}`)
+            );
+
+            if (availableQuestions.length >= 25) {
+                const selected = shuffleArray(availableQuestions).slice(0, 25);
+                selected.forEach(q => {
+                    const signature = q.signature || `${q.question}_${q.correctAnswer}`;
+                    this.usedQuestionSignatures.add(signature);
+                });
+
+                // Clean up used signatures if too many
+                if (this.usedQuestionSignatures.size > 100) {
+                    const signatures = Array.from(this.usedQuestionSignatures);
+                    this.usedQuestionSignatures = new Set(signatures.slice(-50));
+                }
+
+                return {
+                    questions: selected,
+                    levelInfo: cached.levelInfo,
+                    totalLevels: cached.totalLevels
+                };
+            }
+        }
+
+        try {
+            const { data: quizzesData, exists } = await safeGet(createQuizzesRef());
+
+            if (!exists || !quizzesData) {
+                logOperation("generateQuestions", null, "No DB questions found, using fallback");
+                const fallbackQuestions = generateFallbackQuestions(25);
+
+                const result = {
+                    questions: fallbackQuestions,
+                    levelInfo: [],
+                    totalLevels: 0
+                };
+
+                // Cache fallback questions
+                this.questionCache.set(cacheKey, result);
+                this.lastCacheTime = now;
+
+                return result;
+            }
+
+            const { questionsByLevel, levelSettings } = processQuizData(quizzesData, startLevel, maxLevels);
+            const availableLevels = Object.keys(questionsByLevel).map(Number).sort((a, b) => a - b);
+
+            if (availableLevels.length === 0) {
+                logOperation("generateQuestions", null, "No valid levels found, using fallback");
+                const fallbackQuestions = generateFallbackQuestions(25);
+
+                const result = {
+                    questions: fallbackQuestions,
+                    levelInfo: [],
+                    totalLevels: 0
+                };
+
+                this.questionCache.set(cacheKey, result);
+                this.lastCacheTime = now;
+
+                return result;
+            }
+
+            // Collect exactly 25 questions from DB
+            const battleQuestions = collectQuestionsFromLevels(questionsByLevel, availableLevels);
+            let finalQuestions = shuffleArray(battleQuestions).slice(0, 25);
+
+            // ONLY use fallback if we don't have 25 questions from DB
+            if (finalQuestions.length < 25) {
+                logOperation("generateQuestions", null, `Only ${finalQuestions.length} DB questions found, adding ${25 - finalQuestions.length} fallback questions`);
+                const fallbackNeeded = 25 - finalQuestions.length;
+                const fallbackQuestions = generateFallbackQuestions(fallbackNeeded);
+                finalQuestions = finalQuestions.concat(fallbackQuestions);
+            }
+
+            // Ensure exactly 25 questions
+            finalQuestions = finalQuestions.slice(0, 25);
+
+            const result = {
+                questions: finalQuestions,
+                levelInfo: availableLevels.map(level => ({
+                    level: level,
+                    questionCount: questionsByLevel[level]?.length || 0,
+                    pointsPerQuestion: FIXED_POINT_PER_QUESTINON,
+                    usedInBattle: finalQuestions.filter(q => q.level === level).length
+                })),
+                totalLevels: availableLevels.length
+            };
+
+            // Cache the result
+            this.questionCache.set(cacheKey, result);
+            this.lastCacheTime = now;
+
+            logOperation("generateQuestions", null, `Generated exactly ${finalQuestions.length} questions (${finalQuestions.filter(q => !q.signature?.startsWith('fallback')).length} from DB, ${finalQuestions.filter(q => q.signature?.startsWith('fallback')).length} fallback)`);
+            return result;
+
+        } catch (error) {
+            console.error("Error generating questions from DB:", error);
+            logOperation("generateQuestions", null, "DB error, using fallback questions");
+
+            const fallbackQuestions = generateFallbackQuestions(25);
+            const result = {
+                questions: fallbackQuestions,
                 levelInfo: [],
                 totalLevels: 0
             };
+
+            this.questionCache.set(cacheKey, result);
+            this.lastCacheTime = now;
+
+            return result;
         }
-
-        const { questionsByLevel, levelSettings } = processQuizData(quizzesData, startLevel, maxLevels);
-        const availableLevels = Object.keys(questionsByLevel).map(Number).sort((a, b) => a - b);
-
-        if (availableLevels.length === 0) {
-            return {
-                questions: generateFallbackQuestions(25),
-                levelInfo: [],
-                totalLevels: 0
-            };
-        }
-
-        const battleQuestions = collectQuestionsFromLevels(questionsByLevel, availableLevels);
-        const finalQuestions = shuffleArray(battleQuestions).slice(0, 25);
-
-        while (finalQuestions.length < 25) {
-            const fallbackQuestion = {
-                question: `${finalQuestions.length + 1} × 2`,
-                correctAnswer: `${(finalQuestions.length + 1) * 2}`,
-                timeLimit: 15,
-                points: FIXED_POINT_PER_QUESTINON,
-                explanation: `Multiply ${finalQuestions.length + 1} by 2`,
-                level: 1
-            };
-            finalQuestions.push(fallbackQuestion);
-        }
-
-        logOperation("generateQuestions", null, `Generated ${finalQuestions.length} questions`);
-
-        return {
-            questions: finalQuestions,
-            levelInfo: availableLevels.map(level => ({
-                level: level,
-                questionCount: questionsByLevel[level]?.length || 0,
-                pointsPerQuestion: FIXED_POINT_PER_QUESTINON,
-                usedInBattle: finalQuestions.filter(q => q.level === level).length
-            })),
-            totalLevels: availableLevels.length
-        };
     }
 
     async createRoom(roomName, maxPlayers = 4) {
@@ -547,7 +684,6 @@ export class BattleManager {
         }
     }
 
-
     async leaveDuringBattle(roomId) {
         try {
             const user = await this.waitForAuth();
@@ -556,7 +692,6 @@ export class BattleManager {
             logOperation("leaveDuringBattle", roomId, `Player ${userId} leaving during battle`);
 
             const { data: roomData, exists } = await safeGet(createRoomRef(roomId));
-
             if (!exists || !roomData) {
                 return [];
             }
@@ -577,6 +712,7 @@ export class BattleManager {
             // End battle if only one player is left
             if (remainingPlayers.length < 2) {
                 logOperation("leaveDuringBattle", roomId, "Ending battle due to insufficient players");
+
                 const playerArray = calculatePlayerScores(roomData.players);
 
                 // Update room to finished state
@@ -594,6 +730,7 @@ export class BattleManager {
             // If the host leaves, end the battle for everyone
             if (isHostLeaving) {
                 logOperation("leaveDuringBattle", roomId, "Host left during battle, ending for all players");
+
                 const playerArray = calculatePlayerScores(roomData.players);
 
                 await update(createRoomRef(roomId), {
@@ -636,14 +773,17 @@ export class BattleManager {
 
             if (foundRoom) {
                 logOperation("findRandomMatch", foundRoom.roomId, "Joining existing room");
+
                 const userData = await this.getUserData(userId);
                 const playerData = createPlayerData({ ...userData, userId }, false, true);
                 playerData.ready = true;
 
                 await update(createPlayerRef(foundRoom.roomId, userId), playerData);
+
                 return { roomId: foundRoom.roomId, isHost: false };
             } else {
                 logOperation("findRandomMatch", null, "Creating new matchmaking room");
+
                 const userData = await this.getUserData(userId);
                 const roomData = createMatchmakingRoomData(userId, userData, maxPlayers);
 
@@ -706,7 +846,6 @@ export class BattleManager {
 
     async generateUniqueRoomCode() {
         const maxAttempts = 10;
-
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
             const code = generateRoomCode();
             const { exists } = await safeGet(query(
@@ -723,10 +862,16 @@ export class BattleManager {
         throw new Error("Failed to generate unique room code");
     }
 
+    // IMPROVED: Non-blocking pre-generation
     async preGenerateQuestions() {
         try {
+            logOperation("preGenerateQuestions", null, "Pre-generating questions in background");
             const questions = await this.generateQuestions(1, 10);
-            await AsyncStorage.setItem('preGeneratedQuestions', JSON.stringify(questions));
+
+            // Store in AsyncStorage as backup
+            AsyncStorage.setItem('preGeneratedQuestions', JSON.stringify(questions)).catch(console.error);
+
+            logOperation("preGenerateQuestions", null, "Questions pre-generated successfully");
             return questions;
         } catch (error) {
             console.error('Pre-generation failed:', error);
@@ -734,6 +879,7 @@ export class BattleManager {
         }
     }
 
+    // IMPROVED: Fast battle start with optimized question loading
     async startBattle(roomId) {
         try {
             const user = await this.waitForAuth();
@@ -744,26 +890,63 @@ export class BattleManager {
             const { data: room, exists } = await safeGet(createRoomRef(roomId));
             if (!validateBattleStart(room, this.userId)) return;
 
-            logOperation("startBattle", roomId, "Using pre-generated questions...");
+            logOperation("startBattle", roomId, "Starting battle with optimized questions...");
 
-            // Try to get pre-generated questions first
+            // Try multiple sources for questions (fast fallback)
             let questionData;
+
             try {
-                const cached = await AsyncStorage.getItem('preGeneratedQuestions');
-                questionData = cached ? JSON.parse(cached) : await this.generateQuestions(1, 10);
-            } catch {
+                // 1. Try cache first (fastest)
+                const cacheKey = `1_10`;
+                if (this.questionCache.has(cacheKey)) {
+                    logOperation("startBattle", roomId, "Using cached questions");
+                    questionData = this.questionCache.get(cacheKey);
+                } else {
+                    // 2. Try AsyncStorage backup
+                    const cached = await AsyncStorage.getItem('preGeneratedQuestions');
+                    if (cached) {
+                        logOperation("startBattle", roomId, "Using pre-generated questions from storage");
+                        questionData = JSON.parse(cached);
+                    } else {
+                        // 3. Generate fresh (with timeout protection)
+                        logOperation("startBattle", roomId, "Generating fresh questions");
+                        const generatePromise = this.generateQuestions(1, 10);
+                        const timeoutPromise = new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error("Generation timeout")), 3000)
+                        );
+
+                        try {
+                            questionData = await Promise.race([generatePromise, timeoutPromise]);
+                        } catch (timeoutError) {
+                            logOperation("startBattle", roomId, "Question generation timed out, using fallback");
+                            questionData = { questions: generateFallbackQuestions(25) };
+                        }
+                    }
+                }
+            } catch (error) {
+                logOperation("startBattle", roomId, "All question sources failed, using fallback");
                 questionData = { questions: generateFallbackQuestions(25) };
             }
 
-            if (!questionData.questions?.length) {
-                questionData = { questions: generateFallbackQuestions(25) };
+            // Ensure we have exactly 25 questions
+            if (!questionData.questions || questionData.questions.length !== 25) {
+                logOperation("startBattle", roomId, `Adjusting question count from ${questionData.questions?.length || 0} to 25`);
+                if (!questionData.questions) {
+                    questionData = { questions: generateFallbackQuestions(25) };
+                } else if (questionData.questions.length < 25) {
+                    const needed = 25 - questionData.questions.length;
+                    questionData.questions = [...questionData.questions, ...generateFallbackQuestions(needed)];
+                } else {
+                    questionData.questions = questionData.questions.slice(0, 25);
+                }
+                questionData.questions = shuffleArray(questionData.questions);
             }
 
             const now = Date.now();
             const playerUpdates = createBattlePlayerUpdates(room.players);
             const battleData = createBattleInitData(questionData, now);
 
-            // Single atomic update instead of multiple
+            // Single atomic update for speed
             await update(createRoomRef(roomId), {
                 ...battleData,
                 ...playerUpdates,
@@ -774,18 +957,16 @@ export class BattleManager {
                 }, {})
             });
 
-            logOperation("startBattle", roomId, "Battle started successfully");
+            logOperation("startBattle", roomId, `Battle started successfully with ${questionData.questions.length} questions`);
         } catch (error) {
             console.error("[startBattle] Error:", error.message);
             throw error;
         }
     }
 
-
     async moveToNextQuestion(roomId) {
         try {
             const { data: roomData, exists } = await safeGet(createRoomRef(roomId));
-
             if (!exists || !roomData) return;
 
             const nextIndex = roomData.currentQuestion + 1;
@@ -798,6 +979,7 @@ export class BattleManager {
             // CRITICAL FIX: Ensure all 25 questions are played
             const totalQuestions = 25;
             const hasMoreQuestions = nextIndex < totalQuestions && nextIndex < questionsArray.length;
+
             const playerUpdates = createPlayerResetUpdates(roomData.players);
 
             if (hasMoreQuestions) {
@@ -831,7 +1013,6 @@ export class BattleManager {
             logOperation("endBattle", roomId, "Ending battle");
 
             const { data: roomData, exists } = await safeGet(createRoomRef(roomId));
-
             if (!exists || !roomData?.players) {
                 if (roomData) {
                     await update(createRoomRef(roomId), {
@@ -993,6 +1174,12 @@ export class BattleManager {
             this.listeners.clear();
             this.activeRooms.clear();
 
+            // Clear question cache periodically but keep some for performance
+            if (this.usedQuestionSignatures.size > 100) {
+                const signatures = Array.from(this.usedQuestionSignatures);
+                this.usedQuestionSignatures = new Set(signatures.slice(-50));
+            }
+
             console.log("Battle state reset completed");
         } catch (error) {
             console.error("Battle state reset error:", error);
@@ -1023,7 +1210,6 @@ export class BattleManager {
 
             const { data: userData } = await safeGet(createUserRef(userId));
             const currentUserData = userData || {};
-
             const currentTotalPoints = currentUserData.totalPoints || 0;
             const newTotalPoints = currentTotalPoints + scoreToAdd;
 
@@ -1040,7 +1226,6 @@ export class BattleManager {
             if (!streakResult.alreadyPlayedToday) {
                 await AsyncStorage.setItem("showStreakPopup", "true");
             }
-
         } catch (error) {
             console.error("Update user score error:", error);
         }
@@ -1067,7 +1252,6 @@ export class BattleManager {
         }
 
         this.removeRoomListener(roomId);
-
         const roomRef = createRoomRef(roomId);
 
         const handler = (snapshot) => {
@@ -1087,7 +1271,6 @@ export class BattleManager {
     async endBattleInsufficientPlayers(roomId) {
         try {
             const { data: roomData, exists } = await safeGet(createRoomRef(roomId));
-
             if (!exists || roomData.status === "finished") return;
 
             const playerArray = calculatePlayerScores(roomData.players);
@@ -1117,7 +1300,6 @@ export class BattleManager {
         // Check for insufficient players during battle
         if (roomData.status === "playing" && roomData.players) {
             const connectedPlayers = Object.values(roomData.players).filter(p => p.connected);
-
             if (connectedPlayers.length < 2 && roomData.gameEndReason !== "insufficient_players") {
                 // Auto-end battle due to insufficient players
                 this.endBattleInsufficientPlayers(roomData.roomId || Object.keys(this.listeners)[0])
@@ -1136,18 +1318,16 @@ export class BattleManager {
             } catch (error) {
                 console.warn("Error removing listener:", error);
             }
-            this.listeners.delete(roomId);
         }
+        this.listeners.delete(roomId);
     }
 
     async cleanupRoom(roomId, reason = "manual") {
         try {
             logOperation("cleanupRoom", roomId, `Cleaning up - Reason: ${reason}`);
-
             await remove(createRoomRef(roomId));
             this.removeRoomListener(roomId);
             this.activeRooms.delete(roomId);
-
         } catch (error) {
             console.error("[cleanupRoom] Error:", error);
         }
@@ -1171,14 +1351,15 @@ export class BattleManager {
             const { data: roomData } = await safeGet(createRoomRef(roomId));
             if (roomData &&
                 roomData.status === "waiting" &&
-                connected === true &&            // we’re coming online
-                roomData.hostId !== userId &&    // we are NOT already host
+                connected === true && // we're coming online
+                roomData.hostId !== userId && // we are NOT already host
                 roomData.players?.[roomData.hostId]?.connected === false) {
 
                 await update(createRoomRef(roomId), {
-                    hostId: userId,              // make this player the new host
+                    hostId: userId, // make this player the new host
                     [`players/${userId}/isHost`]: true
                 });
+
                 console.log(`[updatePlayerConnection] Promoted ${userId} to host of ${roomId}`);
             }
 
@@ -1193,15 +1374,54 @@ export class BattleManager {
         }
     }
 
+    // IMPROVED: Enhanced cleanup with cache management
     cleanup() {
+        console.log("Cleaning up battle manager...");
+
+        // Clear all Firebase listeners
         this.listeners.forEach((listener, roomId) => {
-            off(createRoomRef(roomId), listener.handler);
+            try {
+                off(createRoomRef(roomId), listener.handler);
+            } catch (error) {
+                console.error(`Error removing listener for ${roomId}:`, error);
+            }
         });
         this.listeners.clear();
 
+        // Clear active rooms
+        this.activeRooms.clear();
+
+        // Clean up presence
         if (this.userPresenceRef) {
-            remove(this.userPresenceRef).catch(() => { });
+            try {
+                onDisconnect(this.userPresenceRef).cancel();
+                remove(this.userPresenceRef).catch(console.error);
+            } catch (error) {
+                console.error("Error cleaning presence:", error);
+            }
+            this.userPresenceRef = null;
         }
+
+        // Partial cache cleanup (keep some for performance)
+        if (this.questionCache.size > 5) {
+            // Keep only the most recent cache entries
+            const entries = Array.from(this.questionCache.entries());
+            this.questionCache.clear();
+            entries.slice(-2).forEach(([key, value]) => {
+                this.questionCache.set(key, value);
+            });
+        }
+
+        // Clean up used question signatures but keep recent ones
+        if (this.usedQuestionSignatures.size > 50) {
+            const signatures = Array.from(this.usedQuestionSignatures);
+            this.usedQuestionSignatures = new Set(signatures.slice(-25));
+        }
+
+        this.userId = null;
+        this.isInitialized = false;
+
+        console.log("Battle manager cleanup completed");
     }
 }
 
