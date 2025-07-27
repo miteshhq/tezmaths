@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { onValue, ref } from "firebase/database";
+import { onValue, ref, off } from "firebase/database";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -172,6 +172,8 @@ export default function BattleScreen() {
 
   const [showLeaveModal, setShowLeaveModal] = useState(false);
 
+  const [serverOffset, setServerOffset] = useState(0);
+
   // Track if this is a fresh battle start
   const battleInitialized = useRef(false);
   const currentRoomId = useRef(roomId);
@@ -226,6 +228,17 @@ export default function BattleScreen() {
     if (currentRoomId.current) {
       battleManager.removeRoomListener(currentRoomId.current as string);
     }
+  }, []);
+
+  useEffect(() => {
+    const offsetRef = ref(database, ".info/serverTimeOffset");
+    const unsubscribe = onValue(offsetRef, (snapshot) => {
+      setServerOffset(snapshot.val() || 0);
+    });
+
+    return () => {
+      off(offsetRef, "value", unsubscribe);
+    };
   }, []);
 
   // DETECT ROOM CHANGE AND CLEAR STATE
@@ -600,6 +613,8 @@ export default function BattleScreen() {
   }, [roomData?.players, userId]);
 
   useEffect(() => {
+    if (serverOffset === 0) return;
+
     if (
       roomData &&
       roomData.status === "playing" &&
@@ -613,8 +628,9 @@ export default function BattleScreen() {
       const timeLimit = roomData.questionTimeLimit || 15;
 
       const updateTimer = () => {
-        const now = Date.now();
-        const elapsed = Math.floor((now - startTime) / 1000);
+        // Use server time instead of local device time
+        const serverNow = Date.now() + serverOffset;
+        const elapsed = Math.floor((serverNow - startTime) / 1000);
         const remaining = Math.max(0, timeLimit - elapsed);
         setTimeLeft(remaining);
 
