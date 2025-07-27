@@ -57,6 +57,7 @@ export default function ProfileScreen() {
     username: "Unavailable",
     email: "Unavailable",
     referrals: 0,
+    referralsSent: 0,
     points: 0,
     totalPoints: 0,
     highScore: 0,
@@ -152,6 +153,7 @@ export default function ProfileScreen() {
             username: data.username || "Unavailable",
             email: data.email || "Unavailable",
             referrals: referrals,
+            referralsSent: data.referralsSent || 0,
             points: data.points ?? 0,
             totalPoints: totalPoints,
             highScore: data.highScore ?? 0,
@@ -209,6 +211,7 @@ export default function ProfileScreen() {
           username: data.username || "Unavailable",
           email: data.email || "Unavailable",
           referrals: referrals,
+          referralsSent: data.referralsSent || 0,
           points: data.points ?? 0,
           totalPoints: totalPoints,
           highScore: data.highScore ?? 0,
@@ -244,7 +247,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleCopyShareMessage = async () => {
+  const handleCopyMessage = async () => {
     try {
       const shareMessage = `${shareConfig.additionalText}
   
@@ -277,6 +280,24 @@ export default function ProfileScreen() {
   ${shareConfig.downloadText}
   
   ${shareConfig.hashtags}`;
+
+      const userId = auth.currentUser?.uid;
+
+      if (userId) {
+        const userRef = ref(database, `users/${userId}`);
+        const snapshot = await get(userRef);
+
+        let prevReferralsSentCount = 0;
+
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          prevReferralsSentCount = data.referralsSent ? data.referralsSent : 0;
+        }
+
+        await update(userRef, {
+          referralsSent: prevReferralsSentCount + 1,
+        });
+      }
 
       await Share.share({
         message: shareMessage,
@@ -487,7 +508,7 @@ export default function ProfileScreen() {
                   <Text className="text-white font-semibold">
                     {userData.username.toUpperCase()}
                   </Text>
-                  <TouchableOpacity onPress={handleCopyShareMessage}>
+                  <TouchableOpacity onPress={handleCopyMessage}>
                     <View className="bg-primary px-3 py-1 rounded">
                       <Text className="text-white text-md font-semibold">
                         Copy
@@ -501,7 +522,7 @@ export default function ProfileScreen() {
               <View className="flex-row justify-between mb-4">
                 <View className="items-center">
                   <Text className="text-white text-xl font-bold">
-                    {userData.referrals}
+                    {userData.referralsSent}
                   </Text>
                   <Text className="text-gray-400 text-sm">Sent</Text>
                 </View>
@@ -535,3 +556,5 @@ export default function ProfileScreen() {
     </View>
   );
 }
+
+// we need to properly calcualte and storethe sent count in the db, and use that properly instead of showing hte successful referrals count ! and check for the achivements file, we need to caulcate the level thing in that file same as the profile file and use that for all kind of calculations. not the currnet level thing.

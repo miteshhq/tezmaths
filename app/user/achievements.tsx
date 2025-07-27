@@ -60,12 +60,19 @@ export default function Achievements() {
 
         // Calculate progress percentages
         const progress: any = {};
+
         ACHIEVEMENTS.forEach((achievement) => {
           if (achievement.type === "level") {
-            const current = data?.currentLevel || 0;
+            // FIX: Use completedLevelsCount instead of currentLevel
+            const completedLevelsCount = data.completedLevels
+              ? Object.values(data.completedLevels).filter(
+                  (level) => level === true
+                ).length
+              : 0;
+
             const progressPercent = Math.min(
               100,
-              (current / achievement.value) * 100
+              (completedLevelsCount / achievement.value) * 100
             );
             progress[achievement.id] = progressPercent;
           } else if (achievement.type === "score") {
@@ -120,15 +127,20 @@ export default function Achievements() {
           </Text>
           <View className="flex-row justify-between">
             <View className="items-center">
-              <Text className="text-sm text-gray-500">Level</Text>
+              <Text className="text-sm text-gray-500">Completed Levels</Text>
               <Text className="text-xl font-bold text-primary">
-                {userData?.currentLevel || 1}
+                {/* FIX: Use completedLevelsCount calculation */}
+                {userData?.completedLevels
+                  ? Object.values(userData.completedLevels).filter(
+                      (level) => level === true
+                    ).length
+                  : 0}
               </Text>
             </View>
             <View className="items-center">
-              <Text className="text-sm text-gray-500">Score</Text>
+              <Text className="text-sm text-gray-500">Total Points</Text>
               <Text className="text-xl font-bold text-primary">
-                {userData.totalPoints % 1 !== 0
+                {userData?.totalPoints % 1 !== 0
                   ? Math.round(userData.totalPoints * 10) / 10
                   : userData.totalPoints || 0}
               </Text>
@@ -150,7 +162,14 @@ export default function Achievements() {
             let progress = 0;
 
             if (achievement.type === "level") {
-              isCompleted = (userData?.currentLevel || 0) >= achievement.value;
+              // FIX: Use completedLevelsCount calculation
+              const completedLevelsCount = userData?.completedLevels
+                ? Object.values(userData.completedLevels).filter(
+                    (level) => level === true
+                  ).length
+                : 0;
+
+              isCompleted = completedLevelsCount >= achievement.value;
               progress = progressData[achievement.id] || 0;
             } else if (achievement.type === "score") {
               isCompleted = (userData?.totalPoints || 0) >= achievement.value;
