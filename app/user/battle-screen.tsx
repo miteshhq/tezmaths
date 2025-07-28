@@ -198,25 +198,35 @@ export default function BattleScreen() {
   }, []);
 
   const cleanupTimers = useCallback(() => {
+    // Clear all timer references immediately
     Object.values(timerManager.current).forEach((timer) => {
       if (timer) {
         clearInterval(timer);
         clearTimeout(timer);
       }
     });
+
+    // Reset timer manager
     timerManager.current = {
       mainTimer: null,
       transitionTimer: null,
       questionTimer: null,
     };
 
+    // Clear individual timer refs
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
+
     if (submitTimeoutRef.current) {
       clearTimeout(submitTimeoutRef.current);
       submitTimeoutRef.current = null;
+    }
+
+    // Clear any remaining timeouts that might be running
+    for (let i = 1; i < 999; i++) {
+      clearTimeout(i);
     }
   }, []);
 
@@ -290,8 +300,19 @@ export default function BattleScreen() {
     }
   }, [cleanupTimers]);
 
+  const safeSetState = useCallback((setter, value) => {
+    if (isMounted.current) {
+      setter(value);
+    }
+  }, []);
+
   const handleTimeExpiry = useCallback(() => {
+    if (!isMounted.current) return;
+
     if (roomData?.hostId === userId && !roomData.questionTransition) {
+      safeSetState(setShowBetterLuckMessage, true);
+      safeSetState(setBetterLuckCountdown, 1);
+
       // Show "better luck" message first
       setShowBetterLuckMessage(true);
       setBetterLuckCountdown(1);
@@ -317,7 +338,13 @@ export default function BattleScreen() {
       // Cleanup interval reference
       timerManager.current.transitionTimer = countdownInterval;
     }
-  }, [roomData?.hostId, roomData?.questionTransition, userId, roomId]);
+  }, [
+    roomData?.hostId,
+    roomData?.questionTransition,
+    userId,
+    roomId,
+    safeSetState,
+  ]);
 
   useEffect(() => {
     if (roomId !== lastRoomId.current) {
@@ -617,6 +644,8 @@ export default function BattleScreen() {
   const inputRef = useRef<TextInput>(null);
 
   const navigationInProgress = useRef(false);
+  const leaveOperationInProgress = useRef(false);
+  const isMounted = useRef(true);
 
   useEffect(() => {
     if (!roomData?.players) return;
@@ -691,10 +720,10 @@ export default function BattleScreen() {
     }
   }, [roomData?.currentQuestion, roomData?.questionTransition]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      navigationInProgress.current = true; // Prevent any new navigation
+      isMounted.current = false;
+      navigationInProgress.current = true;
       cleanupTimers();
 
       if (roomId && !isLeaving) {
@@ -708,31 +737,57 @@ export default function BattleScreen() {
         }
       }
 
-      // FIXED: Non-blocking cleanup
       clearBattleState().catch(console.error);
     };
   }, [roomId, cleanupTimers, clearBattleState, isLeaving]);
 
+  const handleLeavePress = useCallback(() => {
+    try {
+      if (
+        !isLeaving &&
+        !showLeaveModal &&
+        !navigationInProgress.current &&
+        !leaveOperationInProgress.current &&
+        !isProcessing
+      ) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setShowLeaveModal(true);
+      }
+    } catch (error) {
+      console.error("Leave button error:", error);
+      // Emergency fallback
+      router.replace("/user/multiplayer-mode-selection");
+    }
+  }, [isLeaving, showLeaveModal]);
+
   const confirmLeave = useCallback(async () => {
-    if (isLeaving || navigationInProgress.current) {
-      console.log("Leave already in progress, ignoring");
+    // Prevent multiple concurrent leave operations
+    if (
+      leaveOperationInProgress.current ||
+      isLeaving ||
+      navigationInProgress.current
+    ) {
+      console.log("Leave operation already in progress, ignoring");
       return;
     }
 
-    console.log("Starting leave process");
-    navigationInProgress.current = true;
-    setIsLeaving(true);
-    setShowLeaveModal(false);
-
-    // Clear all timers immediately
-    cleanupTimers();
+    leaveOperationInProgress.current = true;
 
     try {
+      console.log("Starting leave process");
+      navigationInProgress.current = true;
+      setIsLeaving(true);
+      setShowLeaveModal(false);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      cleanupTimers();
+
       // Remove listener first to prevent conflicts
       if (roomId) {
         battleManager.removeRoomListener(roomId as string);
       }
 
+      // Rest of your leave logic...
       let results;
       const isHost = roomData?.hostId === userId;
       const totalPlayers = Object.keys(roomData?.players || {}).length;
@@ -740,11 +795,8 @@ export default function BattleScreen() {
       if (roomData?.status === "playing") {
         results = await battleManager.leaveDuringBattle(roomId as string);
 
-        // FIXED: Different navigation logic for non-host in 3+ player games
         if (!isHost && totalPlayers > 2) {
-          // Non-host leaving in 3+ player game - show their results and exit cleanly
           await clearBattleState();
-
           router.replace({
             pathname: "/user/battle-results",
             params: {
@@ -752,7 +804,7 @@ export default function BattleScreen() {
               players: JSON.stringify(results ?? []),
               totalQuestions: (roomData?.totalQuestions ?? 0).toString(),
               currentUserId: userId,
-              endReason: "you_left", // Special end reason for individual exit
+              endReason: "you_left",
             },
           });
           return;
@@ -761,10 +813,8 @@ export default function BattleScreen() {
         results = await battleManager.leaveRoom(roomId as string);
       }
 
-      // Clear state synchronously
       await clearBattleState();
 
-      // Standard navigation for other cases
       const targetPath =
         roomData?.status === "playing"
           ? "/user/battle-results"
@@ -786,17 +836,34 @@ export default function BattleScreen() {
       console.error("[confirmLeave] error", error);
       await clearBattleState();
       router.replace("/user/multiplayer-mode-selection");
+    } finally {
+      leaveOperationInProgress.current = false;
     }
   }, [isLeaving, roomId, roomData, userId, cleanupTimers, clearBattleState]);
 
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        // FIXED: Only show modal if not already leaving or showing modal
-        if (!isLeaving && !showLeaveModal && !navigationInProgress.current) {
+        // Only show modal if conditions are met
+        if (
+          !isLeaving &&
+          !showLeaveModal &&
+          !navigationInProgress.current &&
+          !leaveOperationInProgress.current &&
+          !isProcessing
+        ) {
+          // Add haptic feedback for better UX
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           setShowLeaveModal(true);
+          return true; // Prevent default back action
         }
-        return true;
+
+        // If already showing modal or leaving, just prevent default action
+        if (showLeaveModal || isLeaving) {
+          return true;
+        }
+
+        return false; // Allow default back action in other cases
       };
 
       const subscription = BackHandler.addEventListener(
@@ -805,7 +872,7 @@ export default function BattleScreen() {
       );
 
       return () => subscription.remove();
-    }, [isLeaving, showLeaveModal])
+    }, [isLeaving, showLeaveModal, leaveOperationInProgress])
   );
 
   const handleInputChange = async (text: string) => {
@@ -1054,7 +1121,12 @@ export default function BattleScreen() {
                   Battle Mode
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setShowLeaveModal(true)}>
+              <TouchableOpacity
+                onPress={handleLeavePress}
+                disabled={
+                  isLeaving || !roomData || leaveOperationInProgress.current
+                }
+              >
                 <View className="flex-row items-center bg-red-500 px-3 py-1 rounded-full">
                   <Text className="text-white text-sm font-black">Leave</Text>
                 </View>

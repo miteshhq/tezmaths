@@ -53,9 +53,9 @@ if __name__ == "__main__":
         'battle-screen.tsx',
         # 'multiplayer-mode-selection.tsx',
         'battleManager.js',
-        'battle-results.tsx',        
+        # 'battle-results.tsx',        
         # 'battlelistner.ts',
-        # 'LeaveConfirmationModal.tsx'             
+        'LeaveConfirmationModal.tsx'             
     ]
     
     # Start the search from current directory
