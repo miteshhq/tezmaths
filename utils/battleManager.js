@@ -382,6 +382,8 @@ export class BattleManager {
         this.setupUserPresence();
         // Pre-generate questions in background (non-blocking)
         this.preGenerateQuestions().catch(console.error);
+
+        this.startPeriodicCleanup();
     }
 
     async waitForAuth() {
@@ -531,17 +533,9 @@ export class BattleManager {
             !this.questionCache.has(cacheKey);
 
         if (!shouldRefresh && this.questionCache.has(cacheKey)) {
-            logOperation("generateQuestions", null, "Using cached questions");
             const cached = this.questionCache.get(cacheKey);
-
-            // FIXED: Always shuffle cached questions and reset used signatures for new battles
-            if (forceRefresh) {
-                this.usedQuestionSignatures.clear();
-            }
-
-            const allQuestions = shuffleArray([...cached.questions]); // Create new shuffled copy
-            const selected = allQuestions.slice(0, 25);
-
+            // DON'T shuffle here - use cached order
+            const selected = cached.questions.slice(0, 25);
             return {
                 questions: selected,
                 levelInfo: cached.levelInfo,
@@ -699,7 +693,6 @@ export class BattleManager {
                 (player) => player.userId !== userId && player.connected
             );
 
-            // Check if the host is leaving
             const isHostLeaving = roomData.hostId === userId;
 
             // End battle if only one player is left
@@ -885,23 +878,17 @@ export class BattleManager {
 
             logOperation("startBattle", roomId, "Starting battle with optimized questions...");
 
-            // Try multiple sources for questions (fast fallback)
+            // Get question data
             let questionData;
-
-            // In startBattle method, replace the question generation part:
             try {
-                // FIXED: Force refresh questions for each new battle
-                questionData = await this.generateQuestions(1, 10, true); // forceRefresh = true
-
-                // Clear used signatures for completely fresh experience
+                questionData = await this.generateQuestions(1, 10, true);
                 this.usedQuestionSignatures.clear();
-
             } catch (error) {
                 logOperation("startBattle", roomId, "All question sources failed, using fallback");
                 questionData = { questions: generateFallbackQuestions(25) };
             }
 
-            // Ensure we have exactly 25 questions
+            // Ensure exactly 25 questions
             if (!questionData.questions || questionData.questions.length !== 25) {
                 logOperation("startBattle", roomId, `Adjusting question count from ${questionData.questions?.length || 0} to 25`);
                 if (!questionData.questions) {
@@ -923,7 +910,6 @@ export class BattleManager {
             await update(createRoomRef(roomId), {
                 ...battleData,
                 ...playerUpdates,
-                // Mark all players as battle started in one update
                 ...Object.keys(room.players).reduce((acc, playerId) => {
                     acc[`players/${playerId}/battleStarted`] = true;
                     return acc;
@@ -949,7 +935,6 @@ export class BattleManager {
                 ? (Array.isArray(roomData.questions) ? roomData.questions : Object.values(roomData.questions))
                 : [];
 
-            // CRITICAL FIX: Ensure all 25 questions are played
             const totalQuestions = 25;
             const hasMoreQuestions = nextIndex < totalQuestions && nextIndex < questionsArray.length;
 
