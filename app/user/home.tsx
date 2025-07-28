@@ -67,6 +67,8 @@ export default function HomeScreen() {
 
   const router = useRouter();
   const [currentQuote, setCurrentQuote] = useState(getRandomQuote());
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   // User State
   const [userName, setUserName] = useState("");
@@ -283,49 +285,61 @@ export default function HomeScreen() {
     }
   };
 
-  const loadAllData = useCallback(async (forceRefresh = false) => {
-    setCurrentQuote(getRandomQuote());
-    const userId = auth.currentUser?.uid;
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
+  const loadAllData = useCallback(
+    async (forceRefresh = false, isFromNavigation = false) => {
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        setLoading(false);
+        return;
+      }
 
-    try {
-      setLoading(true);
+      try {
+        // Only show loading with quote on initial load or refresh, not navigation
+        const shouldShowQuoteLoading = !hasLoadedOnce || forceRefresh;
 
-      // Create minimum loading delay promise (3 seconds)
-      const minLoadingDelay = new Promise((resolve) =>
-        setTimeout(resolve, 2000)
-      );
+        if (shouldShowQuoteLoading) {
+          setCurrentQuote(getRandomQuote());
+          setLoading(true);
+        }
 
-      // Data loading promise
-      const dataLoadingPromise = async () => {
-        // Always load from cache first for immediate UI response
-        await loadCachedData();
+        // Create minimum loading delay only for quote loading
+        const minLoadingDelay = shouldShowQuoteLoading
+          ? new Promise((resolve) => setTimeout(resolve, 2000))
+          : Promise.resolve();
 
-        // Fetch fresh data from Firebase
-        const [userData, quizzesData, completedQuizzes] = await Promise.all([
-          fetchUserData(userId),
-          fetchQuizzesData(),
-          fetchCompletedQuizzes(userId),
-        ]);
+        // Data loading promise
+        const dataLoadingPromise = async () => {
+          // Always load from cache first for immediate UI response
+          await loadCachedData();
 
-        // Process and update all data
-        await processAndUpdateData(userData, quizzesData, completedQuizzes);
+          // Fetch fresh data from Firebase
+          const [userData, quizzesData, completedQuizzes] = await Promise.all([
+            fetchUserData(userId),
+            fetchQuizzesData(),
+            fetchCompletedQuizzes(userId),
+          ]);
 
-        // Cache the fresh data
-        await cacheAllData(userData, quizzesData);
-      };
+          // Process and update all data
+          await processAndUpdateData(userData, quizzesData, completedQuizzes);
 
-      // Wait for both data loading AND minimum delay to complete
-      await Promise.all([dataLoadingPromise(), minLoadingDelay]);
-    } catch (error) {
-      // console.error("Error loading data:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+          // Cache the fresh data
+          await cacheAllData(userData, quizzesData);
+        };
+
+        // Wait for both data loading AND minimum delay (if needed)
+        await Promise.all([dataLoadingPromise(), minLoadingDelay]);
+
+        // Mark as loaded once
+        setHasLoadedOnce(true);
+        setIsInitialLoad(false);
+      } catch (error) {
+        // console.error("Error loading data:", error);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [hasLoadedOnce]
+  );
 
   // Enhanced exit confirmation function
   const showExitConfirmation = () => {
@@ -392,7 +406,7 @@ export default function HomeScreen() {
         }
         loadAllData();
       } else if (nextAppState === "active") {
-        loadAllData();
+        loadAllData(false, true);
       }
 
       appStateRef.current = nextAppState;
@@ -501,20 +515,29 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadAllData();
+      // Check if this is navigation from another screen
+      const isFromNavigation = hasLoadedOnce;
+
+      loadAllData(false, isFromNavigation);
 
       // Always check for streak decay when home loads
       checkStreakDecayOnFocus();
 
       // Handle quiz completion popup
       checkAndUpdateStreak();
-    }, [loadAllData, checkStreakDecayOnFocus, checkAndUpdateStreak])
+    }, [
+      loadAllData,
+      checkStreakDecayOnFocus,
+      checkAndUpdateStreak,
+      hasLoadedOnce,
+    ])
   );
 
   // Refresh handler
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadAllData(true);
+    setHasLoadedOnce(false); // Reset to show quote loading
+    await loadAllData(true); // Force refresh
     setRefreshing(false);
   }, [loadAllData]);
 
