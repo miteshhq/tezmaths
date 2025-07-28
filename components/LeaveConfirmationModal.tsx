@@ -22,8 +22,6 @@ export default function LeaveConfirmationModal({
       await onConfirm();
     } catch (error) {
       console.error("Leave confirmation error:", error);
-    } finally {
-      setIsProcessing(false);
     }
   };
 

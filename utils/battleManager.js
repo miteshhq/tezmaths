@@ -924,47 +924,36 @@ export class BattleManager {
     }
 
     async moveToNextQuestion(roomId) {
+        const roomRef = ref(this.database, `rooms/${roomId}`);
+
         try {
-            const { data: roomData, exists } = await safeGet(createRoomRef(roomId));
-            if (!exists || !roomData) return;
+            await runTransaction(roomRef, (currentData) => {
+                if (!currentData) return currentData;
 
-            const nextIndex = roomData.currentQuestion + 1;
-            const now = Date.now();
+                const nextQuestionIndex = (currentData.currentQuestionIndex || 0) + 1;
+                const serverTimestamp = serverTimestamp();
 
-            const questionsArray = roomData.questions
-                ? (Array.isArray(roomData.questions) ? roomData.questions : Object.values(roomData.questions))
-                : [];
+                if (nextQuestionIndex < currentData.totalQuestions) {
+                    // Use server timestamp for precise sync
+                    currentData.currentQuestion = {
+                        ...currentData.questions[nextQuestionIndex],
+                        startTime: serverTimestamp,
+                        index: nextQuestionIndex
+                    };
+                    currentData.currentQuestionIndex = nextQuestionIndex;
+                } else {
+                    currentData.status = "finished";
+                    currentData.gameEndReason = "game_completed";
+                }
 
-            const totalQuestions = 25;
-            const hasMoreQuestions = nextIndex < totalQuestions && nextIndex < questionsArray.length;
-
-            const playerUpdates = createPlayerResetUpdates(roomData.players);
-
-            if (hasMoreQuestions) {
-                const nextQuestion = questionsArray[nextIndex];
-                const nextLevel = nextQuestion?.level || roomData.currentLevel;
-
-                await update(createRoomRef(roomId), {
-                    ...playerUpdates,
-                    currentWinner: null,
-                    currentQuestion: nextIndex,
-                    currentLevel: nextLevel,
-                    questionStartedAt: now,
-                    questionTransition: false,
-                    nextQuestionStartTime: null,
-                    lastActivity: serverTimestamp()
-                });
-
-                logOperation("moveToNextQuestion", roomId, `Moved to question ${nextIndex + 1} of ${totalQuestions}`);
-            } else {
-                logOperation("moveToNextQuestion", roomId, "All 25 questions completed, ending battle");
-                await this.endBattle(roomId);
-            }
+                return currentData;
+            });
         } catch (error) {
-            console.error("[moveToNextQuestion] Error:", error);
+            console.error("Failed to move to next question:", error);
             throw error;
         }
     }
+
 
     async endBattle(roomId) {
         try {
