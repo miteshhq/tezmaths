@@ -1124,7 +1124,10 @@ export default function BattleScreen() {
               <TouchableOpacity
                 onPress={handleLeavePress}
                 disabled={
-                  isLeaving || !roomData || leaveOperationInProgress.current
+                  isLeaving ||
+                  !roomData ||
+                  leaveOperationInProgress.current ||
+                  isProcessing
                 }
               >
                 <View className="flex-row items-center bg-red-500 px-3 py-1 rounded-full">

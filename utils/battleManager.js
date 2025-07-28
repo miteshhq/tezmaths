@@ -533,17 +533,9 @@ export class BattleManager {
             !this.questionCache.has(cacheKey);
 
         if (!shouldRefresh && this.questionCache.has(cacheKey)) {
-            logOperation("generateQuestions", null, "Using cached questions");
             const cached = this.questionCache.get(cacheKey);
-
-            // FIXED: Always shuffle cached questions and reset used signatures for new battles
-            if (forceRefresh) {
-                this.usedQuestionSignatures.clear();
-            }
-
-            const allQuestions = shuffleArray([...cached.questions]); // Create new shuffled copy
-            const selected = allQuestions.slice(0, 25);
-
+            // DON'T shuffle here - use cached order
+            const selected = cached.questions.slice(0, 25);
             return {
                 questions: selected,
                 levelInfo: cached.levelInfo,
@@ -1100,10 +1092,9 @@ export class BattleManager {
 
                 await update(createRoomRef(roomId), updates);
 
-                // Start transition after short delay
-                setTimeout(() => {
-                    this.startQuestionTransition(roomId, 2000).catch(console.error);
-                }, 1000);
+
+                this.startQuestionTransition(roomId, 1500).catch(console.error);
+
 
                 return true;
             } else {
