@@ -689,41 +689,44 @@ export class BattleManager {
                 return [];
             }
 
-            // Remove the leaving player
-            if (roomData.players?.[userId]) {
-                await update(createPlayerRef(roomId, userId), { connected: false });
+            // Check if the player is actually in the room
+            if (!roomData.players?.[userId]) {
+                logOperation("leaveDuringBattle", roomId, "Player not found in room");
+                return [];
             }
+
+            // Mark player as disconnected
+            await update(createPlayerRef(roomId, userId), {
+                connected: false,
+                leftAt: serverTimestamp()
+            });
 
             // Count remaining connected players
             const remainingPlayers = Object.values(roomData.players || {}).filter(
                 (player) => player.userId !== userId && player.connected
             );
 
-            // Check if the host is leaving
             const isHostLeaving = roomData.hostId === userId;
+            const totalPlayers = Object.keys(roomData.players || {}).length;
 
-            // End battle if only one player is left
-            if (remainingPlayers.length < 2) {
-                logOperation("leaveDuringBattle", roomId, "Ending battle due to insufficient players");
+            logOperation("leaveDuringBattle", roomId, `Host leaving: ${isHostLeaving}, Remaining: ${remainingPlayers.length}, Total: ${totalPlayers}`);
 
+            // FIXED: Different handling based on player count and who's leaving
+            if (totalPlayers <= 2) {
+                // In 2-player game, any player leaving ends the battle
                 const playerArray = calculatePlayerScores(roomData.players);
 
-                // Update room to finished state
                 await update(createRoomRef(roomId), {
                     status: "finished",
                     results: playerArray,
-                    gameEndReason: "insufficient_players",
+                    gameEndReason: "player_left",
                     finishedAt: serverTimestamp(),
                     lastActivity: serverTimestamp()
                 });
 
                 return playerArray;
-            }
-
-            // If the host leaves, end the battle for everyone
-            if (isHostLeaving) {
-                logOperation("leaveDuringBattle", roomId, "Host left during battle, ending for all players");
-
+            } else if (isHostLeaving) {
+                // Host leaving in 3+ player game ends battle for everyone
                 const playerArray = calculatePlayerScores(roomData.players);
 
                 await update(createRoomRef(roomId), {
@@ -735,14 +738,21 @@ export class BattleManager {
                 });
 
                 return playerArray;
+            } else {
+                // FIXED: Non-host leaving in 3+ player game - only that player exits
+                // Battle continues for others, but we return results for the leaving player
+                const playerArray = calculatePlayerScores(roomData.players);
+
+                // Update room activity but don't end the battle
+                await safeUpdate(createRoomRef(roomId), {
+                    lastActivity: serverTimestamp(),
+                    [`players/${userId}/finalScore`]: roomData.players[userId].score || 0,
+                    [`players/${userId}/hasLeft`]: true
+                });
+
+                // Return results only for the leaving player (so they can see their results)
+                return playerArray;
             }
-
-            // Update activity timestamp if the battle continues
-            await safeUpdate(createRoomRef(roomId), {
-                lastActivity: serverTimestamp()
-            });
-
-            return [];
         } catch (error) {
             console.error("[leaveDuringBattle] Error:", error);
             return [];
@@ -872,7 +882,6 @@ export class BattleManager {
         }
     }
 
-    // IMPROVED: Fast battle start with optimized question loading
     async startBattle(roomId) {
         try {
             const user = await this.waitForAuth();
@@ -885,23 +894,17 @@ export class BattleManager {
 
             logOperation("startBattle", roomId, "Starting battle with optimized questions...");
 
-            // Try multiple sources for questions (fast fallback)
+            // Get question data
             let questionData;
-
-            // In startBattle method, replace the question generation part:
             try {
-                // FIXED: Force refresh questions for each new battle
-                questionData = await this.generateQuestions(1, 10, true); // forceRefresh = true
-
-                // Clear used signatures for completely fresh experience
+                questionData = await this.generateQuestions(1, 10, true);
                 this.usedQuestionSignatures.clear();
-
             } catch (error) {
                 logOperation("startBattle", roomId, "All question sources failed, using fallback");
                 questionData = { questions: generateFallbackQuestions(25) };
             }
 
-            // Ensure we have exactly 25 questions
+            // Ensure exactly 25 questions
             if (!questionData.questions || questionData.questions.length !== 25) {
                 logOperation("startBattle", roomId, `Adjusting question count from ${questionData.questions?.length || 0} to 25`);
                 if (!questionData.questions) {
@@ -915,15 +918,30 @@ export class BattleManager {
                 questionData.questions = shuffleArray(questionData.questions);
             }
 
-            const now = Date.now();
+            // FIXED: Use server timestamp for consistent timing across all devices
             const playerUpdates = createBattlePlayerUpdates(room.players);
-            const battleData = createBattleInitData(questionData, now);
+            const battleData = {
+                status: "playing",
+                questions: questionData.questions,
+                currentQuestion: 0,
+                currentLevel: 1,
+                totalQuestions: 25,
+                questionTimeLimit: 15,
+                gameStartedAt: serverTimestamp(), // Use server timestamp
+                questionStartedAt: serverTimestamp(), // Use server timestamp
+                lastActivity: serverTimestamp(),
+                questionTransition: false,
+                nextQuestionStartTime: null,
+                currentWinner: null,
+                gameEndReason: null,
+                gameWinner: null,
+                finishedAt: null
+            };
 
             // Single atomic update for speed
             await update(createRoomRef(roomId), {
                 ...battleData,
                 ...playerUpdates,
-                // Mark all players as battle started in one update
                 ...Object.keys(room.players).reduce((acc, playerId) => {
                     acc[`players/${playerId}/battleStarted`] = true;
                     return acc;
@@ -943,13 +961,10 @@ export class BattleManager {
             if (!exists || !roomData) return;
 
             const nextIndex = roomData.currentQuestion + 1;
-            const now = Date.now();
-
             const questionsArray = roomData.questions
                 ? (Array.isArray(roomData.questions) ? roomData.questions : Object.values(roomData.questions))
                 : [];
 
-            // CRITICAL FIX: Ensure all 25 questions are played
             const totalQuestions = 25;
             const hasMoreQuestions = nextIndex < totalQuestions && nextIndex < questionsArray.length;
 
@@ -964,7 +979,7 @@ export class BattleManager {
                     currentWinner: null,
                     currentQuestion: nextIndex,
                     currentLevel: nextLevel,
-                    questionStartedAt: now,
+                    questionStartedAt: serverTimestamp(), // FIXED: Use server timestamp
                     questionTransition: false,
                     nextQuestionStartTime: null,
                     lastActivity: serverTimestamp()
