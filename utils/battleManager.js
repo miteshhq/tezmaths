@@ -689,32 +689,30 @@ export class BattleManager {
                 return [];
             }
 
-            const isHostLeaving = roomData.hostId === userId;
+            // Remove the leaving player
+            if (roomData.players?.[userId]) {
+                await update(createPlayerRef(roomId, userId), { connected: false });
+            }
 
-            // CRITICAL: Remove the leaving player immediately
-            await update(createPlayerRef(roomId, userId), {
-                connected: false,
-                leftAt: serverTimestamp()
-            });
-
-            // Count remaining connected players (excluding the one leaving)
+            // Count remaining connected players
             const remainingPlayers = Object.values(roomData.players || {}).filter(
                 (player) => player.userId !== userId && player.connected
             );
 
-            console.log(`Remaining players after ${userId} leaves:`, remainingPlayers.length);
+            // Check if the host is leaving
+            const isHostLeaving = roomData.hostId === userId;
 
-            // If host leaves or less than 2 players remain, end the battle
-            if (isHostLeaving || remainingPlayers.length < 1) {
-                const endReason = isHostLeaving ? "host_left" : "insufficient_players";
-                logOperation("leaveDuringBattle", roomId, `Ending battle: ${endReason}`);
+            // End battle if only one player is left
+            if (remainingPlayers.length < 2) {
+                logOperation("leaveDuringBattle", roomId, "Ending battle due to insufficient players");
 
                 const playerArray = calculatePlayerScores(roomData.players);
 
+                // Update room to finished state
                 await update(createRoomRef(roomId), {
                     status: "finished",
                     results: playerArray,
-                    gameEndReason: endReason,
+                    gameEndReason: "insufficient_players",
                     finishedAt: serverTimestamp(),
                     lastActivity: serverTimestamp()
                 });
@@ -722,7 +720,24 @@ export class BattleManager {
                 return playerArray;
             }
 
-            // Battle continues with remaining players
+            // If the host leaves, end the battle for everyone
+            if (isHostLeaving) {
+                logOperation("leaveDuringBattle", roomId, "Host left during battle, ending for all players");
+
+                const playerArray = calculatePlayerScores(roomData.players);
+
+                await update(createRoomRef(roomId), {
+                    status: "finished",
+                    results: playerArray,
+                    gameEndReason: "host_left",
+                    finishedAt: serverTimestamp(),
+                    lastActivity: serverTimestamp()
+                });
+
+                return playerArray;
+            }
+
+            // Update activity timestamp if the battle continues
             await safeUpdate(createRoomRef(roomId), {
                 lastActivity: serverTimestamp()
             });
@@ -733,7 +748,6 @@ export class BattleManager {
             return [];
         }
     }
-
 
     async findRandomMatch(maxPlayers = 2) {
         try {
@@ -1147,22 +1161,15 @@ export class BattleManager {
 
     async startQuestionTransition(roomId, duration = 1000) {
         try {
-            // Use server timestamp for precise timing
-            const serverTimeRef = ref(database, ".info/serverTimeOffset");
-            const offsetSnapshot = await get(serverTimeRef);
-            const serverOffset = offsetSnapshot.val() || 0;
-
-            const serverNow = Date.now() + serverOffset;
-            const nextQuestionStartTime = serverNow + duration;
+            const now = Date.now();
+            const nextQuestionStartTime = now + duration;
 
             await update(createRoomRef(roomId), {
                 questionTransition: true,
                 nextQuestionStartTime,
-                transitionDuration: duration,
                 lastActivity: serverTimestamp()
             });
 
-            logOperation("startQuestionTransition", roomId, `Transition started, next question at: ${nextQuestionStartTime}`);
             return nextQuestionStartTime;
         } catch (error) {
             console.error("Start transition error:", error);
