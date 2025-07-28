@@ -519,41 +519,34 @@ export class BattleManager {
     }
 
     // IMPROVED: Optimized question generation with caching and exact 25 questions
-    async generateQuestions(startLevel = 1, maxLevels = 10) {
+    async generateQuestions(startLevel = 1, maxLevels = 10, forceRefresh = false) {
         logOperation("generateQuestions", null, "Starting optimized question generation");
 
         // Check cache first
         const now = Date.now();
         const cacheKey = `${startLevel}_${maxLevels}`;
 
-        if (this.questionCache.has(cacheKey) && (now - this.lastCacheTime) < this.CACHE_DURATION) {
+        const shouldRefresh = forceRefresh ||
+            (now - this.lastCacheTime) > this.CACHE_DURATION ||
+            !this.questionCache.has(cacheKey);
+
+        if (!shouldRefresh && this.questionCache.has(cacheKey)) {
             logOperation("generateQuestions", null, "Using cached questions");
             const cached = this.questionCache.get(cacheKey);
 
-            // Return fresh subset from cache to avoid repetition
-            const availableQuestions = cached.questions.filter(q =>
-                !this.usedQuestionSignatures.has(q.signature || `${q.question}_${q.correctAnswer}`)
-            );
-
-            if (availableQuestions.length >= 25) {
-                const selected = shuffleArray(availableQuestions).slice(0, 25);
-                selected.forEach(q => {
-                    const signature = q.signature || `${q.question}_${q.correctAnswer}`;
-                    this.usedQuestionSignatures.add(signature);
-                });
-
-                // Clean up used signatures if too many
-                if (this.usedQuestionSignatures.size > 100) {
-                    const signatures = Array.from(this.usedQuestionSignatures);
-                    this.usedQuestionSignatures = new Set(signatures.slice(-50));
-                }
-
-                return {
-                    questions: selected,
-                    levelInfo: cached.levelInfo,
-                    totalLevels: cached.totalLevels
-                };
+            // FIXED: Always shuffle cached questions and reset used signatures for new battles
+            if (forceRefresh) {
+                this.usedQuestionSignatures.clear();
             }
+
+            const allQuestions = shuffleArray([...cached.questions]); // Create new shuffled copy
+            const selected = allQuestions.slice(0, 25);
+
+            return {
+                questions: selected,
+                levelInfo: cached.levelInfo,
+                totalLevels: cached.totalLevels
+            };
         }
 
         try {
@@ -895,34 +888,14 @@ export class BattleManager {
             // Try multiple sources for questions (fast fallback)
             let questionData;
 
+            // In startBattle method, replace the question generation part:
             try {
-                // 1. Try cache first (fastest)
-                const cacheKey = `1_10`;
-                if (this.questionCache.has(cacheKey)) {
-                    logOperation("startBattle", roomId, "Using cached questions");
-                    questionData = this.questionCache.get(cacheKey);
-                } else {
-                    // 2. Try AsyncStorage backup
-                    const cached = await AsyncStorage.getItem('preGeneratedQuestions');
-                    if (cached) {
-                        logOperation("startBattle", roomId, "Using pre-generated questions from storage");
-                        questionData = JSON.parse(cached);
-                    } else {
-                        // 3. Generate fresh (with timeout protection)
-                        logOperation("startBattle", roomId, "Generating fresh questions");
-                        const generatePromise = this.generateQuestions(1, 10);
-                        const timeoutPromise = new Promise((_, reject) =>
-                            setTimeout(() => reject(new Error("Generation timeout")), 3000)
-                        );
+                // FIXED: Force refresh questions for each new battle
+                questionData = await this.generateQuestions(1, 10, true); // forceRefresh = true
 
-                        try {
-                            questionData = await Promise.race([generatePromise, timeoutPromise]);
-                        } catch (timeoutError) {
-                            logOperation("startBattle", roomId, "Question generation timed out, using fallback");
-                            questionData = { questions: generateFallbackQuestions(25) };
-                        }
-                    }
-                }
+                // Clear used signatures for completely fresh experience
+                this.usedQuestionSignatures.clear();
+
             } catch (error) {
                 logOperation("startBattle", roomId, "All question sources failed, using fallback");
                 questionData = { questions: generateFallbackQuestions(25) };
