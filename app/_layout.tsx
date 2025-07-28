@@ -38,7 +38,7 @@ export default function RootLayout() {
           <View className="p-6 flex flex-col items-center gap-5">
             {/* Quote Section */}
             <View className="flex flex-col items-center gap-3">
-              <Text className="text-gray-900 font-black text-center mb-4">
+              <Text className="text-xl text-stone-900 font-black text-center mb-4">
                 Best for Bank, SSC, Railway & All Competitive Exams
               </Text>
             </View>

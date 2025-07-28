@@ -600,7 +600,7 @@ export default function HomeScreen() {
 
             {/* Quote Section */}
             <View className="flex flex-col items-center gap-3">
-              <Text className="text-xl italic font-bold text-center text-custom-purple leading-6">
+              <Text className="text-xl italic font-bold text-center text-stone-900 leading-6">
                 "{currentQuote}"
               </Text>
             </View>
