@@ -382,8 +382,6 @@ export class BattleManager {
         this.setupUserPresence();
         // Pre-generate questions in background (non-blocking)
         this.preGenerateQuestions().catch(console.error);
-
-        this.startPeriodicCleanup();
     }
 
     async waitForAuth() {
@@ -533,9 +531,17 @@ export class BattleManager {
             !this.questionCache.has(cacheKey);
 
         if (!shouldRefresh && this.questionCache.has(cacheKey)) {
+            logOperation("generateQuestions", null, "Using cached questions");
             const cached = this.questionCache.get(cacheKey);
-            // DON'T shuffle here - use cached order
-            const selected = cached.questions.slice(0, 25);
+
+            // FIXED: Always shuffle cached questions and reset used signatures for new battles
+            if (forceRefresh) {
+                this.usedQuestionSignatures.clear();
+            }
+
+            const allQuestions = shuffleArray([...cached.questions]); // Create new shuffled copy
+            const selected = allQuestions.slice(0, 25);
+
             return {
                 questions: selected,
                 levelInfo: cached.levelInfo,
@@ -683,44 +689,41 @@ export class BattleManager {
                 return [];
             }
 
-            // Check if the player is actually in the room
-            if (!roomData.players?.[userId]) {
-                logOperation("leaveDuringBattle", roomId, "Player not found in room");
-                return [];
+            // Remove the leaving player
+            if (roomData.players?.[userId]) {
+                await update(createPlayerRef(roomId, userId), { connected: false });
             }
-
-            // Mark player as disconnected
-            await update(createPlayerRef(roomId, userId), {
-                connected: false,
-                leftAt: serverTimestamp()
-            });
 
             // Count remaining connected players
             const remainingPlayers = Object.values(roomData.players || {}).filter(
                 (player) => player.userId !== userId && player.connected
             );
 
+            // Check if the host is leaving
             const isHostLeaving = roomData.hostId === userId;
-            const totalPlayers = Object.keys(roomData.players || {}).length;
 
-            logOperation("leaveDuringBattle", roomId, `Host leaving: ${isHostLeaving}, Remaining: ${remainingPlayers.length}, Total: ${totalPlayers}`);
+            // End battle if only one player is left
+            if (remainingPlayers.length < 2) {
+                logOperation("leaveDuringBattle", roomId, "Ending battle due to insufficient players");
 
-            // FIXED: Different handling based on player count and who's leaving
-            if (totalPlayers <= 2) {
-                // In 2-player game, any player leaving ends the battle
                 const playerArray = calculatePlayerScores(roomData.players);
 
+                // Update room to finished state
                 await update(createRoomRef(roomId), {
                     status: "finished",
                     results: playerArray,
-                    gameEndReason: "player_left",
+                    gameEndReason: "insufficient_players",
                     finishedAt: serverTimestamp(),
                     lastActivity: serverTimestamp()
                 });
 
                 return playerArray;
-            } else if (isHostLeaving) {
-                // Host leaving in 3+ player game ends battle for everyone
+            }
+
+            // If the host leaves, end the battle for everyone
+            if (isHostLeaving) {
+                logOperation("leaveDuringBattle", roomId, "Host left during battle, ending for all players");
+
                 const playerArray = calculatePlayerScores(roomData.players);
 
                 await update(createRoomRef(roomId), {
@@ -732,21 +735,14 @@ export class BattleManager {
                 });
 
                 return playerArray;
-            } else {
-                // FIXED: Non-host leaving in 3+ player game - only that player exits
-                // Battle continues for others, but we return results for the leaving player
-                const playerArray = calculatePlayerScores(roomData.players);
-
-                // Update room activity but don't end the battle
-                await safeUpdate(createRoomRef(roomId), {
-                    lastActivity: serverTimestamp(),
-                    [`players/${userId}/finalScore`]: roomData.players[userId].score || 0,
-                    [`players/${userId}/hasLeft`]: true
-                });
-
-                // Return results only for the leaving player (so they can see their results)
-                return playerArray;
             }
+
+            // Update activity timestamp if the battle continues
+            await safeUpdate(createRoomRef(roomId), {
+                lastActivity: serverTimestamp()
+            });
+
+            return [];
         } catch (error) {
             console.error("[leaveDuringBattle] Error:", error);
             return [];
@@ -876,6 +872,7 @@ export class BattleManager {
         }
     }
 
+    // IMPROVED: Fast battle start with optimized question loading
     async startBattle(roomId) {
         try {
             const user = await this.waitForAuth();
@@ -888,17 +885,23 @@ export class BattleManager {
 
             logOperation("startBattle", roomId, "Starting battle with optimized questions...");
 
-            // Get question data
+            // Try multiple sources for questions (fast fallback)
             let questionData;
+
+            // In startBattle method, replace the question generation part:
             try {
-                questionData = await this.generateQuestions(1, 10, true);
+                // FIXED: Force refresh questions for each new battle
+                questionData = await this.generateQuestions(1, 10, true); // forceRefresh = true
+
+                // Clear used signatures for completely fresh experience
                 this.usedQuestionSignatures.clear();
+
             } catch (error) {
                 logOperation("startBattle", roomId, "All question sources failed, using fallback");
                 questionData = { questions: generateFallbackQuestions(25) };
             }
 
-            // Ensure exactly 25 questions
+            // Ensure we have exactly 25 questions
             if (!questionData.questions || questionData.questions.length !== 25) {
                 logOperation("startBattle", roomId, `Adjusting question count from ${questionData.questions?.length || 0} to 25`);
                 if (!questionData.questions) {
@@ -912,30 +915,15 @@ export class BattleManager {
                 questionData.questions = shuffleArray(questionData.questions);
             }
 
-            // FIXED: Use server timestamp for consistent timing across all devices
+            const now = Date.now();
             const playerUpdates = createBattlePlayerUpdates(room.players);
-            const battleData = {
-                status: "playing",
-                questions: questionData.questions,
-                currentQuestion: 0,
-                currentLevel: 1,
-                totalQuestions: 25,
-                questionTimeLimit: 15,
-                gameStartedAt: serverTimestamp(), // Use server timestamp
-                questionStartedAt: serverTimestamp(), // Use server timestamp
-                lastActivity: serverTimestamp(),
-                questionTransition: false,
-                nextQuestionStartTime: null,
-                currentWinner: null,
-                gameEndReason: null,
-                gameWinner: null,
-                finishedAt: null
-            };
+            const battleData = createBattleInitData(questionData, now);
 
             // Single atomic update for speed
             await update(createRoomRef(roomId), {
                 ...battleData,
                 ...playerUpdates,
+                // Mark all players as battle started in one update
                 ...Object.keys(room.players).reduce((acc, playerId) => {
                     acc[`players/${playerId}/battleStarted`] = true;
                     return acc;
@@ -955,10 +943,13 @@ export class BattleManager {
             if (!exists || !roomData) return;
 
             const nextIndex = roomData.currentQuestion + 1;
+            const now = Date.now();
+
             const questionsArray = roomData.questions
                 ? (Array.isArray(roomData.questions) ? roomData.questions : Object.values(roomData.questions))
                 : [];
 
+            // CRITICAL FIX: Ensure all 25 questions are played
             const totalQuestions = 25;
             const hasMoreQuestions = nextIndex < totalQuestions && nextIndex < questionsArray.length;
 
@@ -973,7 +964,7 @@ export class BattleManager {
                     currentWinner: null,
                     currentQuestion: nextIndex,
                     currentLevel: nextLevel,
-                    questionStartedAt: serverTimestamp(), // FIXED: Use server timestamp
+                    questionStartedAt: now,
                     questionTransition: false,
                     nextQuestionStartTime: null,
                     lastActivity: serverTimestamp()
@@ -1092,9 +1083,10 @@ export class BattleManager {
 
                 await update(createRoomRef(roomId), updates);
 
-
-                this.startQuestionTransition(roomId, 1500).catch(console.error);
-
+                // Start transition after short delay
+                setTimeout(() => {
+                    this.startQuestionTransition(roomId, 2000).catch(console.error);
+                }, 1000);
 
                 return true;
             } else {
@@ -1144,50 +1136,24 @@ export class BattleManager {
 
     async resetUserBattleState() {
         try {
-            console.log("Starting comprehensive battle state reset");
-
-            // Clear all listeners with error handling
+            // Clear all listeners
             this.listeners.forEach((listener, roomId) => {
                 try {
                     off(listener.ref, "value", listener.handler);
-                    console.log(`Removed listener for room ${roomId}`);
                 } catch (error) {
-                    console.warn(`Error removing listener for room ${roomId}:`, error);
+                    console.warn("Error removing listener:", error);
                 }
             });
             this.listeners.clear();
             this.activeRooms.clear();
 
-            // ENHANCED: Clear all cached data
-            this.questionCache.clear();
-            this.usedQuestionSignatures.clear();
-            this.lastCacheTime = 0;
-
-            // Clear AsyncStorage battle data
-            try {
-                const battleKeys = [
-                    "currentBattleId",
-                    "battleState",
-                    "battleResults",
-                    "lastBattleScore",
-                    "battleProgress",
-                    "roomData",
-                    "battleQuestions",
-                    "currentQuestionIndex",
-                    "playerAnswers",
-                    "battleTimer"
-                ];
-                await AsyncStorage.multiRemove(battleKeys);
-            } catch (error) {
-                console.warn("Error clearing AsyncStorage battle data:", error);
+            // Clear question cache periodically but keep some for performance
+            if (this.usedQuestionSignatures.size > 100) {
+                const signatures = Array.from(this.usedQuestionSignatures);
+                this.usedQuestionSignatures = new Set(signatures.slice(-50));
             }
 
-            // Run automated cleanup (non-blocking)
-            this.cleanupOldRooms().catch(error => {
-                console.warn("Automated room cleanup failed:", error);
-            });
-
-            console.log("Battle state reset completed successfully");
+            console.log("Battle state reset completed");
         } catch (error) {
             console.error("Battle state reset error:", error);
         }
@@ -1381,21 +1347,21 @@ export class BattleManager {
         }
     }
 
+    // IMPROVED: Enhanced cleanup with cache management
     cleanup() {
         console.log("Cleaning up battle manager...");
-
-        // Stop periodic cleanup
-        this.stopPeriodicCleanup();
 
         // Clear all Firebase listeners
         this.listeners.forEach((listener, roomId) => {
             try {
-                off(listener.ref, "value", listener.handler);
+                off(createRoomRef(roomId), listener.handler);
             } catch (error) {
                 console.error(`Error removing listener for ${roomId}:`, error);
             }
         });
         this.listeners.clear();
+
+        // Clear active rooms
         this.activeRooms.clear();
 
         // Clean up presence
@@ -1409,108 +1375,27 @@ export class BattleManager {
             this.userPresenceRef = null;
         }
 
-        // Clear all caches
-        this.questionCache.clear();
-        this.usedQuestionSignatures.clear();
+        // Partial cache cleanup (keep some for performance)
+        if (this.questionCache.size > 5) {
+            // Keep only the most recent cache entries
+            const entries = Array.from(this.questionCache.entries());
+            this.questionCache.clear();
+            entries.slice(-2).forEach(([key, value]) => {
+                this.questionCache.set(key, value);
+            });
+        }
+
+        // Clean up used question signatures but keep recent ones
+        if (this.usedQuestionSignatures.size > 50) {
+            const signatures = Array.from(this.usedQuestionSignatures);
+            this.usedQuestionSignatures = new Set(signatures.slice(-25));
+        }
 
         this.userId = null;
         this.isInitialized = false;
 
         console.log("Battle manager cleanup completed");
     }
-
-    async cleanupOldRooms() {
-        try {
-            console.log("[cleanupOldRooms] Starting cleanup of old rooms");
-
-            const now = Date.now();
-            const TEN_MINUTES_AGO = now - (10 * 60 * 1000); // 10 minutes ago
-
-            const { data: roomsData, exists } = await safeGet(createRoomsRef());
-            if (!exists || !roomsData) {
-                console.log("[cleanupOldRooms] No rooms found");
-                return;
-            }
-
-            const roomsToDelete = [];
-
-            Object.entries(roomsData).forEach(([roomId, roomData]) => {
-                const roomCreatedAt = roomData.createdAt || 0;
-                const lastActivity = roomData.lastActivity || roomCreatedAt;
-
-                // Convert Firebase timestamp to milliseconds if needed
-                const createdTime = typeof roomCreatedAt === 'object' ?
-                    (roomCreatedAt.seconds ? roomCreatedAt.seconds * 1000 : now) : roomCreatedAt;
-                const activityTime = typeof lastActivity === 'object' ?
-                    (lastActivity.seconds ? lastActivity.seconds * 1000 : now) : lastActivity;
-
-                const shouldDelete = (
-                    // Room is older than 10 minutes
-                    createdTime < TEN_MINUTES_AGO ||
-                    activityTime < TEN_MINUTES_AGO
-                ) && (
-                        // And room is finished, has no players, or status allows cleanup
-                        roomData.status === "finished" ||
-                        !roomData.players ||
-                        Object.keys(roomData.players).length === 0 ||
-                        // All players disconnected
-                        Object.values(roomData.players).every(player => !player.connected)
-                    );
-
-                if (shouldDelete) {
-                    roomsToDelete.push(roomId);
-                }
-            });
-
-            console.log(`[cleanupOldRooms] Found ${roomsToDelete.length} rooms to delete`);
-
-            // Delete rooms in batches to avoid overwhelming the database
-            const BATCH_SIZE = 5;
-            for (let i = 0; i < roomsToDelete.length; i += BATCH_SIZE) {
-                const batch = roomsToDelete.slice(i, i + BATCH_SIZE);
-
-                await Promise.all(
-                    batch.map(async (roomId) => {
-                        try {
-                            await this.cleanupRoom(roomId, "automated_cleanup");
-                            console.log(`[cleanupOldRooms] Deleted room ${roomId}`);
-                        } catch (error) {
-                            console.error(`[cleanupOldRooms] Failed to delete room ${roomId}:`, error);
-                        }
-                    })
-                );
-
-                // Small delay between batches
-                if (i + BATCH_SIZE < roomsToDelete.length) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
-            }
-
-            console.log(`[cleanupOldRooms] Cleanup completed. Deleted ${roomsToDelete.length} rooms`);
-            return roomsToDelete.length;
-
-        } catch (error) {
-            console.error("[cleanupOldRooms] Error during cleanup:", error);
-            return 0;
-        }
-    }
-
-    startPeriodicCleanup() {
-        // Run cleanup every 5 minutes
-        this.cleanupInterval = setInterval(() => {
-            this.cleanupOldRooms().catch(error => {
-                console.warn("Periodic cleanup failed:", error);
-            });
-        }, 5 * 60 * 1000); // 5 minutes
-    }
-
-    stopPeriodicCleanup() {
-        if (this.cleanupInterval) {
-            clearInterval(this.cleanupInterval);
-            this.cleanupInterval = null;
-        }
-    }
-
 }
 
 export const battleManager = new BattleManager();

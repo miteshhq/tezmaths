@@ -152,9 +152,11 @@ export default function BattleScreen() {
   const [feedback, setFeedback] = useState("");
   const [isAnswered, setIsAnswered] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const timerAnimation = useRef(new Animated.Value(1)).current;
   const userId = auth.currentUser?.uid;
   const submitTimeoutRef = useRef<number | null>(null);
   const timeExpiryHandled = useRef(false);
+  const [userData, setUserData] = useState({ avatar: 0 });
   const [networkError, setNetworkError] = useState(false);
 
   const [showBetterLuckMessage, setShowBetterLuckMessage] = useState(false);
@@ -183,9 +185,6 @@ export default function BattleScreen() {
     questionTimer: null,
   });
 
-  const isCleaningUp = useRef(false);
-  const lastRoomId = useRef(null);
-
   useEffect(() => {
     const offsetRef = ref(database, ".info/serverTimeOffset");
     const unsubscribe = onValue(offsetRef, (snapshot) => {
@@ -198,121 +197,82 @@ export default function BattleScreen() {
   }, []);
 
   const cleanupTimers = useCallback(() => {
-    // Clear all timer references immediately
     Object.values(timerManager.current).forEach((timer) => {
       if (timer) {
         clearInterval(timer);
         clearTimeout(timer);
       }
     });
-
-    // Reset timer manager
     timerManager.current = {
       mainTimer: null,
       transitionTimer: null,
       questionTimer: null,
     };
 
-    // Clear individual timer refs
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-
     if (submitTimeoutRef.current) {
       clearTimeout(submitTimeoutRef.current);
       submitTimeoutRef.current = null;
     }
-
-    // Clear any remaining timeouts that might be running
-    for (let i = 1; i < 999; i++) {
-      clearTimeout(i);
-    }
   }, []);
 
   const clearBattleState = useCallback(async () => {
-    if (isCleaningUp.current) {
-      console.log("Cleanup already in progress, skipping");
-      return;
-    }
-
-    isCleaningUp.current = true;
     console.log("Clearing all battle state for new battle");
 
+    navigationInProgress.current = false;
+
+    // Clear all timers first
+    cleanupTimers();
+
+    // Reset all state variables
+    setRoomData(null);
+    setTimeLeft(15);
+    setUserAnswer("");
+    setFeedback("");
+    setIsAnswered(false);
+    setIsProcessing(false);
+    setNetworkError(false);
+    setShowBetterLuckMessage(false);
+    setBetterLuckCountdown(0);
+    setShowNextQuestionCountdown(false);
+    setCountdownValue(0);
+    setBackHandlerActive(false);
+    setIsLeaving(false);
+    setShowLeaveModal(false);
+
+    // Reset refs
+    timeExpiryHandled.current = false;
+    battleInitialized.current = false;
+    otherWinnerAnnouncedRef.current = false;
+
+    // Clear cached data
     try {
-      navigationInProgress.current = false;
-
-      // Clear all timers first
-      cleanupTimers();
-
-      // Reset all state variables
-      setRoomData(null);
-      setTimeLeft(15);
-      setUserAnswer("");
-      setFeedback("");
-      setIsAnswered(false);
-      setIsProcessing(false);
-      setNetworkError(false);
-      setShowBetterLuckMessage(false);
-      setBetterLuckCountdown(0);
-      setShowNextQuestionCountdown(false);
-      setCountdownValue(0);
-      setBackHandlerActive(false);
-      setIsLeaving(false);
-      setShowLeaveModal(false);
-
-      // Reset refs
-      timeExpiryHandled.current = false;
-      battleInitialized.current = false;
-      otherWinnerAnnouncedRef.current = false;
-
-      // ENHANCED: Clear all battle-related cached data
-      const keysToRemove = [
+      await AsyncStorage.multiRemove([
         "currentBattleId",
         "battleState",
         "battleResults",
         "lastBattleScore",
         "battleProgress",
-        "roomData",
-        "battleQuestions",
-        "currentQuestionIndex",
-        "playerAnswers",
-        "battleTimer",
-      ];
-
-      await AsyncStorage.multiRemove(keysToRemove);
-
-      // Remove room listener if exists
-      if (currentRoomId.current && battleManager) {
-        try {
-          battleManager.removeRoomListener(currentRoomId.current as string);
-        } catch (error) {
-          console.error("Error removing room listener:", error);
-        }
-      }
-
-      // CRITICAL: Reset battle manager state
-      await battleManager.resetUserBattleState();
+      ]);
     } catch (error) {
       console.error("Error clearing battle cache:", error);
-    } finally {
-      isCleaningUp.current = false;
+    }
+
+    // Remove room listener
+    if (currentRoomId.current && battleManager) {
+      try {
+        battleManager.removeRoomListener(currentRoomId.current as string);
+      } catch (error) {
+        console.error("Error removing room listener:", error);
+      }
     }
   }, [cleanupTimers]);
 
-  const safeSetState = useCallback((setter, value) => {
-    if (isMounted.current) {
-      setter(value);
-    }
-  }, []);
-
   const handleTimeExpiry = useCallback(() => {
-    if (!isMounted.current) return;
-
     if (roomData?.hostId === userId && !roomData.questionTransition) {
-      safeSetState(setShowBetterLuckMessage, true);
-      safeSetState(setBetterLuckCountdown, 1);
-
       // Show "better luck" message first
       setShowBetterLuckMessage(true);
       setBetterLuckCountdown(1);
@@ -338,51 +298,54 @@ export default function BattleScreen() {
       // Cleanup interval reference
       timerManager.current.transitionTimer = countdownInterval;
     }
-  }, [
-    roomData?.hostId,
-    roomData?.questionTransition,
-    userId,
-    roomId,
-    safeSetState,
-  ]);
+  }, [roomData?.hostId, roomData?.questionTransition, userId, roomId]);
 
+  // DETECT ROOM CHANGE AND CLEAR STATE
   useEffect(() => {
-    if (roomId !== lastRoomId.current) {
-      console.log(`Room changed from ${lastRoomId.current} to ${roomId}`);
-      lastRoomId.current = roomId;
+    if (roomId !== currentRoomId.current) {
+      console.log(`Room changed from ${currentRoomId.current} to ${roomId}`);
       currentRoomId.current = roomId;
-
-      // Force clear state for new room
+      // Make this non-blocking
       clearBattleState().catch(console.error);
     }
   }, [roomId, clearBattleState]);
 
+  // INITIALIZE BATTLE STATE ON MOUNT (SIMPLIFIED)
   useEffect(() => {
-    const initializeBattle = async () => {
-      if (!battleInitialized.current && roomId && !isCleaningUp.current) {
+    const initializeBattle = () => {
+      if (!battleInitialized.current && roomId) {
         console.log("Initializing new battle for room:", roomId);
 
-        // Wait for any ongoing cleanup
-        while (isCleaningUp.current) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
+        // Clear everything first (NON-BLOCKING)
+        clearBattleState().catch(console.error);
 
-        // Clear everything first
-        await clearBattleState();
-
-        // Reset flags
+        // Reset navigation and state flags
         setIsLeaving(false);
         setBackHandlerActive(false);
         setShowLeaveModal(false);
-        navigationInProgress.current = false;
 
-        // Mark as initialized
+        // Mark as initialized IMMEDIATELY
         battleInitialized.current = true;
       }
     };
 
     initializeBattle();
   }, [roomId, clearBattleState]);
+
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const cachedData = await AsyncStorage.getItem("userData");
+        if (cachedData) {
+          const data = JSON.parse(cachedData);
+          setUserData(data);
+        }
+      } catch (error) {
+        console.error("Error loading user data:", error);
+      }
+    };
+    loadUserData();
+  }, []);
 
   useEffect(() => {
     if (
@@ -502,6 +465,8 @@ export default function BattleScreen() {
     return () => clearInterval(interval);
   }, [roomData?.nextQuestionStartTime]);
 
+  // FIREBASE LISTENER - FIXED VERSION with navigation guard
+
   useEffect(() => {
     if (!roomId || isLeaving) return;
 
@@ -512,6 +477,7 @@ export default function BattleScreen() {
         const data = snapshot.val();
 
         if (!data) {
+          // FIXED: Single navigation with proper cleanup
           if (!navigationInProgress.current && !isLeaving) {
             navigationInProgress.current = true;
             console.log("Room no longer exists, navigating away");
@@ -527,36 +493,7 @@ export default function BattleScreen() {
         setRoomData(data);
         setNetworkError(false);
 
-        // FIXED: Handle individual player exits properly
-        if (
-          data.players?.[userId]?.hasLeft &&
-          !isLeaving &&
-          !navigationInProgress.current
-        ) {
-          // This player has been marked as left - navigate to results
-          navigationInProgress.current = true;
-          setIsLeaving(true);
-
-          console.log("Player marked as left, navigating to results");
-
-          const playerArray = calculatePlayerScores(data.players || {});
-
-          clearBattleState().finally(() => {
-            router.replace({
-              pathname: "/user/battle-results",
-              params: {
-                roomId: roomId,
-                players: JSON.stringify(playerArray),
-                totalQuestions: data.totalQuestions?.toString() || "25",
-                currentUserId: userId,
-                endReason: "you_left",
-              },
-            });
-          });
-          return;
-        }
-
-        // Handle battle end with single navigation
+        // FIXED: Handle battle end with single navigation
         if (
           data.status === "finished" &&
           !isLeaving &&
@@ -567,6 +504,7 @@ export default function BattleScreen() {
 
           console.log("Battle finished, navigating to results");
 
+          // FIXED: Use data.results directly if available
           const playerArray =
             data.results || calculatePlayerScores(data.players || {});
 
@@ -644,8 +582,6 @@ export default function BattleScreen() {
   const inputRef = useRef<TextInput>(null);
 
   const navigationInProgress = useRef(false);
-  const leaveOperationInProgress = useRef(false);
-  const isMounted = useRef(true);
 
   useEffect(() => {
     if (!roomData?.players) return;
@@ -679,11 +615,10 @@ export default function BattleScreen() {
       const timeLimit = roomData.questionTimeLimit || 15;
 
       const updateTimer = () => {
-        // FIXED: Use server time with proper offset calculation
+        // Use server time instead of local device time
         const serverNow = Date.now() + serverOffset;
         const elapsed = Math.floor((serverNow - startTime) / 1000);
         const remaining = Math.max(0, timeLimit - elapsed);
-
         setTimeLeft(remaining);
 
         if (remaining <= 0) {
@@ -696,7 +631,7 @@ export default function BattleScreen() {
       };
 
       updateTimer();
-      timerRef.current = setInterval(updateTimer, 500);
+      timerRef.current = setInterval(updateTimer, 1000);
     } else {
       cleanupTimers();
     }
@@ -706,7 +641,6 @@ export default function BattleScreen() {
     roomData?.questionStartedAt,
     roomData?.questionTransition,
     roomData?.status,
-    serverOffset,
     cleanupTimers,
     handleTimeExpiry,
   ]);
@@ -720,10 +654,10 @@ export default function BattleScreen() {
     }
   }, [roomData?.currentQuestion, roomData?.questionTransition]);
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      isMounted.current = false;
-      navigationInProgress.current = true;
+      navigationInProgress.current = true; // Prevent any new navigation
       cleanupTimers();
 
       if (roomId && !isLeaving) {
@@ -737,84 +671,41 @@ export default function BattleScreen() {
         }
       }
 
+      // FIXED: Non-blocking cleanup
       clearBattleState().catch(console.error);
     };
   }, [roomId, cleanupTimers, clearBattleState, isLeaving]);
 
-  const handleLeavePress = useCallback(() => {
-    try {
-      if (
-        !isLeaving &&
-        !showLeaveModal &&
-        !navigationInProgress.current &&
-        !leaveOperationInProgress.current &&
-        !isProcessing
-      ) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        setShowLeaveModal(true);
-      }
-    } catch (error) {
-      console.error("Leave button error:", error);
-      // Emergency fallback
-      router.replace("/user/multiplayer-mode-selection");
-    }
-  }, [isLeaving, showLeaveModal]);
-
+  // Replace confirmLeave function in battle-screen.tsx:
   const confirmLeave = useCallback(async () => {
-    // Prevent multiple concurrent leave operations
-    if (
-      leaveOperationInProgress.current ||
-      isLeaving ||
-      navigationInProgress.current
-    ) {
-      console.log("Leave operation already in progress, ignoring");
+    if (isLeaving || navigationInProgress.current) {
+      console.log("Leave already in progress, ignoring");
       return;
     }
 
-    leaveOperationInProgress.current = true;
+    console.log("Starting leave process");
+    navigationInProgress.current = true;
+    setIsLeaving(true);
+    setShowLeaveModal(false);
+
+    // Clear all timers immediately
+    cleanupTimers();
 
     try {
-      console.log("Starting leave process");
-      navigationInProgress.current = true;
-      setIsLeaving(true);
-      setShowLeaveModal(false);
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      cleanupTimers();
-
-      // Remove listener first to prevent conflicts
+      // FIXED: Remove listener first to prevent conflicts
       if (roomId) {
         battleManager.removeRoomListener(roomId as string);
       }
 
-      // Rest of your leave logic...
-      let results;
-      const isHost = roomData?.hostId === userId;
-      const totalPlayers = Object.keys(roomData?.players || {}).length;
+      const results =
+        roomData?.status === "playing"
+          ? await battleManager.leaveDuringBattle(roomId as string)
+          : await battleManager.leaveRoom(roomId as string);
 
-      if (roomData?.status === "playing") {
-        results = await battleManager.leaveDuringBattle(roomId as string);
-
-        if (!isHost && totalPlayers > 2) {
-          await clearBattleState();
-          router.replace({
-            pathname: "/user/battle-results",
-            params: {
-              roomId,
-              players: JSON.stringify(results ?? []),
-              totalQuestions: (roomData?.totalQuestions ?? 0).toString(),
-              currentUserId: userId,
-              endReason: "you_left",
-            },
-          });
-          return;
-        }
-      } else {
-        results = await battleManager.leaveRoom(roomId as string);
-      }
-
+      // FIXED: Clear state synchronously
       await clearBattleState();
 
+      // FIXED: Single navigation call
       const targetPath =
         roomData?.status === "playing"
           ? "/user/battle-results"
@@ -827,7 +718,8 @@ export default function BattleScreen() {
               players: JSON.stringify(results ?? []),
               totalQuestions: (roomData?.totalQuestions ?? 0).toString(),
               currentUserId: userId,
-              endReason: isHost ? "host_left" : "player_left",
+              endReason:
+                roomData?.hostId === userId ? "host_left" : "player_left",
             }
           : {};
 
@@ -836,34 +728,17 @@ export default function BattleScreen() {
       console.error("[confirmLeave] error", error);
       await clearBattleState();
       router.replace("/user/multiplayer-mode-selection");
-    } finally {
-      leaveOperationInProgress.current = false;
     }
   }, [isLeaving, roomId, roomData, userId, cleanupTimers, clearBattleState]);
 
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        // Only show modal if conditions are met
-        if (
-          !isLeaving &&
-          !showLeaveModal &&
-          !navigationInProgress.current &&
-          !leaveOperationInProgress.current &&
-          !isProcessing
-        ) {
-          // Add haptic feedback for better UX
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        // FIXED: Only show modal if not already leaving or showing modal
+        if (!isLeaving && !showLeaveModal && !navigationInProgress.current) {
           setShowLeaveModal(true);
-          return true; // Prevent default back action
         }
-
-        // If already showing modal or leaving, just prevent default action
-        if (showLeaveModal || isLeaving) {
-          return true;
-        }
-
-        return false; // Allow default back action in other cases
+        return true;
       };
 
       const subscription = BackHandler.addEventListener(
@@ -872,7 +747,7 @@ export default function BattleScreen() {
       );
 
       return () => subscription.remove();
-    }, [isLeaving, showLeaveModal, leaveOperationInProgress])
+    }, [isLeaving, showLeaveModal])
   );
 
   const handleInputChange = async (text: string) => {
@@ -1121,15 +996,7 @@ export default function BattleScreen() {
                   Battle Mode
                 </Text>
               </View>
-              <TouchableOpacity
-                onPress={handleLeavePress}
-                disabled={
-                  isLeaving ||
-                  !roomData ||
-                  leaveOperationInProgress.current ||
-                  isProcessing
-                }
-              >
+              <TouchableOpacity onPress={() => setShowLeaveModal(true)}>
                 <View className="flex-row items-center bg-red-500 px-3 py-1 rounded-full">
                   <Text className="text-white text-sm font-black">Leave</Text>
                 </View>
