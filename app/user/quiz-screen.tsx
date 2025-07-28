@@ -383,7 +383,6 @@ export default function QuizScreen() {
     // Reset timer animation (handled by timerKey and startTimer)
   }, [startTimer]);
 
-  // **HANDLE GAME END**
   const handleGameEnd = useCallback(
     async (
       finalScore?: number,
@@ -451,6 +450,7 @@ export default function QuizScreen() {
       fullname,
       avatar,
       cleanupQuiz,
+      router,
     ]
   );
 
