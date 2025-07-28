@@ -69,6 +69,7 @@ export default function HomeScreen() {
   const [currentQuote, setCurrentQuote] = useState(getRandomQuote());
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [isRefreshLoading, setIsRefreshLoading] = useState(false);
 
   // User State
   const [userName, setUserName] = useState("");
@@ -294,15 +295,17 @@ export default function HomeScreen() {
       }
 
       try {
-        // Only show loading with quote on initial load or refresh, not navigation
-        const shouldShowQuoteLoading = !hasLoadedOnce || forceRefresh;
+        const shouldShowQuoteLoading =
+          !hasLoadedOnce && !isFromNavigation && !isRefreshLoading;
 
-        if (shouldShowQuoteLoading) {
-          setCurrentQuote(getRandomQuote());
+        if (shouldShowQuoteLoading || isRefreshLoading) {
+          if (shouldShowQuoteLoading) {
+            setCurrentQuote(getRandomQuote());
+          }
           setLoading(true);
         }
 
-        // Create minimum loading delay only for quote loading
+        // Create minimum loading delay only for quote loading (initial load)
         const minLoadingDelay = shouldShowQuoteLoading
           ? new Promise((resolve) => setTimeout(resolve, 2000))
           : Promise.resolve();
@@ -338,7 +341,7 @@ export default function HomeScreen() {
         setLoading(false);
       }
     },
-    [hasLoadedOnce]
+    [hasLoadedOnce, isRefreshLoading] // Add isRefreshLoading to dependencies
   );
 
   // Enhanced exit confirmation function
@@ -533,12 +536,12 @@ export default function HomeScreen() {
     ])
   );
 
-  // Refresh handler
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setHasLoadedOnce(false); // Reset to show quote loading
+    setIsRefreshLoading(true); // Mark as refresh loading
     await loadAllData(true); // Force refresh
     setRefreshing(false);
+    setIsRefreshLoading(false); // Reset refresh loading
   }, [loadAllData]);
 
   // Animation effects
@@ -585,36 +588,38 @@ export default function HomeScreen() {
     }
   }, [params.quizCompleted, checkAndUpdateStreak]);
 
-  // Show enhanced loading screen with quotes
   if (loading) {
-    return (
-      <View className="flex-1 bg-white justify-center items-center px-4">
-        {/* Enhanced Loading Card */}
-        <View className="bg-white rounded-2xl border border-black overflow-hidden w-full max-w-sm">
-          <View className="w-full h-8 bg-primary"></View>
-          <View className="p-6 flex flex-col items-center gap-5">
-            {/* Animated Loading Icon */}
-            <View className="relative">
-              <ActivityIndicator size="large" color="#FF6B35" />
-            </View>
-
-            {/* Quote Section */}
-            <View className="flex flex-col items-center gap-3">
-              <Text className="text-xl italic font-bold text-center text-stone-900 leading-6">
-                "{currentQuote}"
-              </Text>
-            </View>
-
-            {/* Loading Message */}
-            <View className="flex flex-col items-center gap-2">
-              <Text className="text-primary font-bold text-lg">
-                Preparing your math adventure...
-              </Text>
+    if (!isRefreshLoading && isInitialLoad) {
+      return (
+        <View className="flex-1 bg-white justify-center items-center px-4">
+          {/* Enhanced Loading Card with Quote */}
+          <View className="bg-white rounded-2xl border border-black overflow-hidden w-full max-w-sm">
+            <View className="w-full h-8 bg-primary"></View>
+            <View className="p-6 flex flex-col items-center gap-5">
+              <View className="relative">
+                <ActivityIndicator size="large" color="#FF6B35" />
+              </View>
+              <View className="flex flex-col items-center gap-3">
+                <Text className="text-xl italic font-bold text-center text-stone-900 leading-6">
+                  "{currentQuote}"
+                </Text>
+              </View>
+              <View className="flex flex-col items-center gap-2">
+                <Text className="text-primary font-bold text-lg">
+                  Preparing your math adventure...
+                </Text>
+              </View>
             </View>
           </View>
         </View>
-      </View>
-    );
+      );
+    } else {
+      return (
+        <View className="flex-1 bg-white justify-center items-center">
+          <ActivityIndicator size="large" color="#FF6B35" />
+        </View>
+      );
+    }
   }
 
   return (
