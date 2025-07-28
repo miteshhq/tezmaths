@@ -367,7 +367,8 @@ export default function ProfileScreen() {
   if (loading) {
     return (
       <View className="flex-1 bg-white justify-center items-center">
-        <ActivityIndicator size="large" color="#3B82F6" />
+        <ActivityIndicator size="large" color="#F05A2A" />
+        <Text className="text-gray-600 text-base mt-4">Loading Profile...</Text>
       </View>
     );
   }

@@ -219,7 +219,7 @@ export default function LearnScreen() {
     <View style={styles.container}>
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#8B5CF6" />
+          <ActivityIndicator size="large" color="#F05A2A" />
           <Text style={styles.loadingText}>Loading videos...</Text>
         </View>
       ) : (

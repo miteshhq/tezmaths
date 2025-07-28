@@ -22,6 +22,7 @@ import {
 import SoundManager from "../../components/soundManager";
 import { auth, database } from "../../firebase/firebaseConfig";
 import { checkStreakDecay } from "../../utils/streakManager";
+import { getRandomQuote } from "../../utils/mathQuotes";
 
 // Define interfaces for type safety
 interface Quiz {
@@ -65,6 +66,7 @@ export default function HomeScreen() {
   const APP_DATA_KEY = "appData";
 
   const router = useRouter();
+  const [currentQuote, setCurrentQuote] = useState(getRandomQuote());
 
   // User State
   const [userName, setUserName] = useState("");
@@ -81,11 +83,9 @@ export default function HomeScreen() {
     useState(0);
   const [finishedQuizzes, setFinishedQuizzes] = useState<Quiz[]>([]);
   const [maxLevel, setMaxLevel] = useState(1);
-  const [quizCode, setQuizCode] = useState("");
 
   // UI State
   const [loading, setLoading] = useState(true);
-  const [isLoadingLevels, setIsLoadingLevels] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showStreakPopup, setShowStreakPopup] = useState(false);
   const [streakPopupMessage, setStreakPopupMessage] = useState("");
@@ -95,7 +95,6 @@ export default function HomeScreen() {
 
   // Animation refs
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const scrollY = useRef(new Animated.Value(0)).current;
   const animatedValue = useRef(new Animated.Value(270)).current;
 
   // App state tracking
@@ -151,7 +150,7 @@ export default function HomeScreen() {
     quizzesData: any,
     completedQuizzes: any
   ) => {
-    setLoading(false);
+    // setLoading(false);
 
     // Update user state
     const processedUserData: UserData = {
@@ -284,8 +283,8 @@ export default function HomeScreen() {
     }
   };
 
-  // MOVED loadAllData definition BEFORE its usage
   const loadAllData = useCallback(async (forceRefresh = false) => {
+    setCurrentQuote(getRandomQuote());
     const userId = auth.currentUser?.uid;
     if (!userId) {
       setLoading(false);
@@ -295,21 +294,32 @@ export default function HomeScreen() {
     try {
       setLoading(true);
 
-      // Always load from cache first for immediate UI response
-      await loadCachedData();
+      // Create minimum loading delay promise (3 seconds)
+      const minLoadingDelay = new Promise((resolve) =>
+        setTimeout(resolve, 2000)
+      );
 
-      // Fetch fresh data from Firebase
-      const [userData, quizzesData, completedQuizzes] = await Promise.all([
-        fetchUserData(userId),
-        fetchQuizzesData(),
-        fetchCompletedQuizzes(userId),
-      ]);
+      // Data loading promise
+      const dataLoadingPromise = async () => {
+        // Always load from cache first for immediate UI response
+        await loadCachedData();
 
-      // Process and update all data
-      await processAndUpdateData(userData, quizzesData, completedQuizzes);
+        // Fetch fresh data from Firebase
+        const [userData, quizzesData, completedQuizzes] = await Promise.all([
+          fetchUserData(userId),
+          fetchQuizzesData(),
+          fetchCompletedQuizzes(userId),
+        ]);
 
-      // Cache the fresh data
-      await cacheAllData(userData, quizzesData);
+        // Process and update all data
+        await processAndUpdateData(userData, quizzesData, completedQuizzes);
+
+        // Cache the fresh data
+        await cacheAllData(userData, quizzesData);
+      };
+
+      // Wait for both data loading AND minimum delay to complete
+      await Promise.all([dataLoadingPromise(), minLoadingDelay]);
     } catch (error) {
       // console.error("Error loading data:", error);
     } finally {
@@ -552,12 +562,34 @@ export default function HomeScreen() {
     }
   }, [params.quizCompleted, checkAndUpdateStreak]);
 
-  // Show loading screen if initial load
+  // Show enhanced loading screen with quotes
   if (loading) {
     return (
-      <View className="flex-1 bg-custom-gray justify-center items-center">
-        <ActivityIndicator size="large" color="#FF6B35" />
-        <Text className="text-black mt-4">Loading...</Text>
+      <View className="flex-1 bg-white justify-center items-center px-4">
+        {/* Enhanced Loading Card */}
+        <View className="bg-white rounded-2xl border border-black overflow-hidden w-full max-w-sm">
+          <View className="w-full h-8 bg-primary"></View>
+          <View className="p-6 flex flex-col items-center gap-5">
+            {/* Animated Loading Icon */}
+            <View className="relative">
+              <ActivityIndicator size="large" color="#FF6B35" />
+            </View>
+
+            {/* Quote Section */}
+            <View className="flex flex-col items-center gap-3">
+              <Text className="text-xl italic font-bold text-center text-custom-purple leading-6">
+                "{currentQuote}"
+              </Text>
+            </View>
+
+            {/* Loading Message */}
+            <View className="flex flex-col items-center gap-2">
+              <Text className="text-primary font-bold text-lg">
+                Preparing your math adventure...
+              </Text>
+            </View>
+          </View>
+        </View>
       </View>
     );
   }

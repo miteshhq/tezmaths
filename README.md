@@ -8,3 +8,8 @@ password: admin@t32m392s
 Make account in firebase and get web client info then also get the service-key and place in the firebase folder - in the file setAdminToken.ts set the id of admin account and set the location of the service-key.json file
 
 make apps like ios and android and get their files after adding the sha1 keys etc and place them in root folder. in useGoogleSignIn set the web client id from the console.cloud.google.com apis & services credentials window.
+
+- other user can't leave the battle
+- time glitch in battle
+- adding intro kind of thing in loading the app.
+- adding quotes instead of loading.

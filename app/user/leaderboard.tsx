@@ -264,7 +264,7 @@ export default function LeaderboardScreen() {
     <View className="flex-1 bg-white">
       {loading ? (
         <View className="flex-1 justify-center items-center">
-          <ActivityIndicator size="large" color="#primary" />
+          <ActivityIndicator size="large" color="#F05A2A" />
           <Text className="text-gray-600 text-base mt-4">
             Loading Leaderboard...
           </Text>
