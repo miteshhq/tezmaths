@@ -152,11 +152,9 @@ export default function BattleScreen() {
   const [feedback, setFeedback] = useState("");
   const [isAnswered, setIsAnswered] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const timerAnimation = useRef(new Animated.Value(1)).current;
   const userId = auth.currentUser?.uid;
   const submitTimeoutRef = useRef<number | null>(null);
   const timeExpiryHandled = useRef(false);
-  const [userData, setUserData] = useState({ avatar: 0 });
   const [networkError, setNetworkError] = useState(false);
 
   const [showBetterLuckMessage, setShowBetterLuckMessage] = useState(false);
@@ -184,6 +182,9 @@ export default function BattleScreen() {
     transitionTimer: null,
     questionTimer: null,
   });
+
+  const isCleaningUp = useRef(false);
+  const lastRoomId = useRef(null);
 
   useEffect(() => {
     const offsetRef = ref(database, ".info/serverTimeOffset");
@@ -220,54 +221,72 @@ export default function BattleScreen() {
   }, []);
 
   const clearBattleState = useCallback(async () => {
+    if (isCleaningUp.current) {
+      console.log("Cleanup already in progress, skipping");
+      return;
+    }
+
+    isCleaningUp.current = true;
     console.log("Clearing all battle state for new battle");
 
-    navigationInProgress.current = false;
-
-    // Clear all timers first
-    cleanupTimers();
-
-    // Reset all state variables
-    setRoomData(null);
-    setTimeLeft(15);
-    setUserAnswer("");
-    setFeedback("");
-    setIsAnswered(false);
-    setIsProcessing(false);
-    setNetworkError(false);
-    setShowBetterLuckMessage(false);
-    setBetterLuckCountdown(0);
-    setShowNextQuestionCountdown(false);
-    setCountdownValue(0);
-    setBackHandlerActive(false);
-    setIsLeaving(false);
-    setShowLeaveModal(false);
-
-    // Reset refs
-    timeExpiryHandled.current = false;
-    battleInitialized.current = false;
-    otherWinnerAnnouncedRef.current = false;
-
-    // Clear cached data
     try {
-      await AsyncStorage.multiRemove([
+      navigationInProgress.current = false;
+
+      // Clear all timers first
+      cleanupTimers();
+
+      // Reset all state variables
+      setRoomData(null);
+      setTimeLeft(15);
+      setUserAnswer("");
+      setFeedback("");
+      setIsAnswered(false);
+      setIsProcessing(false);
+      setNetworkError(false);
+      setShowBetterLuckMessage(false);
+      setBetterLuckCountdown(0);
+      setShowNextQuestionCountdown(false);
+      setCountdownValue(0);
+      setBackHandlerActive(false);
+      setIsLeaving(false);
+      setShowLeaveModal(false);
+
+      // Reset refs
+      timeExpiryHandled.current = false;
+      battleInitialized.current = false;
+      otherWinnerAnnouncedRef.current = false;
+
+      // ENHANCED: Clear all battle-related cached data
+      const keysToRemove = [
         "currentBattleId",
         "battleState",
         "battleResults",
         "lastBattleScore",
         "battleProgress",
-      ]);
+        "roomData",
+        "battleQuestions",
+        "currentQuestionIndex",
+        "playerAnswers",
+        "battleTimer",
+      ];
+
+      await AsyncStorage.multiRemove(keysToRemove);
+
+      // Remove room listener if exists
+      if (currentRoomId.current && battleManager) {
+        try {
+          battleManager.removeRoomListener(currentRoomId.current as string);
+        } catch (error) {
+          console.error("Error removing room listener:", error);
+        }
+      }
+
+      // CRITICAL: Reset battle manager state
+      await battleManager.resetUserBattleState();
     } catch (error) {
       console.error("Error clearing battle cache:", error);
-    }
-
-    // Remove room listener
-    if (currentRoomId.current && battleManager) {
-      try {
-        battleManager.removeRoomListener(currentRoomId.current as string);
-      } catch (error) {
-        console.error("Error removing room listener:", error);
-      }
+    } finally {
+      isCleaningUp.current = false;
     }
   }, [cleanupTimers]);
 
@@ -300,52 +319,43 @@ export default function BattleScreen() {
     }
   }, [roomData?.hostId, roomData?.questionTransition, userId, roomId]);
 
-  // DETECT ROOM CHANGE AND CLEAR STATE
   useEffect(() => {
-    if (roomId !== currentRoomId.current) {
-      console.log(`Room changed from ${currentRoomId.current} to ${roomId}`);
+    if (roomId !== lastRoomId.current) {
+      console.log(`Room changed from ${lastRoomId.current} to ${roomId}`);
+      lastRoomId.current = roomId;
       currentRoomId.current = roomId;
-      // Make this non-blocking
+
+      // Force clear state for new room
       clearBattleState().catch(console.error);
     }
   }, [roomId, clearBattleState]);
 
-  // INITIALIZE BATTLE STATE ON MOUNT (SIMPLIFIED)
   useEffect(() => {
-    const initializeBattle = () => {
-      if (!battleInitialized.current && roomId) {
+    const initializeBattle = async () => {
+      if (!battleInitialized.current && roomId && !isCleaningUp.current) {
         console.log("Initializing new battle for room:", roomId);
 
-        // Clear everything first (NON-BLOCKING)
-        clearBattleState().catch(console.error);
+        // Wait for any ongoing cleanup
+        while (isCleaningUp.current) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
 
-        // Reset navigation and state flags
+        // Clear everything first
+        await clearBattleState();
+
+        // Reset flags
         setIsLeaving(false);
         setBackHandlerActive(false);
         setShowLeaveModal(false);
+        navigationInProgress.current = false;
 
-        // Mark as initialized IMMEDIATELY
+        // Mark as initialized
         battleInitialized.current = true;
       }
     };
 
     initializeBattle();
   }, [roomId, clearBattleState]);
-
-  useEffect(() => {
-    const loadUserData = async () => {
-      try {
-        const cachedData = await AsyncStorage.getItem("userData");
-        if (cachedData) {
-          const data = JSON.parse(cachedData);
-          setUserData(data);
-        }
-      } catch (error) {
-        console.error("Error loading user data:", error);
-      }
-    };
-    loadUserData();
-  }, []);
 
   useEffect(() => {
     if (

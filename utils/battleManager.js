@@ -382,6 +382,8 @@ export class BattleManager {
         this.setupUserPresence();
         // Pre-generate questions in background (non-blocking)
         this.preGenerateQuestions().catch(console.error);
+
+        this.startPeriodicCleanup();
     }
 
     async waitForAuth() {
@@ -1151,24 +1153,50 @@ export class BattleManager {
 
     async resetUserBattleState() {
         try {
-            // Clear all listeners
+            console.log("Starting comprehensive battle state reset");
+
+            // Clear all listeners with error handling
             this.listeners.forEach((listener, roomId) => {
                 try {
                     off(listener.ref, "value", listener.handler);
+                    console.log(`Removed listener for room ${roomId}`);
                 } catch (error) {
-                    console.warn("Error removing listener:", error);
+                    console.warn(`Error removing listener for room ${roomId}:`, error);
                 }
             });
             this.listeners.clear();
             this.activeRooms.clear();
 
-            // Clear question cache periodically but keep some for performance
-            if (this.usedQuestionSignatures.size > 100) {
-                const signatures = Array.from(this.usedQuestionSignatures);
-                this.usedQuestionSignatures = new Set(signatures.slice(-50));
+            // ENHANCED: Clear all cached data
+            this.questionCache.clear();
+            this.usedQuestionSignatures.clear();
+            this.lastCacheTime = 0;
+
+            // Clear AsyncStorage battle data
+            try {
+                const battleKeys = [
+                    "currentBattleId",
+                    "battleState",
+                    "battleResults",
+                    "lastBattleScore",
+                    "battleProgress",
+                    "roomData",
+                    "battleQuestions",
+                    "currentQuestionIndex",
+                    "playerAnswers",
+                    "battleTimer"
+                ];
+                await AsyncStorage.multiRemove(battleKeys);
+            } catch (error) {
+                console.warn("Error clearing AsyncStorage battle data:", error);
             }
 
-            console.log("Battle state reset completed");
+            // Run automated cleanup (non-blocking)
+            this.cleanupOldRooms().catch(error => {
+                console.warn("Automated room cleanup failed:", error);
+            });
+
+            console.log("Battle state reset completed successfully");
         } catch (error) {
             console.error("Battle state reset error:", error);
         }
@@ -1362,21 +1390,21 @@ export class BattleManager {
         }
     }
 
-    // IMPROVED: Enhanced cleanup with cache management
     cleanup() {
         console.log("Cleaning up battle manager...");
+
+        // Stop periodic cleanup
+        this.stopPeriodicCleanup();
 
         // Clear all Firebase listeners
         this.listeners.forEach((listener, roomId) => {
             try {
-                off(createRoomRef(roomId), listener.handler);
+                off(listener.ref, "value", listener.handler);
             } catch (error) {
                 console.error(`Error removing listener for ${roomId}:`, error);
             }
         });
         this.listeners.clear();
-
-        // Clear active rooms
         this.activeRooms.clear();
 
         // Clean up presence
@@ -1390,27 +1418,108 @@ export class BattleManager {
             this.userPresenceRef = null;
         }
 
-        // Partial cache cleanup (keep some for performance)
-        if (this.questionCache.size > 5) {
-            // Keep only the most recent cache entries
-            const entries = Array.from(this.questionCache.entries());
-            this.questionCache.clear();
-            entries.slice(-2).forEach(([key, value]) => {
-                this.questionCache.set(key, value);
-            });
-        }
-
-        // Clean up used question signatures but keep recent ones
-        if (this.usedQuestionSignatures.size > 50) {
-            const signatures = Array.from(this.usedQuestionSignatures);
-            this.usedQuestionSignatures = new Set(signatures.slice(-25));
-        }
+        // Clear all caches
+        this.questionCache.clear();
+        this.usedQuestionSignatures.clear();
 
         this.userId = null;
         this.isInitialized = false;
 
         console.log("Battle manager cleanup completed");
     }
+
+    async cleanupOldRooms() {
+        try {
+            console.log("[cleanupOldRooms] Starting cleanup of old rooms");
+
+            const now = Date.now();
+            const TEN_MINUTES_AGO = now - (10 * 60 * 1000); // 10 minutes ago
+
+            const { data: roomsData, exists } = await safeGet(createRoomsRef());
+            if (!exists || !roomsData) {
+                console.log("[cleanupOldRooms] No rooms found");
+                return;
+            }
+
+            const roomsToDelete = [];
+
+            Object.entries(roomsData).forEach(([roomId, roomData]) => {
+                const roomCreatedAt = roomData.createdAt || 0;
+                const lastActivity = roomData.lastActivity || roomCreatedAt;
+
+                // Convert Firebase timestamp to milliseconds if needed
+                const createdTime = typeof roomCreatedAt === 'object' ?
+                    (roomCreatedAt.seconds ? roomCreatedAt.seconds * 1000 : now) : roomCreatedAt;
+                const activityTime = typeof lastActivity === 'object' ?
+                    (lastActivity.seconds ? lastActivity.seconds * 1000 : now) : lastActivity;
+
+                const shouldDelete = (
+                    // Room is older than 10 minutes
+                    createdTime < TEN_MINUTES_AGO ||
+                    activityTime < TEN_MINUTES_AGO
+                ) && (
+                        // And room is finished, has no players, or status allows cleanup
+                        roomData.status === "finished" ||
+                        !roomData.players ||
+                        Object.keys(roomData.players).length === 0 ||
+                        // All players disconnected
+                        Object.values(roomData.players).every(player => !player.connected)
+                    );
+
+                if (shouldDelete) {
+                    roomsToDelete.push(roomId);
+                }
+            });
+
+            console.log(`[cleanupOldRooms] Found ${roomsToDelete.length} rooms to delete`);
+
+            // Delete rooms in batches to avoid overwhelming the database
+            const BATCH_SIZE = 5;
+            for (let i = 0; i < roomsToDelete.length; i += BATCH_SIZE) {
+                const batch = roomsToDelete.slice(i, i + BATCH_SIZE);
+
+                await Promise.all(
+                    batch.map(async (roomId) => {
+                        try {
+                            await this.cleanupRoom(roomId, "automated_cleanup");
+                            console.log(`[cleanupOldRooms] Deleted room ${roomId}`);
+                        } catch (error) {
+                            console.error(`[cleanupOldRooms] Failed to delete room ${roomId}:`, error);
+                        }
+                    })
+                );
+
+                // Small delay between batches
+                if (i + BATCH_SIZE < roomsToDelete.length) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+
+            console.log(`[cleanupOldRooms] Cleanup completed. Deleted ${roomsToDelete.length} rooms`);
+            return roomsToDelete.length;
+
+        } catch (error) {
+            console.error("[cleanupOldRooms] Error during cleanup:", error);
+            return 0;
+        }
+    }
+
+    startPeriodicCleanup() {
+        // Run cleanup every 5 minutes
+        this.cleanupInterval = setInterval(() => {
+            this.cleanupOldRooms().catch(error => {
+                console.warn("Periodic cleanup failed:", error);
+            });
+        }, 5 * 60 * 1000); // 5 minutes
+    }
+
+    stopPeriodicCleanup() {
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+            this.cleanupInterval = null;
+        }
+    }
+
 }
 
 export const battleManager = new BattleManager();

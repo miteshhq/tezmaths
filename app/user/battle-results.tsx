@@ -83,6 +83,50 @@ const avatarImages = (avatar: number | string) => {
   }
 };
 
+const SafeNavigationWrapper = ({ children, onError }) => {
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    const errorHandler = (error) => {
+      console.error("Navigation error caught:", error);
+      setHasError(true);
+      onError?.(error);
+    };
+
+    // Add error listener
+    const originalConsoleError = console.error;
+    console.error = (...args) => {
+      if (args[0]?.includes?.("navigation") || args[0]?.includes?.("router")) {
+        errorHandler(args[0]);
+      }
+      originalConsoleError(...args);
+    };
+
+    return () => {
+      console.error = originalConsoleError;
+    };
+  }, [onError]);
+
+  if (hasError) {
+    return (
+      <View className="flex-1 justify-center items-center p-4">
+        <Text className="text-lg mb-4">Navigation Error</Text>
+        <TouchableOpacity
+          className="bg-primary px-6 py-3 rounded-xl"
+          onPress={() => {
+            setHasError(false);
+            router.replace("/user/home");
+          }}
+        >
+          <Text className="text-white font-bold">Go Home</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return children;
+};
+
 export default function BattleResultsScreen() {
   const params = useLocalSearchParams();
   const { roomId, players, totalQuestions, currentUserId } = params;
@@ -91,6 +135,8 @@ export default function BattleResultsScreen() {
   const cleanupExecuted = useRef(false);
   const navigationInProgress = useRef(false);
   const soundPlayed = useRef(false);
+  const navigationLock = useRef(false);
+  const cleanupCompleted = useRef(false);
 
   // State management
   const [isSharing, setIsSharing] = useState(false);
@@ -107,6 +153,14 @@ export default function BattleResultsScreen() {
   });
   const [errorMessage, setErrorMessage] = useState("");
   const [isNavigating, setIsNavigating] = useState(false);
+
+  const handleNavigationError = useCallback((error: any) => {
+    console.error("Battle results navigation error:", error);
+    // Force navigation as fallback
+    setTimeout(() => {
+      router.replace("/user/home");
+    }, 2000);
+  }, []);
 
   // ENHANCED CLEANUP: Complete battle state reset
   const performCleanup = useCallback(async () => {
@@ -359,30 +413,80 @@ export default function BattleResultsScreen() {
   );
 
   const handleHomeNavigation = useCallback(async () => {
-    if (isNavigating) return;
+    if (navigationLock.current) {
+      console.log("Navigation already in progress, ignoring");
+      return;
+    }
 
+    navigationLock.current = true;
     setIsNavigating(true);
 
     try {
-      // Perform cleanup first
-      await performCleanup();
+      console.log("Starting home navigation with cleanup");
 
-      // Small delay to ensure cleanup completes
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // ENHANCED: Check if user is still in an active battle
+      if (roomId) {
+        const roomRef = ref(database, `rooms/${roomId}`);
+        const snapshot = await get(roomRef);
 
-      // Navigate back to multiplayer selection
+        if (snapshot.exists()) {
+          const roomData = snapshot.val();
+          const userId = auth.currentUser?.uid;
+
+          // If battle is still active and user is still connected, just disconnect them
+          if (
+            roomData.status === "playing" &&
+            roomData.players?.[userId]?.connected
+          ) {
+            console.log("User still in active battle, disconnecting cleanly");
+            await battleManager.updatePlayerConnection(roomId, false);
+
+            // Small delay to ensure disconnection is processed
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+        }
+      }
+
+      // Perform comprehensive cleanup
+      if (!cleanupCompleted.current) {
+        await performCleanup();
+        cleanupCompleted.current = true;
+      }
+
+      // Additional cleanup: Clear any remaining battle state
+      await AsyncStorage.multiRemove([
+        "currentBattleId",
+        "battleState",
+        "battleResults",
+        "lastBattleScore",
+        "battleProgress",
+        "roomData",
+        "battleQuestions",
+      ]);
+
+      // Small delay to ensure all cleanup completes
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      // Navigate with replace to prevent back navigation
       router.replace("/user/home");
     } catch (error) {
       console.warn("Navigation cleanup error:", error);
-      // Navigate anyway
-      router.replace("/user/multiplayer-mode-selection");
+      // Always navigate even if cleanup fails
+      router.replace("/user/home");
+    } finally {
+      // Reset locks after navigation
+      setTimeout(() => {
+        navigationLock.current = false;
+        setIsNavigating(false);
+      }, 1000);
     }
-  }, [performCleanup]);
+  }, [performCleanup, roomId]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      performCleanup();
+      if (!cleanupCompleted.current) {
+        performCleanup().catch(console.error);
+      }
     };
   }, [performCleanup]);
 
@@ -502,141 +606,163 @@ export default function BattleResultsScreen() {
   }
 
   return (
-    <ScrollView
-      className="bg-white"
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ flexGrow: 1 }}
-      showsVerticalScrollIndicator={false}
-    >
-      <View className="flex-1 bg-white justify-center items-center p-4">
-        <ViewShot
-          ref={viewShotRef}
-          options={{
-            format: "png",
-            quality: 0.9,
-            result: "tmpfile",
-            snapshotContentContainer: false,
-          }}
-          style={{ backgroundColor: "white" }}
-        >
-          <View
-            collapsable={false}
-            className="bg-custom-gray border-4 border-white p-4 rounded-3xl shadow-xl w-full"
-            style={{
-              backgroundColor: "#f5f5f5",
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 4.65,
-              elevation: 8,
+    <SafeNavigationWrapper onError={handleNavigationError}>
+      <ScrollView
+        className="bg-white"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ flexGrow: 1 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View className="flex-1 bg-white justify-center items-center p-4">
+          <ViewShot
+            ref={viewShotRef}
+            options={{
+              format: "png",
+              quality: 0.9,
+              result: "tmpfile",
+              snapshotContentContainer: false,
             }}
+            style={{ backgroundColor: "white" }}
           >
-            <Text className="text-3xl font-bold text-black text-center mb-6">
-              Battle With Friends
-            </Text>
-
-            <View className="mb-6">
-              <Text className="text-2xl font-bold text-center">
-                {battleData.userRank === 1
-                  ? "🏆 You Won!"
-                  : `You Ranked #${battleData.userRank}`}
+            <View
+              collapsable={false}
+              className="bg-custom-gray border-4 border-white p-4 rounded-3xl shadow-xl w-full"
+              style={{
+                backgroundColor: "#f5f5f5",
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 4.65,
+                elevation: 8,
+              }}
+            >
+              <Text className="text-3xl font-bold text-black text-center mb-6">
+                Battle With Friends
               </Text>
-              <Text className="text-xl text-center">
-                Your Score: {battleData.userScore} pts
-              </Text>
-              <Text className="text-lg text-center italic mt-2">
-                "{getMotivationalQuote()}"
-              </Text>
-            </View>
 
-            {renderProfileImages()}
-
-            <Text className="text-2xl text-black font-bold text-center mx-auto w-full mb-2">
-              Battle Score
-            </Text>
-
-            <ScrollView className="w-full mb-4">
-              {battleData.players.map((player, index) => (
-                <View
-                  key={player.userId}
-                  className={`flex-row justify-between items-center w-full p-4 py-2 rounded-lg mb-2 bg-light-orange ${
-                    player.userId ===
-                    (Array.isArray(currentUserId)
-                      ? currentUserId[0]
-                      : currentUserId)
-                      ? "border-2 border-primary"
-                      : "border-transparent border-2"
-                  }`}
-                >
-                  <Text className="text-xl font-bold">
-                    {index + 1}. {player.username}
-                    {player.userId ===
-                    (Array.isArray(currentUserId)
-                      ? currentUserId[0]
-                      : currentUserId)
-                      ? " (You)"
-                      : ""}
-                  </Text>
-                  <Text className="text-xl">{player.score} pts</Text>
-                </View>
-              ))}
-            </ScrollView>
-
-            <Text className="text-2xl mt-2 mb-2 font-black text-center text-white py-2 px-4 mx-auto bg-primary rounded-xl">
-              Download Now
-            </Text>
-
-            <View className="items-center mb-8 mt-3">
-              <Image source={logo} style={{ height: 30, width: 140 }} />
-              <Text className="text-black text-center">
-                Sharpen your speed, master your math!
-              </Text>
-            </View>
-          </View>
-        </ViewShot>
-
-        <View className="flex-row justify-between mt-6 w-full max-w-md">
-          <TouchableOpacity
-            className="py-3 px-6 border border-black rounded-full flex-1 mr-1"
-            onPress={handleHomeNavigation}
-            disabled={navigationInProgress.current}
-            activeOpacity={0.7}
-          >
-            <View className="flex-row items-center justify-center gap-2">
-              <Text className="font-black text-2xl">Home</Text>
-              <Image
-                source={require("../../assets/icons/home.png")}
-                style={{ width: 20, height: 20 }}
-                tintColor="#FF6B35"
-              />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            className="py-3 px-6 border border-black rounded-full flex-1 ml-1"
-            onPress={shareImageAndText}
-            disabled={isSharing}
-            activeOpacity={0.7}
-          >
-            {isSharing ? (
-              <ActivityIndicator color="#FF6B35" />
-            ) : (
-              <View className="flex-row items-center justify-center gap-2">
-                <Text className="font-black text-2xl">Share</Text>
-                <Image
-                  source={require("../../assets/icons/share.png")}
-                  style={{ width: 20, height: 20 }}
-                  tintColor="#FF6B35"
-                />
+              <View className="mb-6">
+                <Text className="text-2xl font-bold text-center">
+                  {battleData.userRank === 1
+                    ? "🏆 You Won!"
+                    : `You Ranked #${battleData.userRank}`}
+                </Text>
+                <Text className="text-xl text-center">
+                  Your Score: {battleData.userScore} pts
+                </Text>
+                <Text className="text-lg text-center italic mt-2">
+                  "{getMotivationalQuote()}"
+                </Text>
               </View>
-            )}
-          </TouchableOpacity>
-        </View>
 
-        <Text className="text-primary text-sm mt-3">
-          TezMaths - Sharpen Your Speed
-        </Text>
-      </View>
-    </ScrollView>
+              {renderProfileImages()}
+
+              <Text className="text-2xl text-black font-bold text-center mx-auto w-full mb-2">
+                Battle Score
+              </Text>
+
+              <ScrollView className="w-full mb-4">
+                {battleData.players.map((player, index) => (
+                  <View
+                    key={player.userId}
+                    className={`flex-row justify-between items-center w-full p-4 py-2 rounded-lg mb-2 bg-light-orange ${
+                      player.userId ===
+                      (Array.isArray(currentUserId)
+                        ? currentUserId[0]
+                        : currentUserId)
+                        ? "border-2 border-primary"
+                        : "border-transparent border-2"
+                    }`}
+                  >
+                    <Text className="text-xl font-bold">
+                      {index + 1}. {player.username}
+                      {player.userId ===
+                      (Array.isArray(currentUserId)
+                        ? currentUserId[0]
+                        : currentUserId)
+                        ? " (You)"
+                        : ""}
+                    </Text>
+                    <Text className="text-xl">{player.score} pts</Text>
+                  </View>
+                ))}
+              </ScrollView>
+
+              <Text className="text-2xl mt-2 mb-2 font-black text-center text-white py-2 px-4 mx-auto bg-primary rounded-xl">
+                Download Now
+              </Text>
+
+              <View className="items-center mb-8 mt-3">
+                <Image source={logo} style={{ height: 30, width: 140 }} />
+                <Text className="text-black text-center">
+                  Sharpen your speed, master your math!
+                </Text>
+              </View>
+            </View>
+          </ViewShot>
+
+          <View className="flex-row justify-between mt-6 w-full max-w-md">
+            <TouchableOpacity
+              className={`py-3 px-6 border-2 rounded-full flex-1 mr-1 ${
+                isNavigating
+                  ? "border-gray-400 bg-gray-100"
+                  : "border-primary bg-white hover:bg-primary hover:border-white"
+              }`}
+              onPress={handleHomeNavigation}
+              disabled={isNavigating || navigationLock.current}
+              activeOpacity={0.7}
+              style={{
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+                elevation: 3,
+              }}
+            >
+              {isNavigating ? (
+                <View className="flex-row items-center justify-center gap-2">
+                  <ActivityIndicator color="#FF6B35" size="small" />
+                  <Text className="font-black text-lg text-primary">
+                    Loading...
+                  </Text>
+                </View>
+              ) : (
+                <View className="flex-row items-center justify-center gap-2">
+                  <Text className="font-black text-2xl text-primary">Home</Text>
+                  <Image
+                    source={require("../../assets/icons/home.png")}
+                    style={{ width: 20, height: 20 }}
+                    tintColor="#FF6B35"
+                  />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="py-3 px-6 border border-black rounded-full flex-1 ml-1"
+              onPress={shareImageAndText}
+              disabled={isSharing}
+              activeOpacity={0.7}
+            >
+              {isSharing ? (
+                <ActivityIndicator color="#FF6B35" />
+              ) : (
+                <View className="flex-row items-center justify-center gap-2">
+                  <Text className="font-black text-2xl">Share</Text>
+                  <Image
+                    source={require("../../assets/icons/share.png")}
+                    style={{ width: 20, height: 20 }}
+                    tintColor="#FF6B35"
+                  />
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <Text className="text-primary text-sm mt-3">
+            TezMaths - Sharpen Your Speed
+          </Text>
+        </View>
+      </ScrollView>
+    </SafeNavigationWrapper>
   );
 }
