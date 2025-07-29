@@ -526,54 +526,61 @@ export default function BattleResultsScreen() {
     setIsNavigating(true);
 
     try {
-      // **FIXED: Clear navigation history to prevent loops**
-      while (router.canGoBack()) {
-        router.back();
-      }
+      // **FIXED: Simplified navigation without complex stack clearing**
+      // Don't use while loop - it causes issues
 
-      // **FIXED: Use replace with reset to clear stack**
-      router.replace("/user/home");
-
-      // **FIXED: Cleanup in background without blocking navigation**
+      // Clear any pending operations first
       setTimeout(() => {
-        performCleanupSilently().finally(() => {
-          navigationLock.current = false;
-          setIsNavigating(false);
-        });
-      }, 100);
+        performCleanupSilently().catch(console.error);
+      }, 50);
+
+      // Direct navigation - let Expo Router handle stack management
+      router.replace("/user/home");
     } catch (error) {
       console.error("Navigation error:", error);
-      // **FIXED: Force navigation even on error**
+      // **FIXED: Fallback navigation**
       try {
-        router.dismissAll(); // Clear all modals/screens
-        router.replace("/user/home");
+        // Try alternative navigation
+        router.push("/user/home");
       } catch (fallbackError) {
-        // Last resort: reload the app
-        console.error("Critical navigation failure");
+        console.error("Critical navigation failure - reloading app");
+        // Force refresh as last resort
+        window.location?.reload?.();
       }
+    } finally {
+      // **FIXED: Reset flags after delay**
+      setTimeout(() => {
+        setIsNavigating(false);
+        navigationLock.current = false;
+        preventStateUpdates.current = false;
+      }, 1000);
     }
   }, [performCleanupSilently]);
 
+  // Proper error handling for React Native
   useEffect(() => {
-    // **FIXED: Prevent memory leaks and crashes**
-    const handleError = (error, errorInfo) => {
-      console.error("Battle Results Error:", error, errorInfo);
-      // Navigate to home on any critical error
-      router.replace("/user/home");
+    const handleAppError = (error) => {
+      console.error("Battle Results Critical Error:", error);
+      // Safe navigation on critical errors
+      setTimeout(() => {
+        router.replace("/user/home");
+      }, 1000);
     };
 
-    // Add global error handler
-    const originalHandler = global.ErrorUtils?.getGlobalHandler();
-    global.ErrorUtils?.setGlobalHandler((error, isFatal) => {
-      if (isFatal) {
-        handleError(error, "Fatal error in battle results");
-      } else {
-        originalHandler?.(error, isFatal);
+    // Monitor for unhandled promise rejections
+    const handleRejection = (event) => {
+      if (
+        event.reason?.message?.includes?.("navigation") ||
+        event.reason?.message?.includes?.("battle")
+      ) {
+        handleAppError(event.reason);
       }
-    });
+    };
+
+    window.addEventListener?.("unhandledrejection", handleRejection);
 
     return () => {
-      global.ErrorUtils?.setGlobalHandler(originalHandler);
+      window.removeEventListener?.("unhandledrejection", handleRejection);
     };
   }, []);
 

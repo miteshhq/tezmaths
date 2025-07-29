@@ -752,78 +752,84 @@ export default function BattleScreen() {
     };
   }, [roomId, cleanupTimers, clearBattleState, isLeaving]);
 
-  const confirmLeave = useCallback(async () => {
-    console.log("Confirm leave called");
+const confirmLeave = useCallback(async () => {
+  console.log("Confirm leave called");
 
-    // Prevent multiple simultaneous executions
-    if (isLeaving || leavingInProgress.current) {
-      console.log("Leave already in progress, ignoring confirmLeave");
-      return;
+  if (isLeaving || leavingInProgress.current) {
+    console.log("Leave already in progress, ignoring confirmLeave");
+    return;
+  }
+
+  leavingInProgress.current = true;
+  setIsLeaving(true);
+  setBackHandlerActive(true);
+  setShowLeaveModal(false);
+
+  try {
+    cleanupTimers();
+
+    if (roomId) {
+      battleManager.removeRoomListener(roomId as string);
     }
 
-    // Set flags immediately
-    leavingInProgress.current = true;
-    setIsLeaving(true);
-    setBackHandlerActive(true);
-    setShowLeaveModal(false);
-
-    try {
-      // Clear timers and listeners immediately
-      cleanupTimers();
-
-      // Remove room listener to prevent interference
-      if (roomId) {
-        battleManager.removeRoomListener(roomId as string);
-      }
-
-      // **FIXED: Simplified leave logic with better error handling**
+    // **FIXED: Add timeout to prevent hanging**
+    const leavePromise = async () => {
       if (roomData?.status === "playing") {
-        console.log("Leaving during active battle");
+        const results = await battleManager.leaveDuringBattle(roomId as string);
 
-        try {
-          const results = await battleManager.leaveDuringBattle(
-            roomId as string
-          );
-
-          // Navigate to results immediately
-          router.replace({
-            pathname: "/user/battle-results",
-            params: {
-              roomId,
-              players: JSON.stringify(results || []),
-              totalQuestions: (roomData?.totalQuestions ?? 25).toString(),
-              currentUserId: userId,
-              endReason:
-                roomData?.hostId === userId ? "host_left" : "player_left",
-            },
-          });
-        } catch (battleLeaveError) {
-          console.error(
-            "Battle leave failed, going to multiplayer selection:",
-            battleLeaveError
-          );
-          // Fallback: go to multiplayer selection
-          await battleManager.leaveRoom(roomId as string).catch(console.error);
-          router.replace("/user/multiplayer-mode-selection");
-        }
+        router.replace({
+          pathname: "/user/battle-results",
+          params: {
+            roomId,
+            players: JSON.stringify(results || []),
+            totalQuestions: (roomData?.totalQuestions ?? 25).toString(),
+            currentUserId: userId,
+            endReason:
+              roomData?.hostId === userId ? "host_left" : "player_left",
+          },
+        });
       } else {
-        console.log("Leaving waiting room");
         await battleManager.leaveRoom(roomId as string);
         router.replace("/user/multiplayer-mode-selection");
       }
-    } catch (error) {
-      console.error("Error in confirmLeave:", error);
-      // **FIXED: Always navigate somewhere on error**
-      router.replace("/user/multiplayer-mode-selection");
-    } finally {
-      // **FIXED: Always reset flags after a short delay**
-      setTimeout(() => {
-        setIsLeaving(false);
-        setBackHandlerActive(false);
-        leavingInProgress.current = false;
-      }, 500);
+    };
+
+    // **FIXED: Race with timeout to prevent hanging**
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Leave operation timed out")), 8000)
+    );
+
+    await Promise.race([leavePromise(), timeoutPromise]);
+  } catch (error) {
+    console.error("Error in confirmLeave:", error);
+
+    // **FIXED: Always navigate somewhere, even on timeout**
+    const fallbackNav = () => {
+      try {
+        router.replace("/user/multiplayer-mode-selection");
+      } catch (navError) {
+        console.error("Fallback navigation failed:", navError);
+        // Force reload as absolute last resort
+        window.location?.reload?.();
+      }
+    };
+
+    if (error.message?.includes("timeout")) {
+      console.log("Leave timed out, forcing navigation");
+      fallbackNav();
+    } else {
+      setTimeout(fallbackNav, 1000);
     }
-  }, [roomId, roomData, userId, isLeaving]);
+  } finally {
+    // **FIXED: Always reset flags with proper delay**
+    setTimeout(() => {
+      setIsLeaving(false);
+      setBackHandlerActive(false);
+      leavingInProgress.current = false;
+    }, 1000);
+  }
+}, [roomId, roomData, userId, isLeaving, cleanupTimers]);
+
 
   useFocusEffect(
     useCallback(() => {

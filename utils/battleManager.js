@@ -684,53 +684,65 @@ export class BattleManager {
 
             logOperation("leaveDuringBattle", roomId, `Player ${userId} leaving during battle`);
 
-            const { data: roomData, exists } = await safeGet(createRoomRef(roomId));
+            // **FIXED: Add timeout for room data fetch**
+            const roomPromise = safeGet(createRoomRef(roomId));
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("Room fetch timeout")), 3000)
+            );
+
+            const { data: roomData, exists } = await Promise.race([roomPromise, timeoutPromise]);
+
             if (!exists || !roomData) {
+                console.warn("Room doesn't exist during leave");
                 return [];
             }
 
-            // **FIXED: Immediate disconnect without waiting**
+            // **FIXED: Immediate disconnect with error handling**
             if (roomData.players?.[userId]) {
-                await update(createPlayerRef(roomId, userId), {
+                const disconnectPromise = update(createPlayerRef(roomId, userId), {
                     connected: false,
                     leftAt: serverTimestamp()
                 });
+
+                // Don't wait for disconnect - continue immediately
+                disconnectPromise.catch(console.error);
             }
 
-            // **FIXED: Quick calculation and return**
             const playerArray = calculatePlayerScores(roomData.players);
 
-            // **FIXED: Non-blocking room updates**
+            // **FIXED: Non-blocking room updates with timeout**
             const remainingPlayers = Object.values(roomData.players || {}).filter(
                 (player) => player.userId !== userId && player.connected
             );
 
-            if (remainingPlayers.length < 2) {
-                // End battle for insufficient players (non-blocking)
-                update(createRoomRef(roomId), {
+            const updateRoom = async () => {
+                const updates = {
                     status: "finished",
                     results: playerArray,
-                    gameEndReason: "insufficient_players",
                     finishedAt: serverTimestamp(),
                     lastActivity: serverTimestamp()
-                }).catch(console.error);
-            } else if (roomData.hostId === userId) {
-                // End battle if host leaves (non-blocking)
-                update(createRoomRef(roomId), {
-                    status: "finished",
-                    results: playerArray,
-                    gameEndReason: "host_left",
-                    finishedAt: serverTimestamp(),
-                    lastActivity: serverTimestamp()
-                }).catch(console.error);
-            }
+                };
+
+                if (remainingPlayers.length < 2) {
+                    updates.gameEndReason = "insufficient_players";
+                } else if (roomData.hostId === userId) {
+                    updates.gameEndReason = "host_left";
+                }
+
+                return update(createRoomRef(roomId), updates);
+            };
+
+            // Don't wait for room update - fire and forget
+            updateRoom().catch(console.error);
 
             return playerArray;
         } catch (error) {
             console.error("[leaveDuringBattle] Error:", error);
+            // Always return something even on error
             return [];
         }
     }
+
 
     async findRandomMatch(maxPlayers = 2) {
         try {
