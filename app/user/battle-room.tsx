@@ -144,26 +144,24 @@ export default function BattleRoom() {
     };
   }, [room?.matchmakingRoom, room?.players, isMounted, roomId]);
 
-  // Replace the room validation useEffect
+  // Replace the room validation useEffect:
   useEffect(() => {
     if (!roomId) return;
 
     const validateAndConnect = async () => {
       try {
-        // Add loading state
         setLoading(true);
 
-        // Quick auth check
         if (!auth.currentUser?.uid) {
           Alert.alert("Authentication Error", "Please sign in to continue");
           router.replace("/user/multiplayer-mode-selection");
           return;
         }
 
-        // Validate room exists with timeout
+        // TIMEOUT PROTECTION: Don't wait forever
         const validationPromise = battleManager.validateRoomExists(roomId);
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Room validation timeout")), 5000)
+          setTimeout(() => reject(new Error("Validation timeout")), 3000)
         );
 
         const roomExists = await Promise.race([
@@ -181,10 +179,12 @@ export default function BattleRoom() {
           return;
         }
 
-        // Connect to room
+        // Connect and setup listener
         await battleManager.updatePlayerConnection(roomId, true);
 
-        // Set up listener with error handling
+        // SINGLE LISTENER: Remove any existing listener first
+        battleManager.removeRoomListener(roomId);
+
         const unsubscribe = battleManager.listenToRoom(roomId, (roomData) => {
           if (!roomData) {
             console.warn("Room deleted, navigating back");
@@ -195,27 +195,10 @@ export default function BattleRoom() {
           setError(null);
         });
 
-        return () => {
-          if (unsubscribe) unsubscribe();
-        };
+        return unsubscribe;
       } catch (error) {
         console.error("Room validation error:", error);
-
-        if (error.message.includes("permission")) {
-          Alert.alert(
-            "Access Denied",
-            "You don't have permission to access this room"
-          );
-        } else if (error.message.includes("timeout")) {
-          Alert.alert(
-            "Connection Error",
-            "Failed to connect to room. Please try again."
-          );
-        } else {
-          setError(error);
-        }
-
-        // Navigate back on error
+        setError(error);
         setTimeout(() => {
           router.replace("/user/multiplayer-mode-selection");
         }, 2000);
@@ -225,7 +208,7 @@ export default function BattleRoom() {
     };
 
     validateAndConnect();
-  }, [roomId, router]);
+  }, [roomId]); // Only depend on roomId
 
   useEffect(() => {
     setIsMounted(true);

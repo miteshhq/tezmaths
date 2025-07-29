@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from "react";
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,23 +8,18 @@ import {
   Alert,
   ActivityIndicator,
   BackHandler,
-} from "react-native";
-import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
-import ViewShot from "react-native-view-shot";
-import { auth } from "../../firebase/firebaseConfig";
-import Share from "react-native-share";
-import * as FileSystem from "expo-file-system";
-import SoundManager from "../../components/soundManager";
-const logo = require("../../assets/branding/tezmaths-full-logo.png");
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { battleManager } from "../../utils/battleManager";
+} from 'react-native';
+import { useLocalSearchParams, useFocusEffect, router } from 'expo-router';
+import ViewShot from 'react-native-view-shot';
+import Share from 'react-native-share';
+import * as FileSystem from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import SoundManager from '../../components/soundManager';
+import { auth, database } from '../../firebase/firebaseConfig';
+import { ref, get, remove, off } from 'firebase/database';
+import { battleManager } from '../../utils/battleManager';
 
-interface BattlePlayer {
-  userId: string;
-  username: string;
-  avatar: number;
-  score: number;
-}
+const logo = require('../../assets/branding/tezmaths-full-logo.png');
 
 const shareConfig = {
   additionalText:
@@ -77,21 +72,18 @@ const ProfileImage = React.memo(({ player, isCurrentUser }) => {
 });
 
 export default function BattleResultsScreen() {
-  const params = useLocalSearchParams();
-  const { roomId, players, totalQuestions, currentUserId } = params;
+  const { roomId, players, totalQuestions, currentUserId } =
+    useLocalSearchParams();
 
-  // ViewShot ref for capturing screenshot
+  // Refs for cleanup management
   const viewShotRef = useRef<ViewShot>(null);
   const soundPlayed = useRef(false);
+  const cleanupDone = useRef(false);
+  const unmounted = useRef(false);
 
-  // Cleanup prevention flags
-  const cleanupStarted = useRef(false);
-  const componentUnmounted = useRef(false);
-  const battleManagerCleanupDone = useRef(false);
-
-  // Store data locally immediately (runs once)
+  // 1️⃣ ONE-TIME DATA PROCESSING - Prevents infinite loops
   const [battleData] = useState(() => {
-    console.log("=== STORING BATTLE DATA LOCALLY ===");
+    console.log("=== PROCESSING BATTLE DATA ONCE ===");
 
     const cleanRoomId = Array.isArray(roomId) ? roomId[0] : roomId || "";
     const cleanCurrentUserId = Array.isArray(currentUserId)
@@ -104,7 +96,7 @@ export default function BattleResultsScreen() {
           : totalQuestions || "0"
       ) || 0;
 
-    let processedPlayers: BattlePlayer[] = [];
+    let processedPlayers = [];
 
     try {
       if (players) {
@@ -113,7 +105,7 @@ export default function BattleResultsScreen() {
         );
 
         if (Array.isArray(playersData)) {
-          processedPlayers = playersData.map((player: any, index: number) => ({
+          processedPlayers = playersData.map((player, index) => ({
             userId: player.userId || `player_${index}`,
             username: player.name || player.username || `Player ${index + 1}`,
             avatar: Number(player.avatar) || 0,
@@ -121,7 +113,7 @@ export default function BattleResultsScreen() {
           }));
         } else if (typeof playersData === "object") {
           processedPlayers = Object.entries(playersData).map(
-            ([userId, playerData]: [string, any]) => ({
+            ([userId, playerData]) => ({
               userId,
               username: playerData.name || playerData.username || "Player",
               avatar: Number(playerData.avatar) || 0,
@@ -134,6 +126,7 @@ export default function BattleResultsScreen() {
       console.error("Error parsing players:", error);
     }
 
+    // Ensure current user exists
     if (!processedPlayers.find((p) => p.userId === cleanCurrentUserId)) {
       processedPlayers.push({
         userId: cleanCurrentUserId,
@@ -143,19 +136,13 @@ export default function BattleResultsScreen() {
       });
     }
 
+    // Sort by score and calculate rank
     processedPlayers.sort((a, b) => b.score - a.score);
-
     const userIndex = processedPlayers.findIndex(
       (p) => p.userId === cleanCurrentUserId
     );
     const userRank = userIndex + 1;
     const userScore = processedPlayers[userIndex]?.score || 0;
-
-    console.log("Battle data stored locally:", {
-      players: processedPlayers.length,
-      userRank,
-      userScore,
-    });
 
     return {
       players: processedPlayers,
@@ -167,105 +154,95 @@ export default function BattleResultsScreen() {
     };
   });
 
-  const [userData] = useState(() => ({ avatar: 0, username: "player" }));
+  const [userData, setUserData] = useState({ avatar: 0, username: "player" });
   const [isSharing, setIsSharing] = useState(false);
 
-  // Load user data and play sound
+  // 2️⃣ LOAD USER DATA & PLAY SOUND
   useEffect(() => {
+    // Load cached user data
     AsyncStorage.getItem("userData")
       .then((cached) => {
-        if (cached && !componentUnmounted.current) {
+        if (cached && !unmounted.current) {
           const data = JSON.parse(cached);
-          Object.assign(userData, data);
+          setUserData(data);
         }
       })
       .catch(() => {});
 
+    // Play victory sound once
     if (battleData.userRank === 1 && !soundPlayed.current) {
       soundPlayed.current = true;
       SoundManager.playSound("victorySoundEffect").catch(() => {});
     }
   }, []);
 
-  // One-time cleanup that prevents infinite loops
+  // Replace the existing cleanup useEffect with this:
   useEffect(() => {
-    const performSafeCleanup = async () => {
-      if (cleanupStarted.current || componentUnmounted.current) {
-        return;
-      }
-      cleanupStarted.current = true;
+    if (cleanupDone.current || unmounted.current || !battleData.roomId) return;
+    cleanupDone.current = true;
 
-      console.log("=== STARTING SAFE CLEANUP (ONE TIME ONLY) ===");
-
+    // SIMPLIFIED: Single cleanup without complex async operations
+    const performCleanup = () => {
       try {
+        const { roomId, currentUserId } = battleData;
         const user = auth.currentUser;
-        const userId = user?.uid || battleData.currentUserId;
-        const roomId = battleData.roomId;
+        const userId = user?.uid || currentUserId;
 
         if (roomId && userId) {
-          const cleanupPromises = [
-            battleManager
-              .updatePlayerConnection(roomId, false)
-              .catch((error) => {
-                console.warn("Player disconnect failed:", error);
-                return null;
-              }),
+          // Fire-and-forget cleanup operations
+          battleManager.updatePlayerConnection(roomId, false).catch(() => {});
 
-            AsyncStorage.multiRemove([
-              "currentBattleId",
-              "battleState",
-              "battleResults",
-              "lastBattleScore",
-              "battleProgress",
-              "roomData",
-              "battleQuestions",
-            ]).catch((error) => {
-              console.warn("AsyncStorage cleanup failed:", error);
-              return null;
-            }),
-          ];
+          AsyncStorage.multiRemove([
+            "currentBattleId",
+            "battleState",
+            "battleResults",
+            "lastBattleScore",
+            "battleProgress",
+            "roomData",
+            "battleQuestions",
+          ]).catch(() => {});
 
-          Promise.allSettled(cleanupPromises)
-            .then(() => {
-              console.log("Cleanup promises completed");
-            })
-            .catch(() => {
-              console.log("Some cleanup promises failed, continuing...");
-            });
-
-          if (!battleManagerCleanupDone.current) {
-            battleManagerCleanupDone.current = true;
-
-            setTimeout(() => {
-              if (!componentUnmounted.current) {
-                battleManager.resetUserBattleState().catch((error) => {
-                  console.warn("Battle manager reset failed:", error);
-                });
-              }
-            }, 1000);
-          }
-
-          console.log("Safe cleanup completed");
+          // Delayed battle manager reset to prevent loops
+          setTimeout(() => {
+            if (!unmounted.current) {
+              battleManager.resetUserBattleState().catch(() => {});
+            }
+          }, 1000);
         }
       } catch (error) {
-        console.error("Safe cleanup error:", error);
+        console.error("Cleanup error:", error);
       }
     };
 
-    const cleanupTimer = setTimeout(performSafeCleanup, 300);
+    // Non-blocking cleanup
+    setTimeout(performCleanup, 100);
+  }, []); // Empty deps - runs once only
 
+  // 4️⃣ DETACH LISTENERS ON UNMOUNT
+  useEffect(() => {
     return () => {
-      clearTimeout(cleanupTimer);
+      console.log("BattleResultsScreen unmounting");
+      unmounted.current = true;
+
+      // Detach Firebase listeners
+      if (battleData.roomId) {
+        off(ref(database, `rooms/${battleData.roomId}`));
+      }
+
+      // Stop sound
+      if (soundPlayed.current) {
+        SoundManager.stopSound("victorySoundEffect").catch(() => {});
+      }
     };
   }, []);
 
-  // Navigation
+  // Navigation handlers
   const handleHomeNavigation = useCallback(() => {
     console.log("Navigating to home...");
     router.replace("/user/home");
   }, []);
 
-  // Back button
+  // Back button handler
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
@@ -279,18 +256,6 @@ export default function BattleResultsScreen() {
       return () => backHandler.remove();
     }, [handleHomeNavigation])
   );
-
-  // Component unmount cleanup
-  useEffect(() => {
-    return () => {
-      console.log("BattleResultsScreen unmounting");
-      componentUnmounted.current = true;
-
-      if (soundPlayed.current) {
-        SoundManager.stopSound("victorySoundEffect").catch(() => {});
-      }
-    };
-  }, []);
 
   // Helper functions
   const getMotivationalQuote = () => {
@@ -326,7 +291,7 @@ ${shareConfig.downloadText}
 ${shareConfig.hashtags}`;
   };
 
-  // Share functionality with ViewShot
+  // Share functionality
   const shareImageAndText = async () => {
     setIsSharing(true);
     try {
@@ -334,24 +299,19 @@ ${shareConfig.hashtags}`;
         throw new Error("ViewShot ref not available");
       }
 
-      // Capture the screenshot
       const uri = await viewShotRef.current.capture();
-
       const timestamp = Date.now();
       const newUri = `${FileSystem.documentDirectory}tezmaths_battle_result_${timestamp}.jpg`;
       await FileSystem.copyAsync({ from: uri, to: newUri });
 
-      const shareOptions = {
+      await Share.open({
         title: "Check this out!",
         message: getShareMessage(),
         url: newUri,
         type: "image/jpeg",
-      };
-
-      await Share.open(shareOptions);
-    } catch (error: any) {
+      });
+    } catch (error) {
       Alert.alert("Sharing failed", error.message || "Something went wrong.");
-      console.error("Share error:", error);
     } finally {
       setIsSharing(false);
     }

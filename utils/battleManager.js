@@ -373,14 +373,16 @@ export class BattleManager {
         this.userPresenceRef = null;
         this.isInitialized = false;
 
-        // IMPROVED: Question caching system
+        // ADD THESE NEW PROPERTIES:
+        this.operationFlags = new Map(); // Prevent duplicate operations
+        this.cleanupTimers = new Map();   // Track cleanup timers
+
         this.questionCache = new Map();
         this.usedQuestionSignatures = new Set();
         this.lastCacheTime = 0;
-        this.CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+        this.CACHE_DURATION = 5 * 60 * 1000;
 
         this.setupUserPresence();
-        // Pre-generate questions in background (non-blocking)
         this.preGenerateQuestions().catch(console.error);
     }
 
@@ -678,71 +680,75 @@ export class BattleManager {
     }
 
     async leaveDuringBattle(roomId) {
+        const operationKey = `leave_${roomId}`;
+
+        // Prevent duplicate operations
+        if (this.operationFlags.has(operationKey)) {
+            console.log("Leave already in progress for room:", roomId);
+            return [];
+        }
+
+        this.operationFlags.set(operationKey, true);
+
         try {
             const user = await this.waitForAuth();
             const userId = user.uid;
 
             logOperation("leaveDuringBattle", roomId, `Player ${userId} leaving during battle`);
 
-            // **FIXED: Add timeout for room data fetch**
+            // Quick room data fetch with timeout
             const roomPromise = safeGet(createRoomRef(roomId));
             const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("Room fetch timeout")), 3000)
+                setTimeout(() => reject(new Error("Room fetch timeout")), 2000)
             );
 
             const { data: roomData, exists } = await Promise.race([roomPromise, timeoutPromise]);
 
             if (!exists || !roomData) {
-                console.warn("Room doesn't exist during leave");
                 return [];
             }
 
-            // **FIXED: Immediate disconnect with error handling**
+            // Immediate disconnect - don't wait for confirmation
             if (roomData.players?.[userId]) {
-                const disconnectPromise = update(createPlayerRef(roomId, userId), {
+                update(createPlayerRef(roomId, userId), {
                     connected: false,
                     leftAt: serverTimestamp()
-                });
-
-                // Don't wait for disconnect - continue immediately
-                disconnectPromise.catch(console.error);
+                }).catch(console.error);
             }
 
             const playerArray = calculatePlayerScores(roomData.players);
 
-            // **FIXED: Non-blocking room updates with timeout**
+            // Non-blocking room update
             const remainingPlayers = Object.values(roomData.players || {}).filter(
                 (player) => player.userId !== userId && player.connected
             );
 
-            const updateRoom = async () => {
-                const updates = {
-                    status: "finished",
-                    results: playerArray,
-                    finishedAt: serverTimestamp(),
-                    lastActivity: serverTimestamp()
-                };
-
-                if (remainingPlayers.length < 2) {
-                    updates.gameEndReason = "insufficient_players";
-                } else if (roomData.hostId === userId) {
-                    updates.gameEndReason = "host_left";
-                }
-
-                return update(createRoomRef(roomId), updates);
+            const updates = {
+                status: "finished",
+                results: playerArray,
+                finishedAt: serverTimestamp()
             };
 
-            // Don't wait for room update - fire and forget
-            updateRoom().catch(console.error);
+            if (remainingPlayers.length < 2) {
+                updates.gameEndReason = "insufficient_players";
+            } else if (roomData.hostId === userId) {
+                updates.gameEndReason = "host_left";
+            }
+
+            // Fire and forget
+            update(createRoomRef(roomId), updates).catch(console.error);
 
             return playerArray;
         } catch (error) {
             console.error("[leaveDuringBattle] Error:", error);
-            // Always return something even on error
             return [];
+        } finally {
+            // Clear operation flag after delay
+            setTimeout(() => {
+                this.operationFlags.delete(operationKey);
+            }, 3000);
         }
     }
-
 
     async findRandomMatch(maxPlayers = 2) {
         try {
@@ -977,29 +983,30 @@ export class BattleManager {
     }
 
     async endBattle(roomId) {
+        const operationKey = `end_${roomId}`;
+
+        if (this.operationFlags.has(operationKey)) {
+            console.log("End battle already in progress for room:", roomId);
+            return [];
+        }
+
+        this.operationFlags.set(operationKey, true);
+
         try {
-            logOperation("endBattle", roomId, "Ending battle");
+            logOperation("endBattle", roomId, "Battle ended successfully. Winner: m2");
 
             const { data: roomData, exists } = await safeGet(createRoomRef(roomId));
             if (!exists || !roomData?.players) {
-                if (roomData) {
-                    await update(createRoomRef(roomId), {
-                        status: "finished",
-                        finishedAt: serverTimestamp(),
-                        gameEndReason: "no_players"
-                    });
-                }
                 return [];
             }
 
             const playerArray = calculatePlayerScores(roomData.players);
             const winner = playerArray[0];
-            const gameEndReason = roomData.gameEndReason || "questions_completed";
 
-            // Update user scores
-            for (const player of playerArray) {
-                await this.updateUserScore(player.userId, player.score);
-            }
+            // Update user scores in background
+            playerArray.forEach(player => {
+                this.updateUserScore(player.userId, player.score).catch(console.error);
+            });
 
             const playerUpdates = createFinalPlayerUpdates(playerArray);
 
@@ -1008,22 +1015,28 @@ export class BattleManager {
                 status: "finished",
                 results: playerArray,
                 gameWinner: winner.userId,
-                gameEndReason: gameEndReason,
-                finishedAt: serverTimestamp(),
-                lastActivity: serverTimestamp()
+                gameEndReason: roomData.gameEndReason || "questions_completed",
+                finishedAt: serverTimestamp()
             });
 
-            logOperation("endBattle", roomId, `Battle ended successfully. Winner: ${winner.username}`);
+            // Remove listener immediately to prevent further events
+            this.removeRoomListener(roomId);
 
-            // Clean up after 30 seconds
-            setTimeout(() => {
+            // Schedule cleanup
+            const cleanupTimer = setTimeout(() => {
                 this.cleanupRoom(roomId, "battle_completed").catch(() => { });
-            }, 30000);
+            }, 10000);
+
+            this.cleanupTimers.set(roomId, cleanupTimer);
 
             return playerArray;
         } catch (error) {
             console.error("[endBattle] Error:", error);
             return [];
+        } finally {
+            setTimeout(() => {
+                this.operationFlags.delete(operationKey);
+            }, 5000);
         }
     }
 
@@ -1131,7 +1144,18 @@ export class BattleManager {
 
     async resetUserBattleState() {
         try {
-            // Clear all listeners
+            console.log("Clearing all battle state for new battle");
+
+            // Clear operation flags
+            this.operationFlags.clear();
+
+            // Clear cleanup timers
+            this.cleanupTimers.forEach((timer, roomId) => {
+                clearTimeout(timer);
+            });
+            this.cleanupTimers.clear();
+
+            // Clear listeners
             this.listeners.forEach((listener, roomId) => {
                 try {
                     off(listener.ref, "value", listener.handler);
@@ -1141,12 +1165,6 @@ export class BattleManager {
             });
             this.listeners.clear();
             this.activeRooms.clear();
-
-            // Clear question cache periodically but keep some for performance
-            if (this.usedQuestionSignatures.size > 100) {
-                const signatures = Array.from(this.usedQuestionSignatures);
-                this.usedQuestionSignatures = new Set(signatures.slice(-50));
-            }
 
             console.log("Battle state reset completed");
         } catch (error) {
