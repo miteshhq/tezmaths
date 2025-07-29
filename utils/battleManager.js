@@ -379,7 +379,10 @@ export class BattleManager {
         this.lastCacheTime = 0;
         this.CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-        this.setupUserPresence();
+        this.setupUserPresence().catch((error) => {
+            console.warn("Initial presence setup failed:", error);
+            // App should still work without presence
+        });
         // Pre-generate questions in background (non-blocking)
         this.preGenerateQuestions().catch(console.error);
 
@@ -1110,26 +1113,51 @@ export class BattleManager {
 
     async resetUserBattleState() {
         try {
-            // Clear all listeners
+            console.log("Starting safe battle state reset");
+
+            // Add auth check
+            if (!this.isInitialized || !this.userId) {
+                console.log("BattleManager not initialized, skipping reset");
+                return;
+            }
+
+            // Clear listeners with proper error handling
+            const listenerPromises = [];
             this.listeners.forEach((listener, roomId) => {
-                try {
-                    off(listener.ref, "value", listener.handler);
-                } catch (error) {
-                    console.warn("Error removing listener:", error);
-                }
+                const promise = new Promise((resolve) => {
+                    try {
+                        off(listener.ref, "value", listener.handler);
+                        resolve();
+                    } catch (error) {
+                        console.warn(`Error removing listener for ${roomId}:`, error);
+                        resolve(); // Don't fail the entire operation
+                    }
+                });
+                listenerPromises.push(promise);
             });
+
+            // Wait for all listeners to be removed (with timeout)
+            await Promise.allSettled(listenerPromises);
+
             this.listeners.clear();
             this.activeRooms.clear();
 
-            // Clear question cache periodically but keep some for performance
+            // Lightweight cache cleanup (don't clear everything)
             if (this.usedQuestionSignatures.size > 100) {
                 const signatures = Array.from(this.usedQuestionSignatures);
                 this.usedQuestionSignatures = new Set(signatures.slice(-50));
             }
 
-            console.log("Battle state reset completed");
+            console.log("Battle state reset completed safely");
         } catch (error) {
-            console.error("Battle state reset error:", error);
+            console.error("Battle state reset error (handled):", error);
+            // Don't throw - just clear what we can
+            try {
+                this.listeners.clear();
+                this.activeRooms.clear();
+            } catch (clearError) {
+                console.warn("Failed to clear basic state:", clearError);
+            }
         }
     }
 

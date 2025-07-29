@@ -49,18 +49,40 @@ export default function MultiplayerModeSelection() {
   const roomListenerRef = useRef(null);
   const countdownIntervalRef = useRef(null);
 
-  // CRITICAL FIX: Reset battle state on component mount
   useEffect(() => {
     const resetBattleState = async () => {
       try {
-        await battleManager.resetUserBattleState();
-        console.log("Battle state reset on multiplayer mode selection mount");
+        // Add safety check for auth
+        if (!auth.currentUser?.uid) {
+          console.log("No authenticated user, skipping battle state reset");
+          return;
+        }
+
+        // Make reset non-blocking and add timeout
+        const resetPromise = battleManager.resetUserBattleState();
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Reset timeout")), 3000)
+        );
+
+        await Promise.race([resetPromise, timeoutPromise]);
+        console.log("Battle state reset completed safely");
       } catch (error) {
-        console.warn("Error resetting battle state:", error);
+        // Don't crash the app - just log the error
+        console.warn(
+          "Battle state reset failed (non-critical):",
+          error.message
+        );
       }
     };
 
-    resetBattleState();
+    // Run reset after component mount to avoid race conditions
+    const timeoutId = setTimeout(() => {
+      resetBattleState();
+    }, 100);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   // Simple cleanup - only what's necessary
