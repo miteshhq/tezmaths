@@ -159,6 +159,8 @@ export default function BattleScreen() {
   const [userData, setUserData] = useState({ avatar: 0 });
   const [networkError, setNetworkError] = useState(false);
 
+  const leavingInProgress = useRef(false);
+
   const [showBetterLuckMessage, setShowBetterLuckMessage] = useState(false);
   const [betterLuckCountdown, setBetterLuckCountdown] = useState(0);
 
@@ -186,7 +188,17 @@ export default function BattleScreen() {
   });
 
   const handleLeavePress = useCallback(() => {
-    if (isLeaving) return; // Prevent multiple presses
+    console.log("Leave button pressed", {
+      isLeaving,
+      leavingInProgress: leavingInProgress.current,
+    });
+
+    // Prevent multiple simultaneous leave attempts
+    if (isLeaving || leavingInProgress.current) {
+      console.log("Leave already in progress, ignoring");
+      return;
+    }
+
     setShowLeaveModal(true);
   }, [isLeaving]);
 
@@ -501,7 +513,7 @@ export default function BattleScreen() {
         const data = snapshot.val();
 
         if (!data) {
-          if (!backHandlerActive && !isLeaving) {
+          if (!backHandlerActive && !isLeaving && !leavingInProgress.current) {
             console.log("Room no longer exists, navigating away");
             setNetworkError(true);
             router.replace("/user/multiplayer-mode-selection");
@@ -516,37 +528,84 @@ export default function BattleScreen() {
           battleInitialized.current = true;
         }
 
+        // FIXED: Enhanced insufficient player detection during battle
+        if (
+          data.status === "playing" &&
+          data.players &&
+          !isLeaving &&
+          !leavingInProgress.current
+        ) {
+          const connectedPlayers = Object.values(data.players).filter(
+            (p: any) => p.connected === true
+          );
+
+          console.log("Connected players check:", {
+            total: Object.keys(data.players).length,
+            connected: connectedPlayers.length,
+            gameEndReason: data.gameEndReason,
+          });
+
+          // If only one or no connected players remain and game hasn't ended yet
+          if (connectedPlayers.length < 2 && !data.gameEndReason) {
+            console.log("Insufficient players detected, ending battle");
+
+            // Set leaving flag to prevent multiple triggers
+            leavingInProgress.current = true;
+            setIsLeaving(true);
+
+            // End the battle via battleManager
+            battleManager
+              .endBattleInsufficientPlayers(roomId as string)
+              .then(() => {
+                console.log("Battle ended due to insufficient players");
+              })
+              .catch((error) => {
+                console.error(
+                  "Error ending battle for insufficient players:",
+                  error
+                );
+                // Force navigation if ending fails
+                router.replace({
+                  pathname: "/user/battle-results",
+                  params: {
+                    roomId: roomId,
+                    players: JSON.stringify([]),
+                    totalQuestions: (data.totalQuestions || 25).toString(),
+                    currentUserId: userId,
+                    endReason: "insufficient_players",
+                  },
+                });
+              });
+            return;
+          }
+        }
+
         // Handle battle end scenarios
-        if (data.status === "finished" && !isLeaving) {
+        if (
+          data.status === "finished" &&
+          !isLeaving &&
+          !leavingInProgress.current
+        ) {
           const endReason = data.gameEndReason;
+          console.log("Battle finished detected:", endReason);
 
           if (
             endReason === "host_left" ||
             endReason === "insufficient_players"
           ) {
+            leavingInProgress.current = true;
             setIsLeaving(true);
+
             router.replace({
               pathname: "/user/battle-results",
               params: {
                 roomId: roomId,
                 players: JSON.stringify(data.results || []),
-                totalQuestions: data.totalQuestions?.toString() || "0",
+                totalQuestions: data.totalQuestions?.toString() || "25",
                 currentUserId: userId,
                 endReason: endReason,
               },
             });
-            return;
-          }
-        }
-
-        // Check if insufficient players during battle
-        if (data.status === "playing" && data.players && !isLeaving) {
-          const connectedPlayers = Object.values(data.players).filter(
-            (p: any) => p.connected
-          );
-
-          if (connectedPlayers.length < 2) {
-            setIsLeaving(true);
             return;
           }
         }
@@ -555,7 +614,7 @@ export default function BattleScreen() {
         console.error("Database listener error:", error);
         setNetworkError(true);
 
-        if (!backHandlerActive && !isLeaving) {
+        if (!backHandlerActive && !isLeaving && !leavingInProgress.current) {
           setTimeout(() => {
             router.replace("/user/multiplayer-mode-selection");
           }, 3000);
@@ -566,7 +625,7 @@ export default function BattleScreen() {
     return () => {
       unsubscribe();
     };
-  }, [roomId, userId]); // Removed backHandlerActive, isLeaving, and clearBattleState
+  }, [roomId, userId, backHandlerActive, isLeaving]);
 
   // BATTLE RESULTS NAVIGATION (SIMPLIFIED)
   useEffect(() => {
@@ -694,64 +753,104 @@ export default function BattleScreen() {
   }, [roomId, cleanupTimers, clearBattleState, isLeaving]);
 
   const confirmLeave = useCallback(async () => {
-    if (isLeaving) return;
+    console.log("Confirm leave called", {
+      isLeaving,
+      leavingInProgress: leavingInProgress.current,
+      roomId,
+      roomStatus: roomData?.status,
+    });
 
+    // Prevent multiple simultaneous executions
+    if (isLeaving || leavingInProgress.current) {
+      console.log("Leave already in progress, ignoring confirmLeave");
+      return;
+    }
+
+    // Set flags immediately to prevent race conditions
+    leavingInProgress.current = true;
     setIsLeaving(true);
     setBackHandlerActive(true);
     setShowLeaveModal(false);
 
-    // Clear timers and listeners
-    cleanupTimers();
-    battleManager.removeRoomListener(roomId as string);
-
     try {
+      // Clear timers and listeners immediately
+      cleanupTimers();
+
+      // Remove room listener to prevent interference
+      if (roomId) {
+        battleManager.removeRoomListener(roomId as string);
+      }
+
       let results = [];
+      let navigateTo = "/user/multiplayer-mode-selection";
+      let navParams = {};
 
       if (roomData?.status === "playing") {
-        results = await battleManager.leaveDuringBattle(roomId as string);
+        console.log("Leaving during active battle");
 
-        // Ensure non-host users get results
-        if ((!results || results.length === 0) && roomData?.hostId !== userId) {
-          const players = roomData?.players || {};
-          results = Object.entries(players).map(([id, player]) => ({
-            userId: id,
-            username: player.username || player.name || "Player",
-            score: player.score || 0,
-            avatar: player.avatar || 0,
-          }));
+        try {
+          // Leave during battle
+          results = await battleManager.leaveDuringBattle(roomId as string);
+
+          // If no results returned, create basic results from current room data
+          if ((!results || results.length === 0) && roomData?.players) {
+            console.log(
+              "No results from leaveDuringBattle, creating from room data"
+            );
+            results = Object.entries(roomData.players).map(([id, player]) => ({
+              userId: id,
+              username: player.username || player.name || "Player",
+              score: player.score || 0,
+              avatar: player.avatar || 0,
+            }));
+          }
+
+          navigateTo = "/user/battle-results";
+          navParams = {
+            roomId,
+            players: JSON.stringify(results),
+            totalQuestions: (roomData?.totalQuestions ?? 25).toString(),
+            currentUserId: userId,
+            endReason:
+              roomData?.hostId === userId ? "host_left" : "player_left",
+          };
+        } catch (battleLeaveError) {
+          console.error("Error leaving during battle:", battleLeaveError);
+          // Fall back to basic leave if battle leave fails
+          await battleManager.leaveRoom(roomId as string).catch(console.error);
         }
       } else {
+        console.log("Leaving waiting room");
         await battleManager.leaveRoom(roomId as string);
       }
 
       // Clear battle state (non-blocking)
       clearBattleState().catch(console.error);
 
+      // Navigate immediately
+      console.log("Navigating to:", navigateTo, navParams);
       router.replace({
-        pathname:
-          roomData?.status === "playing"
-            ? "/user/battle-results"
-            : "/user/multiplayer-mode-selection",
-        params:
-          roomData?.status === "playing"
-            ? {
-                roomId,
-                players: JSON.stringify(results),
-                totalQuestions: (roomData?.totalQuestions ?? 0).toString(),
-                currentUserId: userId,
-                endReason: "player_left",
-              }
-            : {},
+        pathname: navigateTo,
+        params: navParams,
       });
-    } catch (e) {
-      console.error("[confirmLeave] error", e);
-      clearBattleState().catch(console.error);
-      router.replace("/user/multiplayer-mode-selection");
-    }
+    } catch (error) {
+      console.error("Error in confirmLeave:", error);
 
-    // Reset states immediately
-    setIsLeaving(false);
-    setBackHandlerActive(false);
+      // Fallback navigation on any error
+      try {
+        await battleManager.leaveRoom(roomId as string).catch(() => {});
+        clearBattleState().catch(console.error);
+        router.replace("/user/multiplayer-mode-selection");
+      } catch (fallbackError) {
+        console.error("Fallback navigation error:", fallbackError);
+        router.replace("/user/multiplayer-mode-selection");
+      }
+    } finally {
+      // Reset flags
+      setIsLeaving(false);
+      setBackHandlerActive(false);
+      leavingInProgress.current = false;
+    }
   }, [
     roomId,
     roomData?.status,
@@ -759,12 +858,15 @@ export default function BattleScreen() {
     roomData?.hostId,
     roomData?.players,
     userId,
-  ]); // Removed clearBattleState and cleanupTimers
+    isLeaving,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        setShowLeaveModal(true);
+        if (!isLeaving && !leavingInProgress.current) {
+          setShowLeaveModal(true);
+        }
         return true;
       };
 
@@ -774,7 +876,7 @@ export default function BattleScreen() {
       );
 
       return () => subscription.remove();
-    }, [])
+    }, [isLeaving])
   );
 
   const handleInputChange = async (text: string) => {
@@ -1011,14 +1113,24 @@ export default function BattleScreen() {
                   Battle Mode
                 </Text>
               </View>
-              <TouchableOpacity onPress={handleLeavePress} disabled={isLeaving}>
+              <TouchableOpacity
+                onPress={handleLeavePress}
+                disabled={isLeaving || leavingInProgress.current}
+                style={{
+                  opacity: isLeaving || leavingInProgress.current ? 0.6 : 1,
+                }}
+              >
                 <View
                   className={`flex-row items-center ${
-                    isLeaving ? "bg-gray-500" : "bg-red-500"
+                    isLeaving || leavingInProgress.current
+                      ? "bg-gray-500"
+                      : "bg-red-500"
                   } px-3 py-1 rounded-full`}
                 >
                   <Text className="text-white text-sm font-black">
-                    {isLeaving ? "Leaving..." : "Leave"}
+                    {isLeaving || leavingInProgress.current
+                      ? "Leaving..."
+                      : "Leave"}
                   </Text>
                 </View>
               </TouchableOpacity>

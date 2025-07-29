@@ -1243,22 +1243,56 @@ export class BattleManager {
 
     async endBattleInsufficientPlayers(roomId) {
         try {
+            logOperation("endBattleInsufficientPlayers", roomId, "Checking for insufficient players");
+
             const { data: roomData, exists } = await safeGet(createRoomRef(roomId));
-            if (!exists || roomData.status === "finished") return;
+            if (!exists || !roomData) {
+                console.log("Room doesn't exist, skipping insufficient players check");
+                return;
+            }
 
-            const playerArray = calculatePlayerScores(roomData.players);
-            const playerUpdates = createFinalPlayerUpdates(playerArray);
+            if (roomData.status === "finished") {
+                console.log("Battle already finished, skipping insufficient players check");
+                return;
+            }
 
-            await update(createRoomRef(roomId), {
-                ...playerUpdates,
-                status: "finished",
-                results: playerArray,
-                gameEndReason: "insufficient_players",
-                finishedAt: serverTimestamp(),
-                lastActivity: serverTimestamp()
+            // Count actually connected players
+            const connectedPlayers = Object.values(roomData.players || {}).filter(p => p.connected === true);
+
+            console.log("Insufficient players check:", {
+                totalPlayers: Object.keys(roomData.players || {}).length,
+                connectedPlayers: connectedPlayers.length,
+                status: roomData.status,
+                gameEndReason: roomData.gameEndReason
             });
 
-            logOperation("endBattleInsufficientPlayers", roomId, "Battle ended due to insufficient players");
+            // Only end if less than 2 connected players and battle is active
+            if (connectedPlayers.length < 2 && roomData.status === "playing") {
+                logOperation("endBattleInsufficientPlayers", roomId, "Ending battle due to insufficient players");
+
+                const playerArray = calculatePlayerScores(roomData.players);
+                const playerUpdates = createFinalPlayerUpdates(playerArray);
+
+                await update(createRoomRef(roomId), {
+                    ...playerUpdates,
+                    status: "finished",
+                    results: playerArray,
+                    gameEndReason: "insufficient_players",
+                    finishedAt: serverTimestamp(),
+                    lastActivity: serverTimestamp()
+                });
+
+                logOperation("endBattleInsufficientPlayers", roomId, "Battle ended successfully due to insufficient players");
+
+                // Clean up after 10 seconds
+                setTimeout(() => {
+                    this.cleanupRoom(roomId, "insufficient_players").catch(() => { });
+                }, 10000);
+
+                return playerArray;
+            } else {
+                console.log("Sufficient players still connected, not ending battle");
+            }
         } catch (error) {
             console.error("[endBattleInsufficientPlayers] Error:", error);
         }
