@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Modal,
   View,
@@ -11,23 +11,38 @@ export default function LeaveConfirmationModal({
   visible,
   onConfirm,
   onCancel,
+}: {
+  visible: boolean;
+  onConfirm: () => Promise<void>;
+  onCancel: () => void;
 }) {
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Reset processing whenever modal is shown or hidden
+  useEffect(() => {
+    if (!visible) {
+      setIsProcessing(false);
+    }
+  }, [visible]);
+
   const handleConfirm = async () => {
     if (isProcessing) return;
-
     setIsProcessing(true);
     try {
       await onConfirm();
     } catch (error) {
       console.error("Leave confirmation error:", error);
+    } finally {
+      // ensure we reset even if navigation thrown us away
+      setIsProcessing(false);
     }
   };
 
   const handleCancel = () => {
     if (isProcessing) return;
     onCancel();
+    // reset processing so next time modal opens buttons are active
+    setIsProcessing(false);
   };
 
   return (

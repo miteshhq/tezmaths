@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,18 +8,18 @@ import {
   Alert,
   ActivityIndicator,
   BackHandler,
-} from 'react-native';
-import { useLocalSearchParams, useFocusEffect, router } from 'expo-router';
-import ViewShot from 'react-native-view-shot';
-import Share from 'react-native-share';
-import * as FileSystem from 'expo-file-system';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import SoundManager from '../../components/soundManager';
-import { auth, database } from '../../firebase/firebaseConfig';
-import { ref, get, remove, off } from 'firebase/database';
-import { battleManager } from '../../utils/battleManager';
+} from "react-native";
+import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
+import ViewShot from "react-native-view-shot";
+import * as FileSystem from "expo-file-system";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import SoundManager from "../../components/soundManager";
+import { auth, database } from "../../firebase/firebaseConfig";
+import { ref, get, remove, off } from "firebase/database";
+import { battleManager } from "../../utils/battleManager";
+import Share from "react-native-share";
 
-const logo = require('../../assets/branding/tezmaths-full-logo.png');
+const logo = require("../../assets/branding/tezmaths-full-logo.png");
 
 const shareConfig = {
   additionalText:
@@ -81,76 +81,50 @@ export default function BattleResultsScreen() {
   const cleanupDone = useRef(false);
   const unmounted = useRef(false);
 
-  // 1️⃣ ONE-TIME DATA PROCESSING - Prevents infinite loops
+  // Step 1: Extract raw params
+  const rawPlayers = Array.isArray(players) ? players[0] : (players as string);
+  const meId = Array.isArray(currentUserId)
+    ? currentUserId[0]
+    : (currentUserId as string);
+
+  const rawRoomId = Array.isArray(roomId) ? roomId[0] : (roomId as string);
+
+  // Step 2: Build battleData safely
   const [battleData] = useState(() => {
-    console.log("=== PROCESSING BATTLE DATA ONCE ===");
-
-    const cleanRoomId = Array.isArray(roomId) ? roomId[0] : roomId || "";
-    const cleanCurrentUserId = Array.isArray(currentUserId)
-      ? currentUserId[0]
-      : currentUserId || "";
-    const cleanTotalQuestions =
-      parseInt(
-        Array.isArray(totalQuestions)
-          ? totalQuestions[0]
-          : totalQuestions || "0"
-      ) || 0;
-
-    let processedPlayers = [];
-
+    let parsed: any;
     try {
-      if (players) {
-        const playersData = JSON.parse(
-          Array.isArray(players) ? players[0] : players
-        );
-
-        if (Array.isArray(playersData)) {
-          processedPlayers = playersData.map((player, index) => ({
-            userId: player.userId || `player_${index}`,
-            username: player.name || player.username || `Player ${index + 1}`,
-            avatar: Number(player.avatar) || 0,
-            score: Number(player.score) || 0,
-          }));
-        } else if (typeof playersData === "object") {
-          processedPlayers = Object.entries(playersData).map(
-            ([userId, playerData]) => ({
-              userId,
-              username: playerData.name || playerData.username || "Player",
-              avatar: Number(playerData.avatar) || 0,
-              score: Number(playerData.score) || 0,
-            })
-          );
-        }
-      }
-    } catch (error) {
-      console.error("Error parsing players:", error);
+      parsed = JSON.parse(rawPlayers);
+    } catch {
+      parsed = [];
     }
 
-    // Ensure current user exists
-    if (!processedPlayers.find((p) => p.userId === cleanCurrentUserId)) {
-      processedPlayers.push({
-        userId: cleanCurrentUserId,
-        username: "You",
-        avatar: 0,
-        score: 0,
-      });
+    const list = Array.isArray(parsed) ? parsed : Object.values(parsed);
+    const processed = list.map((p: any, i: number) => ({
+      userId: p.userId ?? `player_${i}`,
+      username: p.username ?? p.name ?? `Player ${i + 1}`,
+      avatar: Number(p.avatar) || 0,
+      score: Number(p.score) || 0,
+    }));
+
+    // Ensure current user
+    if (!processed.find((p) => p.userId === meId)) {
+      processed.push({ userId: meId, username: "You", avatar: 0, score: 0 });
     }
 
-    // Sort by score and calculate rank
-    processedPlayers.sort((a, b) => b.score - a.score);
-    const userIndex = processedPlayers.findIndex(
-      (p) => p.userId === cleanCurrentUserId
-    );
-    const userRank = userIndex + 1;
-    const userScore = processedPlayers[userIndex]?.score || 0;
-
+    processed.sort((a, b) => b.score - a.score);
+    const idx = processed.findIndex((p) => p.userId === meId);
     return {
-      players: processedPlayers,
-      totalQuestions: cleanTotalQuestions,
-      userRank,
-      userScore,
-      currentUserId: cleanCurrentUserId,
-      roomId: cleanRoomId,
+      players: processed,
+      currentUserId: meId,
+      roomId: Array.isArray(roomId) ? roomId[0] : (roomId as string),
+      totalQuestions:
+        parseInt(
+          Array.isArray(totalQuestions)
+            ? totalQuestions[0]
+            : (totalQuestions as string)
+        ) || 0,
+      userRank: idx + 1,
+      userScore: processed[idx].score,
     };
   });
 
@@ -310,7 +284,7 @@ ${shareConfig.hashtags}`;
         url: newUri,
         type: "image/jpeg",
       });
-    } catch (error) {
+    } catch (error: any) {
       Alert.alert("Sharing failed", error.message || "Something went wrong.");
     } finally {
       setIsSharing(false);

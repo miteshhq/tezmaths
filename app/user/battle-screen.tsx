@@ -147,6 +147,7 @@ const CircularProgress = ({
 
 export default function BattleScreen() {
   const { roomId } = useLocalSearchParams();
+
   const [roomData, setRoomData] = useState<RoomData | null>(null);
   const [timeLeft, setTimeLeft] = useState(15);
   const [userAnswer, setUserAnswer] = useState("");
@@ -353,15 +354,18 @@ export default function BattleScreen() {
     loadUserData();
   }, []);
 
-  // ✅ FIXED: Battle initialization
   useEffect(() => {
     if (roomId !== currentRoomId.current) {
-      console.log(`Room changed: ${currentRoomId.current} → ${roomId}`);
       currentRoomId.current = roomId;
-      battleInitialized.current = false;
-      clearBattleState();
+      // Immediately clear all leave–related state
+      leavingInProgress.current = false;
+      leaveOnce.current = false;
+      setIsLeaving(false);
+      setShowLeaveModal(false);
+      // Also clear any prior timers, UI state, questions, answers, etc.
+      clearBattleState().catch(console.error);
     }
-  }, [roomId, clearBattleState]);
+  }, [roomId]);
 
   // ✅ FIXED: Room listener with proper cleanup
   useEffect(() => {
