@@ -185,12 +185,35 @@ export default function BattleScreen() {
     questionTimer: null,
   });
 
-  // CLEAR ALL BATTLE STATE WHEN ENTERING NEW ROOM
+  const handleLeavePress = useCallback(() => {
+    if (isLeaving) return; // Prevent multiple presses
+    setShowLeaveModal(true);
+  }, [isLeaving]);
+
   const clearBattleState = useCallback(async () => {
     console.log("Clearing all battle state for new battle");
 
-    // Clear all timers first
-    cleanupTimers();
+    // Clear all timers first - call directly, don't use the callback
+    Object.values(timerManager.current).forEach((timer) => {
+      if (timer) {
+        clearInterval(timer);
+        clearTimeout(timer);
+      }
+    });
+    timerManager.current = {
+      mainTimer: null,
+      transitionTimer: null,
+      questionTimer: null,
+    };
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (submitTimeoutRef.current) {
+      clearTimeout(submitTimeoutRef.current);
+      submitTimeoutRef.current = null;
+    }
 
     // Reset all state variables
     setRoomData(null);
@@ -214,21 +237,23 @@ export default function BattleScreen() {
     otherWinnerAnnouncedRef.current = false;
 
     // Clear any cached battle data from AsyncStorage (NON-BLOCKING)
-    AsyncStorage.multiRemove([
-      "currentBattleId",
-      "battleState",
-      "battleResults",
-      "lastBattleScore",
-      "battleProgress",
-    ]).catch((error) => {
+    try {
+      await AsyncStorage.multiRemove([
+        "currentBattleId",
+        "battleState",
+        "battleResults",
+        "lastBattleScore",
+        "battleProgress",
+      ]);
+    } catch (error) {
       console.error("Error clearing battle cache:", error);
-    });
+    }
 
     // Remove any existing room listeners
     if (currentRoomId.current) {
       battleManager.removeRoomListener(currentRoomId.current as string);
     }
-  }, []);
+  }, []); // Empty dependency array to prevent infinite loops
 
   useEffect(() => {
     const offsetRef = ref(database, ".info/serverTimeOffset");
@@ -241,15 +266,15 @@ export default function BattleScreen() {
     };
   }, []);
 
-  // DETECT ROOM CHANGE AND CLEAR STATE
   useEffect(() => {
     if (roomId !== currentRoomId.current) {
       console.log(`Room changed from ${currentRoomId.current} to ${roomId}`);
       currentRoomId.current = roomId;
-      // Make this non-blocking
+
+      // Call clearBattleState directly without await to prevent blocking
       clearBattleState().catch(console.error);
     }
-  }, [roomId, clearBattleState]);
+  }, [roomId]);
 
   // INITIALIZE BATTLE STATE ON MOUNT (SIMPLIFIED)
   useEffect(() => {
@@ -302,7 +327,7 @@ export default function BattleScreen() {
       clearTimeout(submitTimeoutRef.current);
       submitTimeoutRef.current = null;
     }
-  }, []);
+  }, []); // Empty dependency array
 
   const handleTimeExpiry = useCallback(() => {
     if (roomData?.hostId === userId && !roomData.questionTransition) {
@@ -466,7 +491,6 @@ export default function BattleScreen() {
     return () => clearInterval(interval);
   }, [roomData?.nextQuestionStartTime]);
 
-  // FIREBASE LISTENER - START IMMEDIATELY (REMOVED battleInitialized.current DEPENDENCY)
   useEffect(() => {
     if (!roomId) return;
 
@@ -477,30 +501,22 @@ export default function BattleScreen() {
         const data = snapshot.val();
 
         if (!data) {
-          // Room no longer exists - navigate away if not already leaving
           if (!backHandlerActive && !isLeaving) {
             console.log("Room no longer exists, navigating away");
-            // Make non-blocking
-            clearBattleState()
-              .then(() => {
-                router.replace("/user/multiplayer-mode-selection");
-              })
-              .catch(console.error);
+            setNetworkError(true);
+            router.replace("/user/multiplayer-mode-selection");
           }
-          setNetworkError(true);
           return;
         }
 
-        // SET ROOM DATA IMMEDIATELY - don't wait for initialization
         setRoomData(data);
         setNetworkError(false);
 
-        // Mark as initialized after first successful data load
         if (!battleInitialized.current) {
           battleInitialized.current = true;
         }
 
-        // Handle battle end scenarios without multiple popups
+        // Handle battle end scenarios
         if (data.status === "finished" && !isLeaving) {
           const endReason = data.gameEndReason;
 
@@ -509,8 +525,6 @@ export default function BattleScreen() {
             endReason === "insufficient_players"
           ) {
             setIsLeaving(true);
-
-            // REMOVE TIMEOUT DELAY - navigate immediately
             router.replace({
               pathname: "/user/battle-results",
               params: {
@@ -541,14 +555,9 @@ export default function BattleScreen() {
         console.error("Database listener error:", error);
         setNetworkError(true);
 
-        // Navigate away on persistent errors
         if (!backHandlerActive && !isLeaving) {
           setTimeout(() => {
-            clearBattleState()
-              .then(() => {
-                router.replace("/user/multiplayer-mode-selection");
-              })
-              .catch(console.error);
+            router.replace("/user/multiplayer-mode-selection");
           }, 3000);
         }
       }
@@ -557,7 +566,7 @@ export default function BattleScreen() {
     return () => {
       unsubscribe();
     };
-  }, [roomId, backHandlerActive, isLeaving, userId, clearBattleState]);
+  }, [roomId, userId]); // Removed backHandlerActive, isLeaving, and clearBattleState
 
   // BATTLE RESULTS NAVIGATION (SIMPLIFIED)
   useEffect(() => {
@@ -691,17 +700,31 @@ export default function BattleScreen() {
     setBackHandlerActive(true);
     setShowLeaveModal(false);
 
-    // Clear all state and timers
+    // Clear timers and listeners
     cleanupTimers();
     battleManager.removeRoomListener(roomId as string);
 
     try {
-      const results =
-        roomData?.status === "playing"
-          ? await battleManager.leaveDuringBattle(roomId as string)
-          : await battleManager.leaveRoom(roomId as string);
+      let results = [];
 
-      // Clear battle state before navigation (NON-BLOCKING)
+      if (roomData?.status === "playing") {
+        results = await battleManager.leaveDuringBattle(roomId as string);
+
+        // Ensure non-host users get results
+        if ((!results || results.length === 0) && roomData?.hostId !== userId) {
+          const players = roomData?.players || {};
+          results = Object.entries(players).map(([id, player]) => ({
+            userId: id,
+            username: player.username || player.name || "Player",
+            score: player.score || 0,
+            avatar: player.avatar || 0,
+          }));
+        }
+      } else {
+        await battleManager.leaveRoom(roomId as string);
+      }
+
+      // Clear battle state (non-blocking)
       clearBattleState().catch(console.error);
 
       router.replace({
@@ -713,11 +736,10 @@ export default function BattleScreen() {
           roomData?.status === "playing"
             ? {
                 roomId,
-                players: JSON.stringify(results ?? []),
+                players: JSON.stringify(results),
                 totalQuestions: (roomData?.totalQuestions ?? 0).toString(),
                 currentUserId: userId,
-                endReason:
-                  roomData?.hostId === userId ? "host_left" : "player_left",
+                endReason: "player_left",
               }
             : {},
       });
@@ -726,7 +748,18 @@ export default function BattleScreen() {
       clearBattleState().catch(console.error);
       router.replace("/user/multiplayer-mode-selection");
     }
-  }, [isLeaving, roomId, roomData, userId, cleanupTimers, clearBattleState]);
+
+    // Reset states immediately
+    setIsLeaving(false);
+    setBackHandlerActive(false);
+  }, [
+    roomId,
+    roomData?.status,
+    roomData?.totalQuestions,
+    roomData?.hostId,
+    roomData?.players,
+    userId,
+  ]); // Removed clearBattleState and cleanupTimers
 
   useFocusEffect(
     useCallback(() => {
@@ -978,9 +1011,15 @@ export default function BattleScreen() {
                   Battle Mode
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setShowLeaveModal(true)}>
-                <View className="flex-row items-center bg-red-500 px-3 py-1 rounded-full">
-                  <Text className="text-white text-sm font-black">Leave</Text>
+              <TouchableOpacity onPress={handleLeavePress} disabled={isLeaving}>
+                <View
+                  className={`flex-row items-center ${
+                    isLeaving ? "bg-gray-500" : "bg-red-500"
+                  } px-3 py-1 rounded-full`}
+                >
+                  <Text className="text-white text-sm font-black">
+                    {isLeaving ? "Leaving..." : "Leave"}
+                  </Text>
                 </View>
               </TouchableOpacity>
             </View>
