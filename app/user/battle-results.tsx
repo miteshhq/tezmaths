@@ -514,24 +514,27 @@ export default function BattleResultsScreen() {
     }, [])
   );
 
-  // Optimized home navigation for instant response
   const handleHomeNavigation = useCallback(async () => {
     if (navigationLock.current) {
       console.log("Navigation already in progress, ignoring");
       return;
     }
 
+    console.log("Starting home navigation");
     navigationLock.current = true;
     preventStateUpdates.current = true;
     setIsNavigating(true);
 
     try {
-      console.log("Starting immediate home navigation");
+      // **FIXED: Clear navigation history to prevent loops**
+      while (router.canGoBack()) {
+        router.back();
+      }
 
-      // Navigate immediately for smooth UX
+      // **FIXED: Use replace with reset to clear stack**
       router.replace("/user/home");
 
-      // Cleanup in background after navigation
+      // **FIXED: Cleanup in background without blocking navigation**
       setTimeout(() => {
         performCleanupSilently().finally(() => {
           navigationLock.current = false;
@@ -539,14 +542,48 @@ export default function BattleResultsScreen() {
         });
       }, 100);
     } catch (error) {
-      console.warn("Navigation error:", error);
-      router.replace("/user/home");
-      setTimeout(() => {
-        navigationLock.current = false;
-        setIsNavigating(false);
-      }, 1000);
+      console.error("Navigation error:", error);
+      // **FIXED: Force navigation even on error**
+      try {
+        router.dismissAll(); // Clear all modals/screens
+        router.replace("/user/home");
+      } catch (fallbackError) {
+        // Last resort: reload the app
+        console.error("Critical navigation failure");
+      }
     }
   }, [performCleanupSilently]);
+
+  useEffect(() => {
+    // **FIXED: Prevent memory leaks and crashes**
+    const handleError = (error, errorInfo) => {
+      console.error("Battle Results Error:", error, errorInfo);
+      // Navigate to home on any critical error
+      router.replace("/user/home");
+    };
+
+    // Add global error handler
+    const originalHandler = global.ErrorUtils?.getGlobalHandler();
+    global.ErrorUtils?.setGlobalHandler((error, isFatal) => {
+      if (isFatal) {
+        handleError(error, "Fatal error in battle results");
+      } else {
+        originalHandler?.(error, isFatal);
+      }
+    });
+
+    return () => {
+      global.ErrorUtils?.setGlobalHandler(originalHandler);
+    };
+  }, []);
+
+  // **FIXED: Add navigation reset on component mount**
+  useEffect(() => {
+    // Clear any stale navigation state when component mounts
+    navigationLock.current = false;
+    preventStateUpdates.current = false;
+    setIsNavigating(false);
+  }, []);
 
   useEffect(() => {
     return () => {

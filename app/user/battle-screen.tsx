@@ -753,12 +753,7 @@ export default function BattleScreen() {
   }, [roomId, cleanupTimers, clearBattleState, isLeaving]);
 
   const confirmLeave = useCallback(async () => {
-    console.log("Confirm leave called", {
-      isLeaving,
-      leavingInProgress: leavingInProgress.current,
-      roomId,
-      roomStatus: roomData?.status,
-    });
+    console.log("Confirm leave called");
 
     // Prevent multiple simultaneous executions
     if (isLeaving || leavingInProgress.current) {
@@ -766,7 +761,7 @@ export default function BattleScreen() {
       return;
     }
 
-    // Set flags immediately to prevent race conditions
+    // Set flags immediately
     leavingInProgress.current = true;
     setIsLeaving(true);
     setBackHandlerActive(true);
@@ -781,85 +776,54 @@ export default function BattleScreen() {
         battleManager.removeRoomListener(roomId as string);
       }
 
-      let results = [];
-      let navigateTo = "/user/multiplayer-mode-selection";
-      let navParams = {};
-
+      // **FIXED: Simplified leave logic with better error handling**
       if (roomData?.status === "playing") {
         console.log("Leaving during active battle");
 
         try {
-          // Leave during battle
-          results = await battleManager.leaveDuringBattle(roomId as string);
+          const results = await battleManager.leaveDuringBattle(
+            roomId as string
+          );
 
-          // If no results returned, create basic results from current room data
-          if ((!results || results.length === 0) && roomData?.players) {
-            console.log(
-              "No results from leaveDuringBattle, creating from room data"
-            );
-            results = Object.entries(roomData.players).map(([id, player]) => ({
-              userId: id,
-              username: player.username || player.name || "Player",
-              score: player.score || 0,
-              avatar: player.avatar || 0,
-            }));
-          }
-
-          navigateTo = "/user/battle-results";
-          navParams = {
-            roomId,
-            players: JSON.stringify(results),
-            totalQuestions: (roomData?.totalQuestions ?? 25).toString(),
-            currentUserId: userId,
-            endReason:
-              roomData?.hostId === userId ? "host_left" : "player_left",
-          };
+          // Navigate to results immediately
+          router.replace({
+            pathname: "/user/battle-results",
+            params: {
+              roomId,
+              players: JSON.stringify(results || []),
+              totalQuestions: (roomData?.totalQuestions ?? 25).toString(),
+              currentUserId: userId,
+              endReason:
+                roomData?.hostId === userId ? "host_left" : "player_left",
+            },
+          });
         } catch (battleLeaveError) {
-          console.error("Error leaving during battle:", battleLeaveError);
-          // Fall back to basic leave if battle leave fails
+          console.error(
+            "Battle leave failed, going to multiplayer selection:",
+            battleLeaveError
+          );
+          // Fallback: go to multiplayer selection
           await battleManager.leaveRoom(roomId as string).catch(console.error);
+          router.replace("/user/multiplayer-mode-selection");
         }
       } else {
         console.log("Leaving waiting room");
         await battleManager.leaveRoom(roomId as string);
+        router.replace("/user/multiplayer-mode-selection");
       }
-
-      // Clear battle state (non-blocking)
-      clearBattleState().catch(console.error);
-
-      // Navigate immediately
-      console.log("Navigating to:", navigateTo, navParams);
-      router.replace({
-        pathname: navigateTo,
-        params: navParams,
-      });
     } catch (error) {
       console.error("Error in confirmLeave:", error);
-
-      // Fallback navigation on any error
-      try {
-        await battleManager.leaveRoom(roomId as string).catch(() => {});
-        clearBattleState().catch(console.error);
-        router.replace("/user/multiplayer-mode-selection");
-      } catch (fallbackError) {
-        console.error("Fallback navigation error:", fallbackError);
-        router.replace("/user/multiplayer-mode-selection");
-      }
+      // **FIXED: Always navigate somewhere on error**
+      router.replace("/user/multiplayer-mode-selection");
     } finally {
-      // Reset flags
-      setIsLeaving(false);
-      setBackHandlerActive(false);
-      leavingInProgress.current = false;
+      // **FIXED: Always reset flags after a short delay**
+      setTimeout(() => {
+        setIsLeaving(false);
+        setBackHandlerActive(false);
+        leavingInProgress.current = false;
+      }, 500);
     }
-  }, [
-    roomId,
-    roomData?.status,
-    roomData?.totalQuestions,
-    roomData?.hostId,
-    roomData?.players,
-    userId,
-    isLeaving,
-  ]);
+  }, [roomId, roomData, userId, isLeaving]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1127,11 +1091,17 @@ export default function BattleScreen() {
                       : "bg-red-500"
                   } px-3 py-1 rounded-full`}
                 >
-                  <Text className="text-white text-sm font-black">
-                    {isLeaving || leavingInProgress.current
-                      ? "Leaving..."
-                      : "Leave"}
-                  </Text>
+                  {/* **FIXED: Show spinner when leaving** */}
+                  {isLeaving || leavingInProgress.current ? (
+                    <>
+                      <ActivityIndicator size="small" color="white" />
+                      <Text className="text-white text-sm font-black ml-1">
+                        Leaving...
+                      </Text>
+                    </>
+                  ) : (
+                    <Text className="text-white text-sm font-black">Leave</Text>
+                  )}
                 </View>
               </TouchableOpacity>
             </View>
