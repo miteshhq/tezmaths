@@ -89,55 +89,6 @@ export default function MultiplayerModeSelection() {
     }
   }, []);
 
-  // Add safety check for all navigation functions
-  const handleRandomMatch = useCallback(async () => {
-    if (isLoading || randomMode.searching) return;
-
-    // Add auth check before proceeding
-    if (!auth.currentUser?.uid) {
-      Alert.alert("Authentication Error", "Please sign in to play battles");
-      return;
-    }
-
-    console.log("Starting random match search");
-    setIsLoading(true);
-    setRandomMode({ searching: true, countdown: 30 });
-
-    // Add error boundary
-    try {
-      await battleManager.resetUserBattleState();
-
-      // Rest of the existing code...
-      const { roomId, isHost } = await battleManager.findRandomMatch(2);
-
-      if (countdownIntervalRef.current) {
-        clearInterval(countdownIntervalRef.current);
-        countdownIntervalRef.current = null;
-      }
-
-      console.log(`Random match found - Room: ${roomId}, Host: ${isHost}`);
-
-      setRandomMode({ searching: false, countdown: 0 });
-      router.replace(`/user/battle-room?roomId=${roomId}&isHost=${isHost}`);
-    } catch (error) {
-      // Enhanced error handling
-      console.error("Random match failed:", error);
-      setRandomMode({ searching: false, countdown: 0 });
-
-      let errorMessage = "Failed to find a match. Please try again.";
-      if (error.message.includes("auth")) {
-        errorMessage = "Authentication error. Please sign in again.";
-      } else if (error.message.includes("timeout")) {
-        errorMessage =
-          "Connection timeout. Please check your internet and try again.";
-      }
-
-      Alert.alert("Matchmaking Failed", errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isLoading, randomMode.searching, router]);
-
   // Simple cleanup - only what's necessary
   const performCleanup = useCallback(async () => {
     console.log("Performing simple cleanup");
@@ -164,30 +115,38 @@ export default function MultiplayerModeSelection() {
     }
   }, [randomMode.searching]);
 
-  // Fixed Random Mode Handler - MUCH SIMPLER
+  // SINGLE handleRandomMatch function - COMBINED AND ENHANCED
   const handleRandomMatch = useCallback(async () => {
     if (isLoading || randomMode.searching) return;
+
+    // Add auth check before proceeding
+    if (!auth.currentUser?.uid) {
+      Alert.alert("Authentication Error", "Please sign in to play battles");
+      return;
+    }
 
     console.log("Starting random match search");
     setIsLoading(true);
     setRandomMode({ searching: true, countdown: 30 });
 
-    await battleManager.resetUserBattleState();
-
-    // Countdown timer
-    countdownIntervalRef.current = setInterval(() => {
-      setRandomMode((prev) => {
-        if (prev.countdown <= 1) {
-          clearInterval(countdownIntervalRef.current);
-          countdownIntervalRef.current = null;
-          handleCancelRandomSearch();
-          return { ...prev, countdown: 0, searching: false };
-        }
-        return { ...prev, countdown: prev.countdown - 1 };
-      });
-    }, 1000);
-
+    // Add error boundary
     try {
+      await battleManager.resetUserBattleState();
+
+      // Countdown timer
+      countdownIntervalRef.current = setInterval(() => {
+        setRandomMode((prev) => {
+          if (prev.countdown <= 1) {
+            clearInterval(countdownIntervalRef.current);
+            countdownIntervalRef.current = null;
+            handleCancelRandomSearch();
+            return { ...prev, countdown: 0, searching: false };
+          }
+          return { ...prev, countdown: prev.countdown - 1 };
+        });
+      }, 1000);
+
+      // Find random match
       const { roomId, isHost } = await battleManager.findRandomMatch(2);
 
       if (countdownIntervalRef.current) {
@@ -201,6 +160,7 @@ export default function MultiplayerModeSelection() {
       setRandomMode({ searching: false, countdown: 0 });
       router.replace(`/user/battle-room?roomId=${roomId}&isHost=${isHost}`);
     } catch (error) {
+      // Enhanced error handling
       if (countdownIntervalRef.current) {
         clearInterval(countdownIntervalRef.current);
         countdownIntervalRef.current = null;
@@ -209,10 +169,15 @@ export default function MultiplayerModeSelection() {
       console.error("Random match failed:", error);
       setRandomMode({ searching: false, countdown: 0 });
 
-      Alert.alert(
-        "Matchmaking Failed",
-        error.message || "Failed to find a match. Please try again."
-      );
+      let errorMessage = "Failed to find a match. Please try again.";
+      if (error.message.includes("auth")) {
+        errorMessage = "Authentication error. Please sign in again.";
+      } else if (error.message.includes("timeout")) {
+        errorMessage =
+          "Connection timeout. Please check your internet and try again.";
+      }
+
+      Alert.alert("Matchmaking Failed", errorMessage);
     } finally {
       setIsLoading(false);
     }
