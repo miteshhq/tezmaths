@@ -49,19 +49,24 @@ export default function MultiplayerModeSelection() {
   const roomListenerRef = useRef(null);
   const countdownIntervalRef = useRef(null);
 
+  // Replace the useEffect for battle state reset
   useEffect(() => {
     const resetBattleState = async () => {
       try {
-        // Add safety check for auth
+        // Add auth check first
         if (!auth.currentUser?.uid) {
           console.log("No authenticated user, skipping battle state reset");
           return;
         }
 
-        // Make reset non-blocking and add timeout
+        // Add loading state to prevent navigation during reset
+        setIsLoading(true);
+
+        // Make reset with shorter timeout
         const resetPromise = battleManager.resetUserBattleState();
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Reset timeout")), 3000)
+        const timeoutPromise = new Promise(
+          (_, reject) =>
+            setTimeout(() => reject(new Error("Reset timeout")), 2000) // Reduced timeout
         );
 
         await Promise.race([resetPromise, timeoutPromise]);
@@ -72,18 +77,66 @@ export default function MultiplayerModeSelection() {
           "Battle state reset failed (non-critical):",
           error.message
         );
+      } finally {
+        // Always clear loading state
+        setIsLoading(false);
       }
     };
 
-    // Run reset after component mount to avoid race conditions
-    const timeoutId = setTimeout(() => {
+    // Add loading state check before reset
+    if (auth.currentUser?.uid) {
       resetBattleState();
-    }, 100);
-
-    return () => {
-      clearTimeout(timeoutId);
-    };
+    }
   }, []);
+
+  // Add safety check for all navigation functions
+  const handleRandomMatch = useCallback(async () => {
+    if (isLoading || randomMode.searching) return;
+
+    // Add auth check before proceeding
+    if (!auth.currentUser?.uid) {
+      Alert.alert("Authentication Error", "Please sign in to play battles");
+      return;
+    }
+
+    console.log("Starting random match search");
+    setIsLoading(true);
+    setRandomMode({ searching: true, countdown: 30 });
+
+    // Add error boundary
+    try {
+      await battleManager.resetUserBattleState();
+
+      // Rest of the existing code...
+      const { roomId, isHost } = await battleManager.findRandomMatch(2);
+
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
+      }
+
+      console.log(`Random match found - Room: ${roomId}, Host: ${isHost}`);
+
+      setRandomMode({ searching: false, countdown: 0 });
+      router.replace(`/user/battle-room?roomId=${roomId}&isHost=${isHost}`);
+    } catch (error) {
+      // Enhanced error handling
+      console.error("Random match failed:", error);
+      setRandomMode({ searching: false, countdown: 0 });
+
+      let errorMessage = "Failed to find a match. Please try again.";
+      if (error.message.includes("auth")) {
+        errorMessage = "Authentication error. Please sign in again.";
+      } else if (error.message.includes("timeout")) {
+        errorMessage =
+          "Connection timeout. Please check your internet and try again.";
+      }
+
+      Alert.alert("Matchmaking Failed", errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isLoading, randomMode.searching, router]);
 
   // Simple cleanup - only what's necessary
   const performCleanup = useCallback(async () => {

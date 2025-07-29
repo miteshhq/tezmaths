@@ -144,22 +144,88 @@ export default function BattleRoom() {
     };
   }, [room?.matchmakingRoom, room?.players, isMounted, roomId]);
 
+  // Replace the room validation useEffect
   useEffect(() => {
     if (!roomId) return;
 
-    const checkRoomExists = async () => {
-      const snap = await get(ref(database, `rooms/${roomId}`));
-      if (!snap.exists()) {
-        Alert.alert(
-          "Room Not Available",
-          "This room has been deleted or expired."
+    const validateAndConnect = async () => {
+      try {
+        // Add loading state
+        setLoading(true);
+
+        // Quick auth check
+        if (!auth.currentUser?.uid) {
+          Alert.alert("Authentication Error", "Please sign in to continue");
+          router.replace("/user/multiplayer-mode-selection");
+          return;
+        }
+
+        // Validate room exists with timeout
+        const validationPromise = battleManager.validateRoomExists(roomId);
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Room validation timeout")), 5000)
         );
-        router.replace("/user/multiplayer-mode-selection");
+
+        const roomExists = await Promise.race([
+          validationPromise,
+          timeoutPromise,
+        ]);
+
+        if (!roomExists.exists) {
+          Alert.alert("Room Expired", "This battle room no longer exists", [
+            {
+              text: "OK",
+              onPress: () => router.replace("/user/multiplayer-mode-selection"),
+            },
+          ]);
+          return;
+        }
+
+        // Connect to room
+        await battleManager.updatePlayerConnection(roomId, true);
+
+        // Set up listener with error handling
+        const unsubscribe = battleManager.listenToRoom(roomId, (roomData) => {
+          if (!roomData) {
+            console.warn("Room deleted, navigating back");
+            router.replace("/user/multiplayer-mode-selection");
+            return;
+          }
+          setRoom(roomData);
+          setError(null);
+        });
+
+        return () => {
+          if (unsubscribe) unsubscribe();
+        };
+      } catch (error) {
+        console.error("Room validation error:", error);
+
+        if (error.message.includes("permission")) {
+          Alert.alert(
+            "Access Denied",
+            "You don't have permission to access this room"
+          );
+        } else if (error.message.includes("timeout")) {
+          Alert.alert(
+            "Connection Error",
+            "Failed to connect to room. Please try again."
+          );
+        } else {
+          setError(error);
+        }
+
+        // Navigate back on error
+        setTimeout(() => {
+          router.replace("/user/multiplayer-mode-selection");
+        }, 2000);
+      } finally {
+        setLoading(false);
       }
     };
 
-    checkRoomExists();
-  }, [roomId]);
+    validateAndConnect();
+  }, [roomId, router]);
 
   useEffect(() => {
     setIsMounted(true);

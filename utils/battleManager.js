@@ -391,11 +391,32 @@ export class BattleManager {
 
     async waitForAuth() {
         return new Promise((resolve, reject) => {
+            // Immediate check first
             if (auth.currentUser?.uid && typeof auth.currentUser.uid === 'string') {
                 resolve(auth.currentUser);
                 return;
             }
 
+            // Add loading state check
+            if (auth.currentUser === undefined) {
+                // Auth is still loading, wait a bit
+                setTimeout(() => {
+                    if (auth.currentUser?.uid) {
+                        resolve(auth.currentUser);
+                    } else {
+                        reject(new Error("Authentication not ready"));
+                    }
+                }, 1000);
+                return;
+            }
+
+            // If currentUser is null, auth has loaded but user not signed in
+            if (auth.currentUser === null) {
+                reject(new Error("User not authenticated"));
+                return;
+            }
+
+            // Fallback: listen for auth state change
             const unsubscribe = auth.onAuthStateChanged((user) => {
                 unsubscribe();
                 if (user?.uid && typeof user.uid === 'string') {
@@ -405,12 +426,14 @@ export class BattleManager {
                 }
             });
 
+            // Reduced timeout to fail faster
             setTimeout(() => {
                 unsubscribe();
                 reject(new Error("Authentication timeout"));
-            }, 10000);
+            }, 5000); // Reduced from 10s to 5s
         });
     }
+
 
     async setupUserPresence() {
         try {
@@ -636,42 +659,55 @@ export class BattleManager {
         }
     }
 
-    async createRoom(roomName, maxPlayers = 4) {
+    async safeOperation(operation, operationName, fallback = null) {
         try {
-            const user = await this.waitForAuth();
-            const userId = user.uid;
-
-            logOperation("createRoom", null, `Creating room: ${roomName}`);
-
-            // Get user data and generate room code in parallel
-            const [userData, roomCode] = await Promise.all([
-                this.getUserData(userId),
-                this.generateUniqueRoomCode()
-            ]);
-
-            const roomData = {
-                roomName: roomName || "Battle Room",
-                code: roomCode,
-                hostId: userId,
-                status: "waiting",
-                maxPlayers: maxPlayers,
-                createdAt: serverTimestamp(),
-                lastActivity: serverTimestamp(),
-                players: {
-                    [userId]: { ...createPlayerData({ ...userData, userId }, true), ready: false }
-                }
-            };
-
-            const roomRef = push(createRoomsRef());
-            await set(roomRef, roomData);
-            const roomId = roomRef.key;
-
-            logOperation("createRoom", roomId, `Room created with code: ${roomCode}`);
-            return { roomId, roomCode, roomData };
+            return await operation();
         } catch (error) {
-            console.error("[createRoom] Error:", error);
+            console.error(`[${operationName}] Error:`, error);
+            if (fallback) {
+                return fallback;
+            }
             throw error;
         }
+    }
+
+    async createRoom(roomName, maxPlayers = 4) {
+        return this.safeOperation(async () => {
+            try {
+                const user = await this.waitForAuth();
+                const userId = user.uid;
+
+                logOperation("createRoom", null, `Creating room: ${roomName}`);
+
+                const [userData, roomCode] = await Promise.all([
+                    this.getUserData(userId),
+                    this.generateUniqueRoomCode()
+                ]);
+
+                const roomData = {
+                    roomName: roomName || "Battle Room",
+                    code: roomCode,
+                    hostId: userId,
+                    status: "waiting",
+                    maxPlayers: maxPlayers,
+                    createdAt: serverTimestamp(),
+                    lastActivity: serverTimestamp(),
+                    players: {
+                        [userId]: { ...createPlayerData({ ...userData, userId }, true), ready: false }
+                    }
+                };
+
+                const roomRef = push(createRoomsRef());
+                await set(roomRef, roomData);
+                const roomId = roomRef.key;
+
+                logOperation("createRoom", roomId, `Room created with code: ${roomCode}`);
+                return { roomId, roomCode, roomData };
+            } catch (error) {
+                console.error("[createRoom] Error:", error);
+                throw error;
+            }
+        }, "createRoom");
     }
 
     async leaveDuringBattle(roomId) {

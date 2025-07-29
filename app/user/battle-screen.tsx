@@ -159,6 +159,9 @@ export default function BattleScreen() {
   const [userData, setUserData] = useState({ avatar: 0 });
   const [networkError, setNetworkError] = useState(false);
 
+  const [initializationError, setInitializationError] = useState(null);
+  const [isInitializing, setIsInitializing] = useState(true);
+
   const [showBetterLuckMessage, setShowBetterLuckMessage] = useState(false);
   const [betterLuckCountdown, setBetterLuckCountdown] = useState(0);
 
@@ -321,27 +324,79 @@ export default function BattleScreen() {
     }
   }, [roomId, clearBattleState]);
 
-  // INITIALIZE BATTLE STATE ON MOUNT (SIMPLIFIED)
   useEffect(() => {
-    const initializeBattle = () => {
-      if (!battleInitialized.current && roomId) {
-        console.log("Initializing new battle for room:", roomId);
+    const initializeBattle = async () => {
+      if (!roomId) {
+        setInitializationError("No room ID provided");
+        return;
+      }
 
-        // Clear everything first (NON-BLOCKING)
-        clearBattleState().catch(console.error);
+      try {
+        setIsInitializing(true);
 
-        // Reset navigation and state flags
+        // Auth check first
+        if (!auth.currentUser?.uid) {
+          throw new Error("User not authenticated");
+        }
+
+        console.log("Initializing battle for room:", roomId);
+
+        // Clear state with timeout protection
+        const clearPromise = clearBattleState();
+        const timeoutPromise = new Promise(
+          (resolve) => setTimeout(() => resolve(), 2000) // Don't let clear block forever
+        );
+
+        await Promise.race([clearPromise, timeoutPromise]);
+
+        // Reset flags
         setIsLeaving(false);
         setBackHandlerActive(false);
         setShowLeaveModal(false);
-
-        // Mark as initialized IMMEDIATELY
         battleInitialized.current = true;
+      } catch (error) {
+        console.error("Battle initialization error:", error);
+        setInitializationError(error.message);
+
+        // Navigate back after delay
+        setTimeout(() => {
+          router.replace("/user/multiplayer-mode-selection");
+        }, 3000);
+      } finally {
+        setIsInitializing(false);
       }
     };
 
-    initializeBattle();
-  }, [roomId, clearBattleState]);
+    if (roomId !== currentRoomId.current) {
+      currentRoomId.current = roomId;
+      initializeBattle();
+    }
+  }, [roomId, clearBattleState, router]);
+
+  if (initializationError) {
+    return (
+      <View className="flex-1 bg-primary justify-center items-center p-4">
+        <Text className="text-white text-xl mb-4 text-center">
+          Battle Initialization Error
+        </Text>
+        <Text className="text-gray-300 text-center mb-6">
+          {initializationError}
+        </Text>
+        <Text className="text-gray-400 text-center text-sm">
+          Returning to menu...
+        </Text>
+      </View>
+    );
+  }
+
+  if (isInitializing) {
+    return (
+      <View className="flex-1 bg-primary justify-center items-center">
+        <ActivityIndicator size="large" color="white" />
+        <Text className="text-white mt-4">Initializing battle...</Text>
+      </View>
+    );
+  }
 
   useEffect(() => {
     const loadUserData = async () => {
