@@ -1,4 +1,10 @@
-import React, { useRef, useEffect, useState, useCallback } from "react";
+import React, {
+  useRef,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
 import {
   View,
   Text,
@@ -93,7 +99,6 @@ const SafeNavigationWrapper = ({ children, onError }) => {
       onError?.(error);
     };
 
-    // Add error listener
     const originalConsoleError = console.error;
     console.error = (...args) => {
       if (args[0]?.includes?.("navigation") || args[0]?.includes?.("router")) {
@@ -127,6 +132,64 @@ const SafeNavigationWrapper = ({ children, onError }) => {
   return children;
 };
 
+// Memoized ProfileImage component to prevent unnecessary re-renders
+const ProfileImage = React.memo(({ player, isCurrentUser }) => {
+  return (
+    <View className="items-center">
+      <View className="rounded-full bg-gray-300 items-center justify-center border-2 border-primary">
+        <Image
+          source={avatarImages(player.avatar)}
+          className="w-full h-full rounded-full"
+          style={{ width: 48, height: 48 }}
+          resizeMode="cover"
+          fadeDuration={0} // Prevent image flashing
+        />
+      </View>
+      <Text className="text-xs mt-1 text-center max-w-16" numberOfLines={1}>
+        {player.username}
+      </Text>
+    </View>
+  );
+});
+
+// Memoized HomeButton component
+const HomeButton = React.memo(({ isNavigating, navigationLock, onPress }) => (
+  <TouchableOpacity
+    className={`py-3 px-6 border-2 rounded-full flex-1 mr-1 ${
+      isNavigating
+        ? "border-gray-400 bg-gray-100"
+        : "border-primary bg-white hover:bg-primary hover:border-white"
+    }`}
+    onPress={onPress}
+    disabled={isNavigating || navigationLock}
+    activeOpacity={0.7}
+    style={{
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
+    }}
+  >
+    {isNavigating ? (
+      <View className="flex-row items-center justify-center gap-2">
+        <ActivityIndicator color="#FF6B35" size="small" />
+        <Text className="font-black text-lg text-primary">Loading...</Text>
+      </View>
+    ) : (
+      <View className="flex-row items-center justify-center gap-2">
+        <Text className="font-black text-2xl text-primary">Home</Text>
+        <Image
+          source={require("../../assets/icons/home.png")}
+          style={{ width: 20, height: 20 }}
+          tintColor="#FF6B35"
+          fadeDuration={0}
+        />
+      </View>
+    )}
+  </TouchableOpacity>
+));
+
 export default function BattleResultsScreen() {
   const params = useLocalSearchParams();
   const { roomId, players, totalQuestions, currentUserId } = params;
@@ -137,6 +200,7 @@ export default function BattleResultsScreen() {
   const soundPlayed = useRef(false);
   const navigationLock = useRef(false);
   const cleanupCompleted = useRef(false);
+  const preventStateUpdates = useRef(false);
 
   // State management
   const [isSharing, setIsSharing] = useState(false);
@@ -153,61 +217,94 @@ export default function BattleResultsScreen() {
   });
   const [errorMessage, setErrorMessage] = useState("");
   const [isNavigating, setIsNavigating] = useState(false);
+  const [isDataStable, setIsDataStable] = useState(false);
+
+  // Memoize processed players to prevent recalculation
+  const processedPlayers = useMemo(() => {
+    if (!battleData.isValid || battleData.players.length === 0) return [];
+    return battleData.players.sort((a, b) => b.score - a.score);
+  }, [battleData.players, battleData.isValid]);
+
+  // Memoize motivational quote
+  const motivationalQuote = useMemo(() => {
+    const quotes = [
+      "Victory is earned through sharp minds!",
+      "Every battle makes you stronger!",
+      "Second place is just the first step to first!",
+      "Keep fighting, greatness awaits!",
+      "Math battles build champions!",
+    ];
+    if (battleData.userRank === 1) return quotes[0];
+    if (battleData.userRank === 2) return quotes[1];
+    if (battleData.userRank === 3) return quotes[2];
+    if (battleData.userRank <= battleData.players.length / 2) return quotes[3];
+    return quotes[4];
+  }, [battleData.userRank, battleData.players.length]);
 
   const handleNavigationError = useCallback((error: any) => {
     console.error("Battle results navigation error:", error);
-    // Force navigation as fallback
     setTimeout(() => {
       router.replace("/user/home");
     }, 2000);
   }, []);
 
-  // ENHANCED CLEANUP: Complete battle state reset
-  const performCleanup = useCallback(async () => {
-    console.log("Battle results cleanup starting");
-
+  // Silent cleanup that doesn't affect UI state
+  const performCleanupSilently = useCallback(async () => {
     try {
       const user = auth.currentUser;
       const userId = user?.uid;
 
       if (roomId && userId) {
-        // Update player connection status
-        await battleManager.updatePlayerConnection(roomId, false);
+        // Do cleanup operations without setState calls
+        Promise.all([
+          battleManager.updatePlayerConnection(roomId, false),
+          battleManager.resetUserBattleState(),
+          AsyncStorage.multiRemove([
+            "currentBattleId",
+            "battleState",
+            "battleResults",
+            "lastBattleScore",
+            "battleProgress",
+            "roomData",
+            "battleQuestions",
+          ]),
+        ]).catch(console.error);
 
-        // Check if we should clean up the room
+        // Handle room cleanup
         const roomRef = ref(database, `rooms/${roomId}`);
-        const snapshot = await get(roomRef);
+        get(roomRef)
+          .then((snapshot) => {
+            if (snapshot.exists()) {
+              const roomData = snapshot.val();
+              if (
+                roomData.hostId === userId &&
+                roomData.status === "finished"
+              ) {
+                const playersStillConnected = Object.values(
+                  roomData.players || {}
+                ).some((player: any) => player.connected);
 
-        if (snapshot.exists()) {
-          const roomData = snapshot.val();
-
-          // If we're the host and room is finished, clean it up
-          if (roomData.hostId === userId && roomData.status === "finished") {
-            const playersStillConnected = Object.values(
-              roomData.players || {}
-            ).some((player: any) => player.connected);
-
-            if (!playersStillConnected) {
-              await remove(roomRef);
-              console.log("Room cleaned up by host");
+                if (!playersStillConnected) {
+                  remove(roomRef).catch(console.error);
+                }
+              } else {
+                battleManager.leaveRoom(roomId).catch(console.error);
+              }
             }
-          } else {
-            // Just leave the room
-            await battleManager.leaveRoom(roomId);
-          }
-        }
+          })
+          .catch(console.error);
       }
 
-      // CRITICAL: Reset all battle manager state
-      await battleManager.resetUserBattleState();
-
-      console.log("Battle results cleanup completed");
+      console.log("Silent cleanup completed");
     } catch (error) {
-      console.error("Battle results cleanup error:", error);
+      console.error("Silent cleanup error:", error);
     }
   }, [roomId]);
 
+  // Optimized data validation
   useEffect(() => {
+    if (preventStateUpdates.current) return;
+
     const validateBattleData = () => {
       try {
         // Check required parameters
@@ -251,7 +348,6 @@ export default function BattleResultsScreen() {
           }
         } catch (parseError) {
           console.error("Error parsing players data:", parseError);
-
           parsedPlayers = [
             {
               userId: currentUserId,
@@ -332,7 +428,6 @@ export default function BattleResultsScreen() {
         });
       } catch (error) {
         console.error("Error validating battle data:", error);
-
         setBattleData({
           players: [
             {
@@ -376,6 +471,13 @@ export default function BattleResultsScreen() {
     loadUserData();
   }, []);
 
+  // Data stability check
+  useEffect(() => {
+    if (battleData.isValid && battleData.players.length > 0) {
+      setTimeout(() => setIsDataStable(true), 100);
+    }
+  }, [battleData.isValid, battleData.players]);
+
   useFocusEffect(
     useCallback(() => {
       if (
@@ -412,6 +514,7 @@ export default function BattleResultsScreen() {
     }, [])
   );
 
+  // Optimized home navigation for instant response
   const handleHomeNavigation = useCallback(async () => {
     if (navigationLock.current) {
       console.log("Navigation already in progress, ignoring");
@@ -419,97 +522,56 @@ export default function BattleResultsScreen() {
     }
 
     navigationLock.current = true;
+    preventStateUpdates.current = true;
     setIsNavigating(true);
 
     try {
-      console.log("Starting home navigation with cleanup");
+      console.log("Starting immediate home navigation");
 
-      // ENHANCED: Check if user is still in an active battle
-      if (roomId) {
-        const roomRef = ref(database, `rooms/${roomId}`);
-        const snapshot = await get(roomRef);
-
-        if (snapshot.exists()) {
-          const roomData = snapshot.val();
-          const userId = auth.currentUser?.uid;
-
-          // If battle is still active and user is still connected, just disconnect them
-          if (
-            roomData.status === "playing" &&
-            roomData.players?.[userId]?.connected
-          ) {
-            console.log("User still in active battle, disconnecting cleanly");
-            await battleManager.updatePlayerConnection(roomId, false);
-
-            // Small delay to ensure disconnection is processed
-            await new Promise((resolve) => setTimeout(resolve, 500));
-          }
-        }
-      }
-
-      // Perform comprehensive cleanup
-      if (!cleanupCompleted.current) {
-        await performCleanup();
-        cleanupCompleted.current = true;
-      }
-
-      // Additional cleanup: Clear any remaining battle state
-      await AsyncStorage.multiRemove([
-        "currentBattleId",
-        "battleState",
-        "battleResults",
-        "lastBattleScore",
-        "battleProgress",
-        "roomData",
-        "battleQuestions",
-      ]);
-
-      // Small delay to ensure all cleanup completes
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      // Navigate with replace to prevent back navigation
+      // Navigate immediately for smooth UX
       router.replace("/user/home");
+
+      // Cleanup in background after navigation
+      setTimeout(() => {
+        performCleanupSilently().finally(() => {
+          navigationLock.current = false;
+          setIsNavigating(false);
+        });
+      }, 100);
     } catch (error) {
-      console.warn("Navigation cleanup error:", error);
-      // Always navigate even if cleanup fails
+      console.warn("Navigation error:", error);
       router.replace("/user/home");
-    } finally {
-      // Reset locks after navigation
       setTimeout(() => {
         navigationLock.current = false;
         setIsNavigating(false);
       }, 1000);
     }
-  }, [performCleanup, roomId]);
+  }, [performCleanupSilently]);
 
   useEffect(() => {
     return () => {
       if (!cleanupCompleted.current) {
-        performCleanup().catch(console.error);
+        performCleanupSilently().catch(console.error);
       }
     };
-  }, [performCleanup]);
+  }, [performCleanupSilently]);
 
-  // Render profile images
-  const renderProfileImages = () => {
+  // Memoized profile images rendering
+  const renderProfileImages = useMemo(() => {
     if (!battleData.isValid || battleData.players.length === 0) return null;
 
     const elements = [];
     battleData.players.forEach((player, index) => {
+      const isCurrentUser =
+        player.userId ===
+        (Array.isArray(currentUserId) ? currentUserId[0] : currentUserId);
+
       elements.push(
-        <View key={`player-${player.userId}`} className="items-center">
-          <View className="rounded-full bg-gray-300 items-center justify-center border-2 border-primary">
-            <Image
-              source={avatarImages(player.avatar)}
-              className="w-full h-full rounded-full"
-              style={{ width: 48, height: 48 }}
-              resizeMode="cover"
-            />
-          </View>
-          <Text className="text-xs mt-1 text-center max-w-16" numberOfLines={1}>
-            {player.username}
-          </Text>
-        </View>
+        <ProfileImage
+          key={`player-${player.userId}`}
+          player={player}
+          isCurrentUser={isCurrentUser}
+        />
       );
 
       if (index < battleData.players.length - 1) {
@@ -519,6 +581,7 @@ export default function BattleResultsScreen() {
               source={require("../../assets/icons/swords.png")}
               style={{ width: 12, height: 12 }}
               tintColor="#F05A2A"
+              fadeDuration={0}
             />
           </View>
         );
@@ -530,60 +593,47 @@ export default function BattleResultsScreen() {
         {elements}
       </View>
     );
-  };
+  }, [battleData.isValid, battleData.players, currentUserId]);
 
-  const getMotivationalQuote = () => {
-    const quotes = [
-      "Victory is earned through sharp minds!",
-      "Every battle makes you stronger!",
-      "Second place is just the first step to first!",
-      "Keep fighting, greatness awaits!",
-      "Math battles build champions!",
-    ];
-    if (battleData.userRank === 1) return quotes[0];
-    if (battleData.userRank === 2) return quotes[1];
-    if (battleData.userRank === 3) return quotes[2];
-    if (battleData.userRank <= battleData.players.length / 2) return quotes[3];
-    return quotes[4];
-  };
-
-  const getShareMessage = () => {
+  const getShareMessage = useCallback(() => {
     const shareMessage = `${shareConfig.additionalText}
   
-  🏆 I ranked #${battleData.userRank} with ${
+🏆 I ranked #${battleData.userRank} with ${
       battleData.userScore
     } points in a math battle!
-  "${getMotivationalQuote()}"
-  
-  🎯 Use my referral code: ${userData.username.toUpperCase()}
-  👆 Get bonus points when you sign up!
-  
-  ${shareConfig.playStoreLink}
-  
-  ${shareConfig.downloadText}
-  
-  ${shareConfig.hashtags}`;
+"${motivationalQuote}"
+
+🎯 Use my referral code: ${userData.username.toUpperCase()}
+👆 Get bonus points when you sign up!
+
+${shareConfig.playStoreLink}
+
+${shareConfig.downloadText}
+
+${shareConfig.hashtags}`;
 
     return shareMessage;
-  };
+  }, [
+    battleData.userRank,
+    battleData.userScore,
+    motivationalQuote,
+    userData.username,
+  ]);
 
   const shareImageAndText = async () => {
     setIsSharing(true);
     try {
-      // Capture the image from ViewShot
       if (!viewShotRef.current) throw new Error("ViewShot ref not available");
       const uri = await viewShotRef.current.capture();
 
-      // Save image to file system
       const timestamp = Date.now();
       const newUri = `${FileSystem.documentDirectory}tezmaths_battle_result_${timestamp}.jpg`;
       await FileSystem.copyAsync({ from: uri, to: newUri });
 
-      // Use react-native-share for proper image + text sharing
       const shareOptions = {
         title: "Check this out!",
         message: getShareMessage(),
-        url: newUri, // Share the captured image URI
+        url: newUri,
         type: "image/jpeg",
       };
 
@@ -596,11 +646,11 @@ export default function BattleResultsScreen() {
     }
   };
 
-  if (!battleData.isValid) {
+  if (!isDataStable) {
     return (
       <View className="flex-1 bg-white justify-center items-center">
         <ActivityIndicator size="large" color="#FF6B35" />
-        <Text className="text-lg mt-4">Loading results...</Text>
+        <Text className="text-lg mt-4">Preparing results...</Text>
       </View>
     );
   }
@@ -650,18 +700,18 @@ export default function BattleResultsScreen() {
                   Your Score: {battleData.userScore} pts
                 </Text>
                 <Text className="text-lg text-center italic mt-2">
-                  "{getMotivationalQuote()}"
+                  "{motivationalQuote}"
                 </Text>
               </View>
 
-              {renderProfileImages()}
+              {renderProfileImages}
 
               <Text className="text-2xl text-black font-bold text-center mx-auto w-full mb-2">
                 Battle Score
               </Text>
 
               <ScrollView className="w-full mb-4">
-                {battleData.players.map((player, index) => (
+                {processedPlayers.map((player, index) => (
                   <View
                     key={player.userId}
                     className={`flex-row justify-between items-center w-full p-4 py-2 rounded-lg mb-2 bg-light-orange ${
@@ -701,41 +751,11 @@ export default function BattleResultsScreen() {
           </ViewShot>
 
           <View className="flex-row justify-between mt-6 w-full max-w-md">
-            <TouchableOpacity
-              className={`py-3 px-6 border-2 rounded-full flex-1 mr-1 ${
-                isNavigating
-                  ? "border-gray-400 bg-gray-100"
-                  : "border-primary bg-white hover:bg-primary hover:border-white"
-              }`}
+            <HomeButton
+              isNavigating={isNavigating}
+              navigationLock={navigationLock.current}
               onPress={handleHomeNavigation}
-              disabled={isNavigating || navigationLock.current}
-              activeOpacity={0.7}
-              style={{
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
-                elevation: 3,
-              }}
-            >
-              {isNavigating ? (
-                <View className="flex-row items-center justify-center gap-2">
-                  <ActivityIndicator color="#FF6B35" size="small" />
-                  <Text className="font-black text-lg text-primary">
-                    Loading...
-                  </Text>
-                </View>
-              ) : (
-                <View className="flex-row items-center justify-center gap-2">
-                  <Text className="font-black text-2xl text-primary">Home</Text>
-                  <Image
-                    source={require("../../assets/icons/home.png")}
-                    style={{ width: 20, height: 20 }}
-                    tintColor="#FF6B35"
-                  />
-                </View>
-              )}
-            </TouchableOpacity>
+            />
 
             <TouchableOpacity
               className="py-3 px-6 border border-black rounded-full flex-1 ml-1"
@@ -752,6 +772,7 @@ export default function BattleResultsScreen() {
                     source={require("../../assets/icons/share.png")}
                     style={{ width: 20, height: 20 }}
                     tintColor="#FF6B35"
+                    fadeDuration={0}
                   />
                 </View>
               )}
