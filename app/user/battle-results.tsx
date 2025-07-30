@@ -52,6 +52,15 @@ interface BattleDataState {
   isValid: boolean;
 }
 
+interface LocalResultsData {
+  players: BattlePlayer[];
+  totalQuestions: number;
+  userRank: number;
+  userScore: number;
+  roomId: string;
+  timestamp: number;
+}
+
 const shareConfig = {
   additionalText:
     "🧮 Discover TezMaths - the ultimate free math-boosting app! Features multiple quizzes, proven tricks, comprehensive guides, and so much more to supercharge your mathematical skills! 🚀",
@@ -105,9 +114,13 @@ export default function BattleResultsScreen() {
     userScore: 0,
     isValid: false,
   });
+  // NEW: Local results data storage (disconnected from Firebase)
+  const [localResultsData, setLocalResultsData] =
+    useState<LocalResultsData | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [isNavigating, setIsNavigating] = useState(false);
 
+  // Simplified cleanup - only handles room cleanup if host
   const performCleanup = useCallback(async () => {
     console.log("Battle results cleanup starting");
 
@@ -153,6 +166,7 @@ export default function BattleResultsScreen() {
     cleanupExecuted.current = false;
   }, []);
 
+  // UPDATED: Validate battle data and store locally (disconnected from Firebase)
   useEffect(() => {
     const validateBattleData = () => {
       try {
@@ -263,15 +277,32 @@ export default function BattleResultsScreen() {
 
         const userRank = userIndex + 1;
         const userScore = processedPlayers[userIndex].score;
+        const totalQuestionsCount =
+          parseInt(
+            Array.isArray(totalQuestions)
+              ? totalQuestions[0]
+              : totalQuestions || "0"
+          ) || 0;
+
+        // NEW: Store results data locally (disconnected from Firebase)
+        const resultsData: LocalResultsData = {
+          players: processedPlayers,
+          totalQuestions: totalQuestionsCount,
+          userRank,
+          userScore,
+          roomId: Array.isArray(roomId) ? roomId[0] : roomId,
+          timestamp: Date.now(),
+        };
+
+        // Store in component state (disconnected from Firebase)
+        setLocalResultsData(resultsData);
+
+        // Also store in AsyncStorage as backup
+        AsyncStorage.setItem("battleResults", JSON.stringify(resultsData));
 
         setBattleData({
           players: processedPlayers,
-          totalQuestions:
-            parseInt(
-              Array.isArray(totalQuestions)
-                ? totalQuestions[0]
-                : totalQuestions || "0"
-            ) || 0,
+          totalQuestions: totalQuestionsCount,
           userRank,
           userScore,
           isValid: true,
@@ -279,7 +310,7 @@ export default function BattleResultsScreen() {
       } catch (error) {
         console.error("Error validating battle data:", error);
 
-        setBattleData({
+        const fallbackData = {
           players: [
             {
               userId: Array.isArray(currentUserId)
@@ -299,12 +330,36 @@ export default function BattleResultsScreen() {
           userRank: 1,
           userScore: 0,
           isValid: true,
-        });
+        };
+
+        setBattleData(fallbackData);
       }
     };
 
     validateBattleData();
   }, [roomId, players, currentUserId, totalQuestions]);
+
+  // NEW: Background Firebase cleanup (completely detached from UI)
+  useEffect(() => {
+    if (localResultsData) {
+      // Firebase cleanup happens independently, doesn't affect UI
+      const backgroundCleanup = async () => {
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait 5 seconds
+          await performCleanup();
+          await battleManager.leaveRoom(roomId);
+          console.log("Background Firebase cleanup completed");
+        } catch (error) {
+          console.error(
+            "Background cleanup failed (doesn't affect user):",
+            error
+          );
+        }
+      };
+
+      backgroundCleanup();
+    }
+  }, [localResultsData, roomId, performCleanup]);
 
   // Load user data
   useEffect(() => {
@@ -358,6 +413,7 @@ export default function BattleResultsScreen() {
     }, [])
   );
 
+  // UPDATED: Home navigation with only local cleanup (no Firebase operations)
   const handleHomeNavigation = useCallback(async () => {
     if (isNavigating || navigationInProgress.current) return;
 
@@ -365,30 +421,22 @@ export default function BattleResultsScreen() {
     navigationInProgress.current = true;
 
     try {
-      await performCleanup();
+      // ONLY local state reset - NO Firebase operations
+      await battleManager.resetUserBattleState(); // This only clears local AsyncStorage
 
-      // CALL THESE ONLY WHEN USER ACTUALLY LEAVES
-      await battleManager.leaveRoom(roomId);
-      await battleManager.resetUserBattleState();
-
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
+      // Instant navigation
       router.replace("/user/home");
     } catch (error) {
-      console.warn("Navigation cleanup error:", error);
+      console.warn("Navigation error:", error);
       router.replace("/user/home");
     } finally {
       navigationInProgress.current = false;
       setIsNavigating(false);
     }
-  }, [performCleanup, roomId]);
+  }, []);
 
-  useEffect(() => {
-    return () => {
-      performCleanup();
-      navigationInProgress.current = false;
-    };
-  }, [performCleanup]);
+  // REMOVED: The useEffect cleanup that called performCleanup on unmount
+  // This was causing cross-device interference
 
   // Render profile images
   const renderProfileImages = () => {
