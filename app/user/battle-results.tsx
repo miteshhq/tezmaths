@@ -108,7 +108,6 @@ export default function BattleResultsScreen() {
   const [errorMessage, setErrorMessage] = useState("");
   const [isNavigating, setIsNavigating] = useState(false);
 
-  // ENHANCED CLEANUP: Complete battle state reset
   const performCleanup = useCallback(async () => {
     console.log("Battle results cleanup starting");
 
@@ -137,17 +136,11 @@ export default function BattleResultsScreen() {
               await remove(roomRef);
               console.log("Room cleaned up by host");
             }
-          } else {
-            // Just leave the room
-            await battleManager.leaveRoom(roomId);
           }
         }
       }
 
-      // CRITICAL: Reset all battle manager state
-      await battleManager.resetUserBattleState();
       navigationInProgress.current = false;
-
       console.log("Battle results cleanup completed");
     } catch (error) {
       console.error("Battle results cleanup error:", error);
@@ -373,6 +366,11 @@ export default function BattleResultsScreen() {
 
     try {
       await performCleanup();
+
+      // CALL THESE ONLY WHEN USER ACTUALLY LEAVES
+      await battleManager.leaveRoom(roomId);
+      await battleManager.resetUserBattleState();
+
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       router.replace("/user/home");
@@ -383,7 +381,7 @@ export default function BattleResultsScreen() {
       navigationInProgress.current = false;
       setIsNavigating(false);
     }
-  }, [performCleanup]);
+  }, [performCleanup, roomId]);
 
   useEffect(() => {
     return () => {
