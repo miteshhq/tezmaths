@@ -144,71 +144,22 @@ export default function BattleRoom() {
     };
   }, [room?.matchmakingRoom, room?.players, isMounted, roomId]);
 
-  // Replace the room validation useEffect:
   useEffect(() => {
     if (!roomId) return;
 
-    const validateAndConnect = async () => {
-      try {
-        setLoading(true);
-
-        if (!auth.currentUser?.uid) {
-          Alert.alert("Authentication Error", "Please sign in to continue");
-          router.replace("/user/multiplayer-mode-selection");
-          return;
-        }
-
-        // TIMEOUT PROTECTION: Don't wait forever
-        const validationPromise = battleManager.validateRoomExists(roomId);
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Validation timeout")), 3000)
+    const checkRoomExists = async () => {
+      const snap = await get(ref(database, `rooms/${roomId}`));
+      if (!snap.exists()) {
+        Alert.alert(
+          "Room Not Available",
+          "This room has been deleted or expired."
         );
-
-        const roomExists = await Promise.race([
-          validationPromise,
-          timeoutPromise,
-        ]);
-
-        if (!roomExists.exists) {
-          Alert.alert("Room Expired", "This battle room no longer exists", [
-            {
-              text: "OK",
-              onPress: () => router.replace("/user/multiplayer-mode-selection"),
-            },
-          ]);
-          return;
-        }
-
-        // Connect and setup listener
-        await battleManager.updatePlayerConnection(roomId, true);
-
-        // SINGLE LISTENER: Remove any existing listener first
-        battleManager.removeRoomListener(roomId);
-
-        const unsubscribe = battleManager.listenToRoom(roomId, (roomData) => {
-          if (!roomData) {
-            console.warn("Room deleted, navigating back");
-            router.replace("/user/multiplayer-mode-selection");
-            return;
-          }
-          setRoom(roomData);
-          setError(null);
-        });
-
-        return unsubscribe;
-      } catch (error) {
-        console.error("Room validation error:", error);
-        setError(error);
-        setTimeout(() => {
-          router.replace("/user/multiplayer-mode-selection");
-        }, 2000);
-      } finally {
-        setLoading(false);
+        router.replace("/user/multiplayer-mode-selection");
       }
     };
 
-    validateAndConnect();
-  }, [roomId]); // Only depend on roomId
+    checkRoomExists();
+  }, [roomId]);
 
   useEffect(() => {
     setIsMounted(true);

@@ -373,16 +373,14 @@ export class BattleManager {
         this.userPresenceRef = null;
         this.isInitialized = false;
 
-        // ADD THESE NEW PROPERTIES:
-        this.operationFlags = new Map(); // Prevent duplicate operations
-        this.cleanupTimers = new Map();   // Track cleanup timers
-
+        // IMPROVED: Question caching system
         this.questionCache = new Map();
         this.usedQuestionSignatures = new Set();
         this.lastCacheTime = 0;
-        this.CACHE_DURATION = 5 * 60 * 1000;
+        this.CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
         this.setupUserPresence();
+        // Pre-generate questions in background (non-blocking)
         this.preGenerateQuestions().catch(console.error);
     }
 
@@ -680,73 +678,74 @@ export class BattleManager {
     }
 
     async leaveDuringBattle(roomId) {
-        const operationKey = `leave_${roomId}`;
-
-        // Prevent duplicate operations
-        if (this.operationFlags.has(operationKey)) {
-            console.log("Leave already in progress for room:", roomId);
-            return [];
-        }
-
-        this.operationFlags.set(operationKey, true);
-
         try {
             const user = await this.waitForAuth();
             const userId = user.uid;
 
             logOperation("leaveDuringBattle", roomId, `Player ${userId} leaving during battle`);
 
-            // Quick room data fetch with timeout
-            const roomPromise = safeGet(createRoomRef(roomId));
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("Room fetch timeout")), 2000)
-            );
-
-            const { data: roomData, exists } = await Promise.race([roomPromise, timeoutPromise]);
-
+            const { data: roomData, exists } = await safeGet(createRoomRef(roomId));
             if (!exists || !roomData) {
                 return [];
             }
 
-            // Immediate disconnect - don't wait for confirmation
+            // Remove the leaving player
             if (roomData.players?.[userId]) {
-                update(createPlayerRef(roomId, userId), {
-                    connected: false,
-                    leftAt: serverTimestamp()
-                }).catch(console.error);
+                await update(createPlayerRef(roomId, userId), { connected: false });
             }
 
-            const playerArray = calculatePlayerScores(roomData.players);
-
-            // Non-blocking room update
+            // Count remaining connected players
             const remainingPlayers = Object.values(roomData.players || {}).filter(
                 (player) => player.userId !== userId && player.connected
             );
 
-            const updates = {
-                status: "finished",
-                results: playerArray,
-                finishedAt: serverTimestamp()
-            };
+            // Check if the host is leaving
+            const isHostLeaving = roomData.hostId === userId;
 
+            // End battle if only one player is left
             if (remainingPlayers.length < 2) {
-                updates.gameEndReason = "insufficient_players";
-            } else if (roomData.hostId === userId) {
-                updates.gameEndReason = "host_left";
+                logOperation("leaveDuringBattle", roomId, "Ending battle due to insufficient players");
+
+                const playerArray = calculatePlayerScores(roomData.players);
+
+                // Update room to finished state
+                await update(createRoomRef(roomId), {
+                    status: "finished",
+                    results: playerArray,
+                    gameEndReason: "insufficient_players",
+                    finishedAt: serverTimestamp(),
+                    lastActivity: serverTimestamp()
+                });
+
+                return playerArray;
             }
 
-            // Fire and forget
-            update(createRoomRef(roomId), updates).catch(console.error);
+            // If the host leaves, end the battle for everyone
+            if (isHostLeaving) {
+                logOperation("leaveDuringBattle", roomId, "Host left during battle, ending for all players");
 
-            return playerArray;
+                const playerArray = calculatePlayerScores(roomData.players);
+
+                await update(createRoomRef(roomId), {
+                    status: "finished",
+                    results: playerArray,
+                    gameEndReason: "host_left",
+                    finishedAt: serverTimestamp(),
+                    lastActivity: serverTimestamp()
+                });
+
+                return playerArray;
+            }
+
+            // Update activity timestamp if the battle continues
+            await safeUpdate(createRoomRef(roomId), {
+                lastActivity: serverTimestamp()
+            });
+
+            return [];
         } catch (error) {
             console.error("[leaveDuringBattle] Error:", error);
             return [];
-        } finally {
-            // Clear operation flag after delay
-            setTimeout(() => {
-                this.operationFlags.delete(operationKey);
-            }, 3000);
         }
     }
 
@@ -983,30 +982,29 @@ export class BattleManager {
     }
 
     async endBattle(roomId) {
-        const operationKey = `end_${roomId}`;
-
-        if (this.operationFlags.has(operationKey)) {
-            console.log("End battle already in progress for room:", roomId);
-            return [];
-        }
-
-        this.operationFlags.set(operationKey, true);
-
         try {
-            logOperation("endBattle", roomId, "Battle ended successfully. Winner: m2");
+            logOperation("endBattle", roomId, "Ending battle");
 
             const { data: roomData, exists } = await safeGet(createRoomRef(roomId));
             if (!exists || !roomData?.players) {
+                if (roomData) {
+                    await update(createRoomRef(roomId), {
+                        status: "finished",
+                        finishedAt: serverTimestamp(),
+                        gameEndReason: "no_players"
+                    });
+                }
                 return [];
             }
 
             const playerArray = calculatePlayerScores(roomData.players);
             const winner = playerArray[0];
+            const gameEndReason = roomData.gameEndReason || "questions_completed";
 
-            // Update user scores in background
-            playerArray.forEach(player => {
-                this.updateUserScore(player.userId, player.score).catch(console.error);
-            });
+            // Update user scores
+            for (const player of playerArray) {
+                await this.updateUserScore(player.userId, player.score);
+            }
 
             const playerUpdates = createFinalPlayerUpdates(playerArray);
 
@@ -1015,28 +1013,22 @@ export class BattleManager {
                 status: "finished",
                 results: playerArray,
                 gameWinner: winner.userId,
-                gameEndReason: roomData.gameEndReason || "questions_completed",
-                finishedAt: serverTimestamp()
+                gameEndReason: gameEndReason,
+                finishedAt: serverTimestamp(),
+                lastActivity: serverTimestamp()
             });
 
-            // Remove listener immediately to prevent further events
-            this.removeRoomListener(roomId);
+            logOperation("endBattle", roomId, `Battle ended successfully. Winner: ${winner.username}`);
 
-            // Schedule cleanup
-            const cleanupTimer = setTimeout(() => {
+            // Clean up after 30 seconds
+            setTimeout(() => {
                 this.cleanupRoom(roomId, "battle_completed").catch(() => { });
-            }, 10000);
-
-            this.cleanupTimers.set(roomId, cleanupTimer);
+            }, 30000);
 
             return playerArray;
         } catch (error) {
             console.error("[endBattle] Error:", error);
             return [];
-        } finally {
-            setTimeout(() => {
-                this.operationFlags.delete(operationKey);
-            }, 5000);
         }
     }
 
@@ -1144,18 +1136,7 @@ export class BattleManager {
 
     async resetUserBattleState() {
         try {
-            console.log("Clearing all battle state for new battle");
-
-            // Clear operation flags
-            this.operationFlags.clear();
-
-            // Clear cleanup timers
-            this.cleanupTimers.forEach((timer, roomId) => {
-                clearTimeout(timer);
-            });
-            this.cleanupTimers.clear();
-
-            // Clear listeners
+            // Clear all listeners
             this.listeners.forEach((listener, roomId) => {
                 try {
                     off(listener.ref, "value", listener.handler);
@@ -1165,6 +1146,12 @@ export class BattleManager {
             });
             this.listeners.clear();
             this.activeRooms.clear();
+
+            // Clear question cache periodically but keep some for performance
+            if (this.usedQuestionSignatures.size > 100) {
+                const signatures = Array.from(this.usedQuestionSignatures);
+                this.usedQuestionSignatures = new Set(signatures.slice(-50));
+            }
 
             console.log("Battle state reset completed");
         } catch (error) {
@@ -1256,56 +1243,22 @@ export class BattleManager {
 
     async endBattleInsufficientPlayers(roomId) {
         try {
-            logOperation("endBattleInsufficientPlayers", roomId, "Checking for insufficient players");
-
             const { data: roomData, exists } = await safeGet(createRoomRef(roomId));
-            if (!exists || !roomData) {
-                console.log("Room doesn't exist, skipping insufficient players check");
-                return;
-            }
+            if (!exists || roomData.status === "finished") return;
 
-            if (roomData.status === "finished") {
-                console.log("Battle already finished, skipping insufficient players check");
-                return;
-            }
+            const playerArray = calculatePlayerScores(roomData.players);
+            const playerUpdates = createFinalPlayerUpdates(playerArray);
 
-            // Count actually connected players
-            const connectedPlayers = Object.values(roomData.players || {}).filter(p => p.connected === true);
-
-            console.log("Insufficient players check:", {
-                totalPlayers: Object.keys(roomData.players || {}).length,
-                connectedPlayers: connectedPlayers.length,
-                status: roomData.status,
-                gameEndReason: roomData.gameEndReason
+            await update(createRoomRef(roomId), {
+                ...playerUpdates,
+                status: "finished",
+                results: playerArray,
+                gameEndReason: "insufficient_players",
+                finishedAt: serverTimestamp(),
+                lastActivity: serverTimestamp()
             });
 
-            // Only end if less than 2 connected players and battle is active
-            if (connectedPlayers.length < 2 && roomData.status === "playing") {
-                logOperation("endBattleInsufficientPlayers", roomId, "Ending battle due to insufficient players");
-
-                const playerArray = calculatePlayerScores(roomData.players);
-                const playerUpdates = createFinalPlayerUpdates(playerArray);
-
-                await update(createRoomRef(roomId), {
-                    ...playerUpdates,
-                    status: "finished",
-                    results: playerArray,
-                    gameEndReason: "insufficient_players",
-                    finishedAt: serverTimestamp(),
-                    lastActivity: serverTimestamp()
-                });
-
-                logOperation("endBattleInsufficientPlayers", roomId, "Battle ended successfully due to insufficient players");
-
-                // Clean up after 10 seconds
-                setTimeout(() => {
-                    this.cleanupRoom(roomId, "insufficient_players").catch(() => { });
-                }, 10000);
-
-                return playerArray;
-            } else {
-                console.log("Sufficient players still connected, not ending battle");
-            }
+            logOperation("endBattleInsufficientPlayers", roomId, "Battle ended due to insufficient players");
         } catch (error) {
             console.error("[endBattleInsufficientPlayers] Error:", error);
         }

@@ -9,17 +9,48 @@ import {
   ActivityIndicator,
   BackHandler,
 } from "react-native";
-import { useLocalSearchParams, useFocusEffect, router } from "expo-router";
+import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
 import ViewShot from "react-native-view-shot";
-import * as FileSystem from "expo-file-system";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import SoundManager from "../../components/soundManager";
 import { auth, database } from "../../firebase/firebaseConfig";
-import { ref, get, remove, off } from "firebase/database";
-import { battleManager } from "../../utils/battleManager";
+import { ref, get, remove } from "firebase/database";
 import Share from "react-native-share";
 
+import * as FileSystem from "expo-file-system";
+import SoundManager from "../../components/soundManager";
 const logo = require("../../assets/branding/tezmaths-full-logo.png");
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { battleManager } from "../../utils/battleManager";
+
+interface PlayerData {
+  name?: string;
+  username?: string;
+  avatar?: number | string;
+  score?: number | string;
+  userId?: string;
+  isHost?: boolean;
+  ready?: boolean;
+  connected?: boolean;
+}
+
+interface BattlePlayer {
+  userId: string;
+  username: string;
+  avatar: number;
+  score: number;
+}
+
+interface UserData {
+  avatar: number;
+  username: string;
+}
+
+interface BattleDataState {
+  players: BattlePlayer[];
+  totalQuestions: number;
+  userRank: number;
+  userScore: number;
+  isValid: boolean;
+}
 
 const shareConfig = {
   additionalText:
@@ -52,186 +83,351 @@ const avatarImages = (avatar: number | string) => {
   }
 };
 
-const ProfileImage = React.memo(({ player, isCurrentUser }) => {
-  return (
-    <View className="items-center">
-      <View className="rounded-full bg-gray-300 items-center justify-center border-2 border-primary">
-        <Image
-          source={avatarImages(player.avatar)}
-          className="w-full h-full rounded-full"
-          style={{ width: 48, height: 48 }}
-          resizeMode="cover"
-          fadeDuration={0}
-        />
-      </View>
-      <Text className="text-xs mt-1 text-center max-w-16" numberOfLines={1}>
-        {player.username}
-      </Text>
-    </View>
-  );
-});
-
 export default function BattleResultsScreen() {
-  const { roomId, players, totalQuestions, currentUserId } =
-    useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const { roomId, players, totalQuestions, currentUserId } = params;
 
-  // Refs for cleanup management
   const viewShotRef = useRef<ViewShot>(null);
+  const cleanupExecuted = useRef(false);
+  const navigationInProgress = useRef(false);
   const soundPlayed = useRef(false);
-  const cleanupDone = useRef(false);
-  const unmounted = useRef(false);
 
-  // Step 1: Extract raw params
-  const rawPlayers = Array.isArray(players) ? players[0] : (players as string);
-  const meId = Array.isArray(currentUserId)
-    ? currentUserId[0]
-    : (currentUserId as string);
-
-  const rawRoomId = Array.isArray(roomId) ? roomId[0] : (roomId as string);
-
-  // Step 2: Build battleData safely
-  const [battleData] = useState(() => {
-    let parsed: any;
-    try {
-      parsed = JSON.parse(rawPlayers);
-    } catch {
-      parsed = [];
-    }
-
-    const list = Array.isArray(parsed) ? parsed : Object.values(parsed);
-    const processed = list.map((p: any, i: number) => ({
-      userId: p.userId ?? `player_${i}`,
-      username: p.username ?? p.name ?? `Player ${i + 1}`,
-      avatar: Number(p.avatar) || 0,
-      score: Number(p.score) || 0,
-    }));
-
-    // Ensure current user
-    if (!processed.find((p) => p.userId === meId)) {
-      processed.push({ userId: meId, username: "You", avatar: 0, score: 0 });
-    }
-
-    processed.sort((a, b) => b.score - a.score);
-    const idx = processed.findIndex((p) => p.userId === meId);
-    return {
-      players: processed,
-      currentUserId: meId,
-      roomId: Array.isArray(roomId) ? roomId[0] : (roomId as string),
-      totalQuestions:
-        parseInt(
-          Array.isArray(totalQuestions)
-            ? totalQuestions[0]
-            : (totalQuestions as string)
-        ) || 0,
-      userRank: idx + 1,
-      userScore: processed[idx].score,
-    };
-  });
-
-  const [userData, setUserData] = useState({ avatar: 0, username: "player" });
+  // State management
   const [isSharing, setIsSharing] = useState(false);
+  const [userData, setUserData] = useState<UserData>({
+    avatar: 0,
+    username: "player",
+  });
+  const [battleData, setBattleData] = useState<BattleDataState>({
+    players: [],
+    totalQuestions: 0,
+    userRank: 0,
+    userScore: 0,
+    isValid: false,
+  });
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isNavigating, setIsNavigating] = useState(false);
 
-  // 2️⃣ LOAD USER DATA & PLAY SOUND
+  // ENHANCED CLEANUP: Complete battle state reset
+  const performCleanup = useCallback(async () => {
+    console.log("Battle results cleanup starting");
+
+    try {
+      const user = auth.currentUser;
+      const userId = user?.uid;
+
+      if (roomId && userId) {
+        // Update player connection status
+        await battleManager.updatePlayerConnection(roomId, false);
+
+        // Check if we should clean up the room
+        const roomRef = ref(database, `rooms/${roomId}`);
+        const snapshot = await get(roomRef);
+
+        if (snapshot.exists()) {
+          const roomData = snapshot.val();
+
+          // If we're the host and room is finished, clean it up
+          if (roomData.hostId === userId && roomData.status === "finished") {
+            const playersStillConnected = Object.values(
+              roomData.players || {}
+            ).some((player: any) => player.connected);
+
+            if (!playersStillConnected) {
+              await remove(roomRef);
+              console.log("Room cleaned up by host");
+            }
+          } else {
+            // Just leave the room
+            await battleManager.leaveRoom(roomId);
+          }
+        }
+      }
+
+      // CRITICAL: Reset all battle manager state
+      await battleManager.resetUserBattleState();
+
+      console.log("Battle results cleanup completed");
+    } catch (error) {
+      console.error("Battle results cleanup error:", error);
+    }
+  }, [roomId]);
+
   useEffect(() => {
-    // Load cached user data
-    AsyncStorage.getItem("userData")
-      .then((cached) => {
-        if (cached && !unmounted.current) {
-          const data = JSON.parse(cached);
+    const validateBattleData = () => {
+      try {
+        // Check required parameters
+        if (!roomId || !players || !currentUserId) {
+          setErrorMessage("Battle data incomplete. Returning to menu...");
+          setTimeout(() => {
+            router.replace("/user/multiplayer-mode-selection");
+          }, 1000);
+          return;
+        }
+
+        // Parse players data with better error handling
+        let parsedPlayers: any[] = [];
+        try {
+          const playersData = JSON.parse(
+            Array.isArray(players) ? players[0] : players
+          );
+
+          if (Array.isArray(playersData)) {
+            parsedPlayers = playersData;
+          } else if (typeof playersData === "object" && playersData !== null) {
+            parsedPlayers = Object.entries(playersData).map(
+              ([userId, playerData]) => {
+                const player = playerData as PlayerData;
+                return {
+                  userId: userId,
+                  username: player.name || player.username || "Unknown Player",
+                  avatar:
+                    typeof player.avatar === "number"
+                      ? player.avatar
+                      : parseInt(String(player.avatar)) || 0,
+                  score:
+                    typeof player.score === "number"
+                      ? player.score
+                      : parseInt(String(player.score)) || 0,
+                };
+              }
+            );
+          } else {
+            throw new Error("Invalid players data format");
+          }
+        } catch (parseError) {
+          console.error("Error parsing players data:", parseError);
+
+          parsedPlayers = [
+            {
+              userId: currentUserId,
+              username: "You",
+              avatar: 0,
+              score: 0,
+            },
+          ];
+        }
+
+        if (!Array.isArray(parsedPlayers) || parsedPlayers.length === 0) {
+          parsedPlayers = [
+            {
+              userId: currentUserId,
+              username: "You",
+              avatar: 0,
+              score: 0,
+            },
+          ];
+        }
+
+        const processedPlayers: BattlePlayer[] = parsedPlayers.map(
+          (player: any, index: number) => ({
+            userId: player.userId || `player_${index}`,
+            username: player.name || player.username || "Unknown Player",
+            avatar:
+              typeof player.avatar === "number"
+                ? player.avatar
+                : parseInt(String(player.avatar)) || 0,
+            score:
+              typeof player.score === "number"
+                ? player.score
+                : parseInt(String(player.score)) || 0,
+          })
+        );
+
+        // Sort players by score (highest first)
+        processedPlayers.sort((a, b) => b.score - a.score);
+
+        // Find current user's rank and score
+        let userIndex = processedPlayers.findIndex(
+          (p) =>
+            p.userId ===
+            (Array.isArray(currentUserId) ? currentUserId[0] : currentUserId)
+        );
+
+        if (userIndex === -1) {
+          processedPlayers.push({
+            userId: Array.isArray(currentUserId)
+              ? currentUserId[0]
+              : currentUserId,
+            username: "You",
+            avatar: 0,
+            score: 0,
+          });
+          processedPlayers.sort((a, b) => b.score - a.score);
+          userIndex = processedPlayers.findIndex(
+            (p) =>
+              p.userId ===
+              (Array.isArray(currentUserId) ? currentUserId[0] : currentUserId)
+          );
+        }
+
+        const userRank = userIndex + 1;
+        const userScore = processedPlayers[userIndex].score;
+
+        setBattleData({
+          players: processedPlayers,
+          totalQuestions:
+            parseInt(
+              Array.isArray(totalQuestions)
+                ? totalQuestions[0]
+                : totalQuestions || "0"
+            ) || 0,
+          userRank,
+          userScore,
+          isValid: true,
+        });
+      } catch (error) {
+        console.error("Error validating battle data:", error);
+
+        setBattleData({
+          players: [
+            {
+              userId: Array.isArray(currentUserId)
+                ? currentUserId[0]
+                : currentUserId,
+              username: "You",
+              avatar: 0,
+              score: 0,
+            },
+          ],
+          totalQuestions:
+            parseInt(
+              Array.isArray(totalQuestions)
+                ? totalQuestions[0]
+                : totalQuestions || "0"
+            ) || 0,
+          userRank: 1,
+          userScore: 0,
+          isValid: true,
+        });
+      }
+    };
+
+    validateBattleData();
+  }, [roomId, players, currentUserId, totalQuestions]);
+
+  // Load user data
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const cachedData = await AsyncStorage.getItem("userData");
+        if (cachedData) {
+          const data = JSON.parse(cachedData);
           setUserData(data);
         }
-      })
-      .catch(() => {});
-
-    // Play victory sound once
-    if (battleData.userRank === 1 && !soundPlayed.current) {
-      soundPlayed.current = true;
-      SoundManager.playSound("victorySoundEffect").catch(() => {});
-    }
-  }, []);
-
-  // Replace the existing cleanup useEffect with this:
-  useEffect(() => {
-    if (cleanupDone.current || unmounted.current || !battleData.roomId) return;
-    cleanupDone.current = true;
-
-    // SIMPLIFIED: Single cleanup without complex async operations
-    const performCleanup = () => {
-      try {
-        const { roomId, currentUserId } = battleData;
-        const user = auth.currentUser;
-        const userId = user?.uid || currentUserId;
-
-        if (roomId && userId) {
-          // Fire-and-forget cleanup operations
-          battleManager.updatePlayerConnection(roomId, false).catch(() => {});
-
-          AsyncStorage.multiRemove([
-            "currentBattleId",
-            "battleState",
-            "battleResults",
-            "lastBattleScore",
-            "battleProgress",
-            "roomData",
-            "battleQuestions",
-          ]).catch(() => {});
-
-          // Delayed battle manager reset to prevent loops
-          setTimeout(() => {
-            if (!unmounted.current) {
-              battleManager.resetUserBattleState().catch(() => {});
-            }
-          }, 1000);
-        }
       } catch (error) {
-        console.error("Cleanup error:", error);
+        console.error("Error loading user data:", error);
       }
     };
-
-    // Non-blocking cleanup
-    setTimeout(performCleanup, 100);
-  }, []); // Empty deps - runs once only
-
-  // 4️⃣ DETACH LISTENERS ON UNMOUNT
-  useEffect(() => {
-    return () => {
-      console.log("BattleResultsScreen unmounting");
-      unmounted.current = true;
-
-      // Detach Firebase listeners
-      if (battleData.roomId) {
-        off(ref(database, `rooms/${battleData.roomId}`));
-      }
-
-      // Stop sound
-      if (soundPlayed.current) {
-        SoundManager.stopSound("victorySoundEffect").catch(() => {});
-      }
-    };
+    loadUserData();
   }, []);
 
-  // Navigation handlers
-  const handleHomeNavigation = useCallback(() => {
-    console.log("Navigating to home...");
-    router.replace("/user/home");
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      if (
+        battleData.isValid &&
+        battleData.userRank === 1 &&
+        !soundPlayed.current
+      ) {
+        soundPlayed.current = true;
+        SoundManager.playSound("victorySoundEffect").catch(() => {});
+      }
 
-  // Back button handler
+      return () => {
+        if (soundPlayed.current) {
+          SoundManager.stopSound("victorySoundEffect").catch(() => {});
+        }
+      };
+    }, [battleData.isValid, battleData.userRank])
+  );
+
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        handleHomeNavigation();
+        if (!navigationInProgress.current) {
+          handleHomeNavigation();
+        }
         return true;
       };
+
       const backHandler = BackHandler.addEventListener(
         "hardwareBackPress",
         onBackPress
       );
       return () => backHandler.remove();
-    }, [handleHomeNavigation])
+    }, [])
   );
 
-  // Helper functions
+  const handleHomeNavigation = useCallback(async () => {
+    if (isNavigating) return;
+
+    setIsNavigating(true);
+
+    try {
+      // Perform cleanup first
+      await performCleanup();
+
+      // Small delay to ensure cleanup completes
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Navigate back to multiplayer selection
+      router.replace("/user/home");
+    } catch (error) {
+      console.warn("Navigation cleanup error:", error);
+      // Navigate anyway
+      router.replace("/user/multiplayer-mode-selection");
+    }
+  }, [performCleanup]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      performCleanup();
+    };
+  }, [performCleanup]);
+
+  // Render profile images
+  const renderProfileImages = () => {
+    if (!battleData.isValid || battleData.players.length === 0) return null;
+
+    const elements = [];
+    battleData.players.forEach((player, index) => {
+      elements.push(
+        <View key={`player-${player.userId}`} className="items-center">
+          <View className="rounded-full bg-gray-300 items-center justify-center border-2 border-primary">
+            <Image
+              source={avatarImages(player.avatar)}
+              className="w-full h-full rounded-full"
+              style={{ width: 48, height: 48 }}
+              resizeMode="cover"
+            />
+          </View>
+          <Text className="text-xs mt-1 text-center max-w-16" numberOfLines={1}>
+            {player.username}
+          </Text>
+        </View>
+      );
+
+      if (index < battleData.players.length - 1) {
+        elements.push(
+          <View key={`sword-${index}`} className="items-center justify-center">
+            <Image
+              source={require("../../assets/icons/swords.png")}
+              style={{ width: 12, height: 12 }}
+              tintColor="#F05A2A"
+            />
+          </View>
+        );
+      }
+    });
+
+    return (
+      <View className="flex-row items-center justify-center space-x-2 mb-4">
+        {elements}
+      </View>
+    );
+  };
+
   const getMotivationalQuote = () => {
     const quotes = [
       "Victory is earned through sharp minds!",
@@ -240,58 +436,71 @@ export default function BattleResultsScreen() {
       "Keep fighting, greatness awaits!",
       "Math battles build champions!",
     ];
-    const rank = battleData.userRank;
-    if (rank === 1) return quotes[0];
-    if (rank === 2) return quotes[1];
-    if (rank === 3) return quotes[2];
+    if (battleData.userRank === 1) return quotes[0];
+    if (battleData.userRank === 2) return quotes[1];
+    if (battleData.userRank === 3) return quotes[2];
+    if (battleData.userRank <= battleData.players.length / 2) return quotes[3];
     return quotes[4];
   };
 
   const getShareMessage = () => {
-    return `${shareConfig.additionalText}
-
-🏆 I ranked #${battleData.userRank} with ${
+    const shareMessage = `${shareConfig.additionalText}
+  
+  🏆 I ranked #${battleData.userRank} with ${
       battleData.userScore
     } points in a math battle!
-"${getMotivationalQuote()}"
+  "${getMotivationalQuote()}"
+  
+  🎯 Use my referral code: ${userData.username.toUpperCase()}
+  👆 Get bonus points when you sign up!
+  
+  ${shareConfig.playStoreLink}
+  
+  ${shareConfig.downloadText}
+  
+  ${shareConfig.hashtags}`;
 
-🎯 Use my referral code: ${userData.username.toUpperCase()}
-👆 Get bonus points when you sign up!
-
-${shareConfig.playStoreLink}
-
-${shareConfig.downloadText}
-
-${shareConfig.hashtags}`;
+    return shareMessage;
   };
 
-  // Share functionality
   const shareImageAndText = async () => {
     setIsSharing(true);
     try {
-      if (!viewShotRef.current) {
-        throw new Error("ViewShot ref not available");
-      }
-
+      // Capture the image from ViewShot
+      if (!viewShotRef.current) throw new Error("ViewShot ref not available");
       const uri = await viewShotRef.current.capture();
+
+      // Save image to file system
       const timestamp = Date.now();
       const newUri = `${FileSystem.documentDirectory}tezmaths_battle_result_${timestamp}.jpg`;
       await FileSystem.copyAsync({ from: uri, to: newUri });
 
-      await Share.open({
+      // Use react-native-share for proper image + text sharing
+      const shareOptions = {
         title: "Check this out!",
         message: getShareMessage(),
-        url: newUri,
+        url: newUri, // Share the captured image URI
         type: "image/jpeg",
-      });
+      };
+
+      await Share.open(shareOptions);
     } catch (error: any) {
       Alert.alert("Sharing failed", error.message || "Something went wrong.");
+      console.error("Share error:", error);
     } finally {
       setIsSharing(false);
     }
   };
 
-  // Render UI
+  if (!battleData.isValid) {
+    return (
+      <View className="flex-1 bg-white justify-center items-center">
+        <ActivityIndicator size="large" color="#FF6B35" />
+        <Text className="text-lg mt-4">Loading results...</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView
       className="bg-white"
@@ -340,26 +549,7 @@ ${shareConfig.hashtags}`;
               </Text>
             </View>
 
-            <View className="flex-row items-center justify-center space-x-2 mb-4">
-              {battleData.players.map((player, index) => (
-                <React.Fragment key={player.userId}>
-                  <ProfileImage
-                    player={player}
-                    isCurrentUser={player.userId === battleData.currentUserId}
-                  />
-                  {index < battleData.players.length - 1 && (
-                    <View className="items-center justify-center">
-                      <Image
-                        source={require("../../assets/icons/swords.png")}
-                        style={{ width: 12, height: 12 }}
-                        tintColor="#F05A2A"
-                        fadeDuration={0}
-                      />
-                    </View>
-                  )}
-                </React.Fragment>
-              ))}
-            </View>
+            {renderProfileImages()}
 
             <Text className="text-2xl text-black font-bold text-center mx-auto w-full mb-2">
               Battle Score
@@ -370,14 +560,22 @@ ${shareConfig.hashtags}`;
                 <View
                   key={player.userId}
                   className={`flex-row justify-between items-center w-full p-4 py-2 rounded-lg mb-2 bg-light-orange ${
-                    player.userId === battleData.currentUserId
+                    player.userId ===
+                    (Array.isArray(currentUserId)
+                      ? currentUserId[0]
+                      : currentUserId)
                       ? "border-2 border-primary"
                       : "border-transparent border-2"
                   }`}
                 >
                   <Text className="text-xl font-bold">
                     {index + 1}. {player.username}
-                    {player.userId === battleData.currentUserId ? " (You)" : ""}
+                    {player.userId ===
+                    (Array.isArray(currentUserId)
+                      ? currentUserId[0]
+                      : currentUserId)
+                      ? " (You)"
+                      : ""}
                   </Text>
                   <Text className="text-xl">{player.score} pts</Text>
                 </View>
@@ -399,24 +597,17 @@ ${shareConfig.hashtags}`;
 
         <View className="flex-row justify-between mt-6 w-full max-w-md">
           <TouchableOpacity
-            className="py-3 px-6 border-2 rounded-full flex-1 mr-1 border-primary bg-white"
+            className="py-3 px-6 border border-black rounded-full flex-1 mr-1"
             onPress={handleHomeNavigation}
+            disabled={navigationInProgress.current}
             activeOpacity={0.7}
-            style={{
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.1,
-              shadowRadius: 4,
-              elevation: 3,
-            }}
           >
             <View className="flex-row items-center justify-center gap-2">
-              <Text className="font-black text-2xl text-primary">Home</Text>
+              <Text className="font-black text-2xl">Home</Text>
               <Image
                 source={require("../../assets/icons/home.png")}
                 style={{ width: 20, height: 20 }}
                 tintColor="#FF6B35"
-                fadeDuration={0}
               />
             </View>
           </TouchableOpacity>
@@ -436,7 +627,6 @@ ${shareConfig.hashtags}`;
                   source={require("../../assets/icons/share.png")}
                   style={{ width: 20, height: 20 }}
                   tintColor="#FF6B35"
-                  fadeDuration={0}
                 />
               </View>
             )}
