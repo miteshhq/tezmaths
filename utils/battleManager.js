@@ -689,58 +689,37 @@ export class BattleManager {
                 return [];
             }
 
-            // Remove the leaving player
+            // Mark player as disconnected
             if (roomData.players?.[userId]) {
                 await update(createPlayerRef(roomId, userId), { connected: false });
             }
+
+            // Immediately update room lastActivity timestamp to notify listeners
+            await safeUpdate(createRoomRef(roomId), { lastActivity: serverTimestamp() });
 
             // Count remaining connected players
             const remainingPlayers = Object.values(roomData.players || {}).filter(
                 (player) => player.userId !== userId && player.connected
             );
 
-            // Check if the host is leaving
             const isHostLeaving = roomData.hostId === userId;
 
-            // End battle if only one player is left
-            if (remainingPlayers.length < 2) {
-                logOperation("leaveDuringBattle", roomId, "Ending battle due to insufficient players");
-
-                const playerArray = calculatePlayerScores(roomData.players);
-
-                // Update room to finished state
-                await update(createRoomRef(roomId), {
-                    status: "finished",
-                    results: playerArray,
-                    gameEndReason: "insufficient_players",
-                    finishedAt: serverTimestamp(),
-                    lastActivity: serverTimestamp()
-                });
-
-                return playerArray;
-            }
-
-            // If the host leaves, end the battle for everyone
-            if (isHostLeaving) {
-                logOperation("leaveDuringBattle", roomId, "Host left during battle, ending for all players");
+            // End battle if insufficient players
+            if (remainingPlayers.length < 2 || isHostLeaving) {
+                logOperation("leaveDuringBattle", roomId, "Ending battle due to player leave");
 
                 const playerArray = calculatePlayerScores(roomData.players);
 
                 await update(createRoomRef(roomId), {
                     status: "finished",
                     results: playerArray,
-                    gameEndReason: "host_left",
+                    gameEndReason: isHostLeaving ? "host_left" : "insufficient_players",
                     finishedAt: serverTimestamp(),
                     lastActivity: serverTimestamp()
                 });
 
                 return playerArray;
             }
-
-            // Update activity timestamp if the battle continues
-            await safeUpdate(createRoomRef(roomId), {
-                lastActivity: serverTimestamp()
-            });
 
             return [];
         } catch (error) {
@@ -748,6 +727,7 @@ export class BattleManager {
             return [];
         }
     }
+
 
     async findRandomMatch(maxPlayers = 2) {
         try {

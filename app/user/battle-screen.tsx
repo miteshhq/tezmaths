@@ -476,6 +476,24 @@ export default function BattleScreen() {
       (snapshot) => {
         const data = snapshot.val();
 
+        if (data) {
+          // Check if current player is connected OR exists in room
+          if (!data.players?.[userId]?.connected) {
+            if (!navigationInProgress.current && !isLeaving) {
+              navigationInProgress.current = true;
+              setIsLeaving(true);
+
+              console.log(
+                "You were disconnected/removed from the battle, exiting..."
+              );
+              clearBattleState().finally(() => {
+                router.replace("/user/multiplayer-mode-selection");
+              });
+              return;
+            }
+          }
+        }
+
         if (!data) {
           // FIXED: Single navigation with proper cleanup
           if (!navigationInProgress.current && !isLeaving) {

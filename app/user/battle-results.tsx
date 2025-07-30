@@ -146,12 +146,19 @@ export default function BattleResultsScreen() {
 
       // CRITICAL: Reset all battle manager state
       await battleManager.resetUserBattleState();
+      navigationInProgress.current = false;
 
       console.log("Battle results cleanup completed");
     } catch (error) {
       console.error("Battle results cleanup error:", error);
     }
   }, [roomId]);
+
+  useEffect(() => {
+    navigationInProgress.current = false;
+    soundPlayed.current = false;
+    cleanupExecuted.current = false;
+  }, []);
 
   useEffect(() => {
     const validateBattleData = () => {
@@ -359,30 +366,29 @@ export default function BattleResultsScreen() {
   );
 
   const handleHomeNavigation = useCallback(async () => {
-    if (isNavigating) return;
+    if (isNavigating || navigationInProgress.current) return;
 
     setIsNavigating(true);
+    navigationInProgress.current = true;
 
     try {
-      // Perform cleanup first
       await performCleanup();
-
-      // Small delay to ensure cleanup completes
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // Navigate back to multiplayer selection
       router.replace("/user/home");
     } catch (error) {
       console.warn("Navigation cleanup error:", error);
-      // Navigate anyway
-      router.replace("/user/multiplayer-mode-selection");
+      router.replace("/user/home");
+    } finally {
+      navigationInProgress.current = false;
+      setIsNavigating(false);
     }
   }, [performCleanup]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       performCleanup();
+      navigationInProgress.current = false;
     };
   }, [performCleanup]);
 
