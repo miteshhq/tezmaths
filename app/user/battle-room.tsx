@@ -40,13 +40,7 @@ export default function BattleRoom() {
   const router = useRouter();
   const { roomId, isHost } = useLocalSearchParams();
 
-  useEffect(() => {
-    if (!roomId) {
-      Alert.alert("Error", "Room not found.");
-      router.replace("/user/home");
-    }
-  }, [roomId]);
-
+  // CRITICAL FIX: Proper state management
   const [room, setRoom] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -54,17 +48,36 @@ export default function BattleRoom() {
   const [isMounted, setIsMounted] = useState(false);
   const [battleStarting, setBattleStarting] = useState(false);
   const [opponentFound, setOpponentFound] = useState(false);
-  const startTriggered = useRef(false);
   const [battleStartAttempted, setBattleStartAttempted] = useState(false);
 
   const userId = auth.currentUser?.uid;
   const timeoutRef = useRef(null);
   const battleStartTimeoutRef = useRef(null);
   const cleanupRef = useRef(false);
+  const startTriggered = useRef(false);
+  const componentMounted = useRef(true);
+  const navigationInProgress = useRef(false);
 
-  // Simplified cleanup function
+  useEffect(() => {
+    if (!roomId) {
+      Alert.alert("Error", "Room not found.");
+      router.replace("/user/home");
+    }
+  }, [roomId]);
+
+  // CRITICAL FIX: Component initialization
+  useEffect(() => {
+    componentMounted.current = true;
+    navigationInProgress.current = false;
+
+    return () => {
+      componentMounted.current = false;
+    };
+  }, []);
+
+  // CRITICAL FIX: Comprehensive cleanup function
   const performCleanup = useCallback(async () => {
-    if (cleanupRef.current) return;
+    if (cleanupRef.current || !componentMounted.current) return;
     cleanupRef.current = true;
 
     console.log("Battle room cleanup starting");
@@ -81,8 +94,12 @@ export default function BattleRoom() {
       }
 
       // Update connection status
-      if (roomId) {
-        await battleManager.updatePlayerConnection(roomId, false);
+      if (roomId && typeof roomId === "string") {
+        try {
+          await battleManager.updatePlayerConnection(roomId, false);
+        } catch (error) {
+          console.warn("Error updating connection:", error);
+        }
       }
 
       // Reset states
@@ -90,10 +107,12 @@ export default function BattleRoom() {
       setBattleStartAttempted(false);
       setMatchmakingTimeout(false);
       setOpponentFound(false);
+
+      console.log("Battle room cleanup completed");
     } catch (error) {
       console.error("Cleanup error:", error);
     } finally {
-      // Reset cleanup flag after a delay
+      // Reset cleanup flag after delay
       setTimeout(() => {
         cleanupRef.current = false;
       }, 1000);
@@ -102,7 +121,7 @@ export default function BattleRoom() {
 
   useBattleStartListener(roomId as string, isHost === "true");
 
-  // Reset state & listeners on focus
+  // Reset state on focus
   useFocusEffect(
     useCallback(() => {
       setOpponentFound(false);
@@ -154,7 +173,7 @@ export default function BattleRoom() {
           "Room Not Available",
           "This room has been deleted or expired."
         );
-        router.replace("/user/multiplayer-mode-selection");
+        router.replace("/user/home");
       }
     };
 
@@ -172,7 +191,7 @@ export default function BattleRoom() {
   // Connect to room
   useEffect(() => {
     const connectToRoom = async () => {
-      if (roomId) {
+      if (roomId && typeof roomId === "string") {
         await battleManager.updatePlayerConnection(roomId, true);
       }
     };
@@ -180,7 +199,7 @@ export default function BattleRoom() {
     connectToRoom();
 
     return () => {
-      if (roomId) {
+      if (roomId && typeof roomId === "string") {
         battleManager.updatePlayerConnection(roomId, false);
       }
     };
@@ -196,10 +215,9 @@ export default function BattleRoom() {
       const connectedCnt = Object.values(room.players || {}).filter(
         (p) => p.connected
       ).length;
-      const isHost = room.hostId === userId;
+      const isHostUser = room.hostId === userId;
 
-      // Only trigger once when two connected and I'm host
-      if (connectedCnt === 2 && isHost) {
+      if (connectedCnt === 2 && isHostUser) {
         startTriggered.current = true;
         setOpponentFound(true);
         setBattleStarting(true);
@@ -225,7 +243,7 @@ export default function BattleRoom() {
           Alert.alert("Room Expired", "This battle room no longer exists", [
             {
               text: "OK",
-              onPress: () => router.replace("/user/multiplayer-mode-selection"),
+              onPress: () => router.replace("/user/home"),
             },
           ]);
           return;
@@ -234,8 +252,10 @@ export default function BattleRoom() {
         const unsubscribe = battleManager.listenToRoom(
           roomId,
           async (roomData) => {
-            setRoom(roomData);
-            setLoading(false);
+            if (componentMounted.current) {
+              setRoom(roomData);
+              setLoading(false);
+            }
           }
         );
 
@@ -257,22 +277,31 @@ export default function BattleRoom() {
     validateAndListen();
   }, [roomId, isMounted]);
 
-  // Listen for battle start
+  // CRITICAL FIX: Enhanced battle start listener
   useEffect(() => {
-    if (!roomId) return;
+    if (!roomId || !componentMounted.current) return;
 
     const roomRef = ref(database, `rooms/${roomId}`);
 
     const handleSnapshot = (snapshot) => {
+      if (!componentMounted.current) return;
+
       const roomData = snapshot.val();
       if (!roomData) return;
 
       // Navigate when battle starts
-      if (roomData.status === "playing") {
+      if (roomData.status === "playing" && !navigationInProgress.current) {
+        navigationInProgress.current = true;
         console.log("Room status changed to playing - navigating");
-        router.replace({
-          pathname: "/user/battle-screen",
-          params: { roomId, isHost },
+
+        // Cleanup before navigation
+        performCleanup().then(() => {
+          if (componentMounted.current) {
+            router.replace({
+              pathname: "/user/battle-screen",
+              params: { roomId, isHost },
+            });
+          }
         });
       }
     };
@@ -286,7 +315,7 @@ export default function BattleRoom() {
         console.warn("Error unsubscribing:", error);
       }
     };
-  }, [roomId, isHost]);
+  }, [roomId, isHost, performCleanup]);
 
   const handleStartBattle = async () => {
     if (battleStarting) return;
@@ -303,7 +332,6 @@ export default function BattleRoom() {
     }
   };
 
-  // FIXED: Ready/Unready button functionality
   const toggleReady = async () => {
     try {
       await battleManager.toggleReady(roomId);
@@ -313,15 +341,23 @@ export default function BattleRoom() {
     }
   };
 
+  // CRITICAL FIX: Enhanced leave room with proper cleanup
   const handleLeaveRoom = async () => {
+    if (navigationInProgress.current) return;
+
     try {
+      navigationInProgress.current = true;
       await performCleanup();
       await battleManager.leaveRoom(roomId);
-      router.replace("/user/multiplayer-mode-selection");
+
+      if (componentMounted.current) {
+        router.replace("/user/home");
+      }
     } catch (error) {
       console.error("Leave room error:", error);
-      Alert.alert("Error", "Failed to leave room.");
-      router.replace("/user/multiplayer-mode-selection");
+      if (componentMounted.current) {
+        router.replace("/user/home");
+      }
     }
   };
 
@@ -329,9 +365,7 @@ export default function BattleRoom() {
     return (
       <View className="flex-1 justify-center items-center">
         <Text className="text-red-500 text-xl">{error.message}</Text>
-        <TouchableOpacity
-          onPress={() => router.replace("/user/multiplayer-mode-selection")}
-        >
+        <TouchableOpacity onPress={() => router.replace("/user/home")}>
           <Text className="text-blue-500 mt-4">Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -351,9 +385,7 @@ export default function BattleRoom() {
     return (
       <View className="flex-1 justify-center items-center">
         <Text>Room not found</Text>
-        <TouchableOpacity
-          onPress={() => router.replace("/user/multiplayer-mode-selection")}
-        >
+        <TouchableOpacity onPress={() => router.replace("/user/home")}>
           <Text className="text-blue-500 mt-4">Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -376,7 +408,7 @@ export default function BattleRoom() {
             className="bg-red-500 px-6 py-3 rounded-lg"
             onPress={() => {
               performCleanup();
-              router.replace("/user/multiplayer-mode-selection");
+              router.replace("/user/home");
             }}
           >
             <Text className="text-white font-bold">Try Again</Text>
@@ -421,7 +453,7 @@ export default function BattleRoom() {
           </Text>
           <TouchableOpacity
             className="mt-6 bg-gray-200 px-4 py-2 rounded-lg"
-            onPress={() => router.replace("/user/multiplayer-mode-selection")}
+            onPress={() => router.replace("/user/home")}
           >
             <Text className="text-gray-700 font-bold">Cancel Search</Text>
           </TouchableOpacity>
