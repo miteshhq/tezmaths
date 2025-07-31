@@ -1,66 +1,73 @@
-import { useEffect, useRef } from "react";
-import { useRouter } from "expo-router";
-import { ref, onValue, off } from "firebase/database";
-import { database } from "../firebase/firebaseConfig";
+import { useEffect, useRef } from 'react';
+import { useRouter } from 'expo-router';
+import { battleManager } from './battleManager';
 
-const useBattleStartListener = (roomId: string, isHost: boolean) => {
+const useBattleStartListener = (roomId, isHost) => {
   const router = useRouter();
   const listenerRef = useRef(null);
-  const navigationInProgress = useRef(false);
+  const navigationAttempted = useRef(false);
 
   useEffect(() => {
     if (!roomId) return;
 
-    // CRITICAL FIX: Enhanced battle start listener
-    const roomRef = ref(database, `rooms/${roomId}`);
-    
-    const handleSnapshot = (snapshot) => {
-      const roomData = snapshot.val();
-      
-      if (!roomData) {
-        console.log("Room data not found, navigating to home");
-        if (!navigationInProgress.current) {
-          navigationInProgress.current = true;
-          router.replace("/user/home");
-        }
-        return;
-      }
+    console.log(`[useBattleStartListener] Setting up listener for room: ${roomId}, isHost: ${isHost}`);
 
-      // Navigate when battle starts
-      if (roomData.status === "playing" && !navigationInProgress.current) {
-        navigationInProgress.current = true;
-        console.log("Battle started, navigating to battle screen");
+    const cleanup = () => {
+      if (listenerRef.current) {
+        listenerRef.current();
+        listenerRef.current = null;
+      }
+      navigationAttempted.current = false;
+    };
+
+    const handleRoomUpdate = (roomData) => {
+      if (!roomData) return;
+
+      console.log(`[useBattleStartListener] Room update - Status: ${roomData.status}, Questions: ${roomData.questions?.length || 0}`);
+
+      // ENHANCED: Navigate to battle screen when status changes to "playing" and we have questions
+      if (
+        roomData.status === "playing" && 
+        roomData.questions && 
+        roomData.questions.length > 0 && 
+        !navigationAttempted.current
+      ) {
+        navigationAttempted.current = true;
         
+        console.log(`[useBattleStartListener] Navigating to battle screen for room: ${roomId}`);
+        
+        // Navigate immediately for better responsiveness
         router.replace({
           pathname: "/user/battle-screen",
-          params: { 
-            roomId,
-            isHost: isHost.toString()
+          params: {
+            roomId: roomId,
+            isHost: isHost ? "true" : "false",
           },
         });
       }
-    };
 
-    const handleError = (error) => {
-      console.error("Battle start listener error:", error);
-      if (!navigationInProgress.current) {
-        navigationInProgress.current = true;
-        router.replace("/user/home");
+      // Handle battle end - navigate back to multiplayer selection
+      if (roomData.status === "finished") {
+        console.log(`[useBattleStartListener] Battle finished, cleaning up`);
+        cleanup();
       }
     };
 
-    listenerRef.current = onValue(roomRef, handleSnapshot, handleError);
+    // Set up room listener
+    listenerRef.current = battleManager.listenToRoom(roomId, handleRoomUpdate);
 
-    return () => {
-      if (listenerRef.current) {
-        off(roomRef, "value", listenerRef.current);
-        listenerRef.current = null;
-      }
-      navigationInProgress.current = false;
-    };
+    return cleanup;
   }, [roomId, isHost, router]);
 
-  return null;
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (listenerRef.current) {
+        listenerRef.current();
+        listenerRef.current = null;
+      }
+    };
+  }, []);
 };
 
 export default useBattleStartListener;

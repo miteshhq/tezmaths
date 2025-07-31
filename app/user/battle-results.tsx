@@ -97,10 +97,9 @@ export default function BattleResultsScreen() {
   const { roomId, players, totalQuestions, currentUserId } = params;
 
   const viewShotRef = useRef<ViewShot>(null);
-  const navigationInProgress = useRef(false);
   const cleanupExecuted = useRef(false);
+  const navigationInProgress = useRef(false);
   const soundPlayed = useRef(false);
-  const componentMounted = useRef(true);
 
   // State management
   const [isSharing, setIsSharing] = useState(false);
@@ -115,87 +114,72 @@ export default function BattleResultsScreen() {
     userScore: 0,
     isValid: false,
   });
+  // NEW: Local results data storage (disconnected from Firebase)
   const [localResultsData, setLocalResultsData] =
     useState<LocalResultsData | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [isNavigating, setIsNavigating] = useState(false);
 
-  // CRITICAL FIX: Comprehensive cleanup with proper Firebase disconnection
-  const performFinalCleanup = useCallback(async () => {
-    if (cleanupExecuted.current || !componentMounted.current) return;
-    cleanupExecuted.current = true;
-
-    console.log("Battle results final cleanup starting");
+  // Simplified cleanup - only handles room cleanup if host
+  const performCleanup = useCallback(async () => {
+    console.log("Battle results cleanup starting");
 
     try {
-      // Stop all sounds first
-      try {
-        await SoundManager.stopSound("victorySoundEffect");
-      } catch (error) {
-        console.warn("Error stopping sound:", error);
-      }
+      const user = auth.currentUser;
+      const userId = user?.uid;
 
-      // Complete battle manager cleanup
-      await battleManager.resetUserBattleState();
+      if (roomId && userId) {
+        // Update player connection status
+        await battleManager.updatePlayerConnection(roomId, false);
 
-      // Remove any remaining Firebase listeners
-      if (roomId && typeof roomId === "string") {
-        battleManager.removeRoomListener(roomId);
+        // Check if we should clean up the room
+        const roomRef = ref(database, `rooms/${roomId}`);
+        const snapshot = await get(roomRef);
 
-        // Update connection status to false
-        try {
-          await battleManager.updatePlayerConnection(roomId, false);
-        } catch (error) {
-          console.warn("Error updating connection:", error);
+        if (snapshot.exists()) {
+          const roomData = snapshot.val();
+
+          // If we're the host and room is finished, clean it up
+          if (roomData.hostId === userId && roomData.status === "finished") {
+            const playersStillConnected = Object.values(
+              roomData.players || {}
+            ).some((player: any) => player.connected);
+
+            if (!playersStillConnected) {
+              await remove(roomRef);
+              console.log("Room cleaned up by host");
+            }
+          }
         }
       }
 
-      // Clear battle-related AsyncStorage
-      try {
-        await AsyncStorage.multiRemove([
-          "currentBattleId",
-          "battleState",
-          "battleInProgress",
-          "lastBattleRoom",
-        ]);
-      } catch (error) {
-        console.warn("Error clearing storage:", error);
-      }
-
-      console.log("Battle results final cleanup completed");
+      navigationInProgress.current = false;
+      console.log("Battle results cleanup completed");
     } catch (error) {
-      console.error("Final cleanup error:", error);
+      console.error("Battle results cleanup error:", error);
     }
   }, [roomId]);
 
-  // FIXED: Initialize component properly
   useEffect(() => {
-    componentMounted.current = true;
     navigationInProgress.current = false;
     soundPlayed.current = false;
     cleanupExecuted.current = false;
-
-    return () => {
-      componentMounted.current = false;
-    };
   }, []);
 
-  // Validate battle data and store locally
+  // UPDATED: Validate battle data and store locally (disconnected from Firebase)
   useEffect(() => {
     const validateBattleData = () => {
       try {
+        // Check required parameters
         if (!roomId || !players || !currentUserId) {
           setErrorMessage("Battle data incomplete. Returning to menu...");
           setTimeout(() => {
-            if (componentMounted.current) {
-              performFinalCleanup().then(() => {
-                router.replace("/user/home");
-              });
-            }
+            router.replace("/user/multiplayer-mode-selection");
           }, 1000);
           return;
         }
 
+        // Parse players data with better error handling
         let parsedPlayers: any[] = [];
         try {
           const playersData = JSON.parse(
@@ -264,8 +248,10 @@ export default function BattleResultsScreen() {
           })
         );
 
+        // Sort players by score (highest first)
         processedPlayers.sort((a, b) => b.score - a.score);
 
+        // Find current user's rank and score
         let userIndex = processedPlayers.findIndex(
           (p) =>
             p.userId ===
@@ -298,6 +284,7 @@ export default function BattleResultsScreen() {
               : totalQuestions || "0"
           ) || 0;
 
+        // NEW: Store results data locally (disconnected from Firebase)
         const resultsData: LocalResultsData = {
           players: processedPlayers,
           totalQuestions: totalQuestionsCount,
@@ -307,7 +294,10 @@ export default function BattleResultsScreen() {
           timestamp: Date.now(),
         };
 
+        // Store in component state (disconnected from Firebase)
         setLocalResultsData(resultsData);
+
+        // Also store in AsyncStorage as backup
         AsyncStorage.setItem("battleResults", JSON.stringify(resultsData));
 
         setBattleData({
@@ -347,7 +337,45 @@ export default function BattleResultsScreen() {
     };
 
     validateBattleData();
-  }, [roomId, players, currentUserId, totalQuestions, performFinalCleanup]);
+  }, [roomId, players, currentUserId, totalQuestions]);
+
+  // REPLACE the background cleanup useEffect with this:
+  useEffect(() => {
+    if (localResultsData) {
+      // Set a longer delay to allow all players to view results
+      const delayedCleanup = setTimeout(async () => {
+        try {
+          // Only do minimal cleanup that doesn't affect other players
+          await battleManager.updatePlayerConnection(roomId, false);
+          console.log("Silent connection update completed");
+        } catch (error) {
+          console.error("Silent cleanup failed:", error);
+        }
+      }, 30000); // 30 seconds - gives all players time to view results
+
+      return () => clearTimeout(delayedCleanup);
+    }
+  }, [localResultsData, roomId]);
+
+  // NEW: Add cleanup queue that triggers when user actually leaves
+  const [shouldTriggerFullCleanup, setShouldTriggerFullCleanup] =
+    useState(false);
+
+  useEffect(() => {
+    if (shouldTriggerFullCleanup) {
+      const fullCleanup = async () => {
+        try {
+          await performCleanup();
+          await battleManager.leaveRoom(roomId);
+          await battleManager.resetUserBattleState();
+          console.log("Full cleanup completed");
+        } catch (error) {
+          console.error("Full cleanup failed:", error);
+        }
+      };
+      fullCleanup();
+    }
+  }, [shouldTriggerFullCleanup, performCleanup, roomId]);
 
   // Load user data
   useEffect(() => {
@@ -365,14 +393,12 @@ export default function BattleResultsScreen() {
     loadUserData();
   }, []);
 
-  // Victory sound effect
   useFocusEffect(
     useCallback(() => {
       if (
         battleData.isValid &&
         battleData.userRank === 1 &&
-        !soundPlayed.current &&
-        componentMounted.current
+        !soundPlayed.current
       ) {
         soundPlayed.current = true;
         SoundManager.playSound("victorySoundEffect").catch(() => {});
@@ -386,11 +412,10 @@ export default function BattleResultsScreen() {
     }, [battleData.isValid, battleData.userRank])
   );
 
-  // CRITICAL FIX: Proper back handler with cleanup
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        if (!navigationInProgress.current && componentMounted.current) {
+        if (!navigationInProgress.current) {
           handleHomeNavigation();
         }
         return true;
@@ -400,62 +425,30 @@ export default function BattleResultsScreen() {
         "hardwareBackPress",
         onBackPress
       );
-
-      return () => {
-        backHandler.remove();
-      };
+      return () => backHandler.remove();
     }, [])
   );
 
-  // CRITICAL FIX: Single, clean navigation with complete cleanup
   const handleHomeNavigation = useCallback(async () => {
-    if (
-      isNavigating ||
-      navigationInProgress.current ||
-      !componentMounted.current
-    ) {
-      console.log("Navigation already in progress or component unmounted");
-      return;
-    }
+    if (isNavigating || navigationInProgress.current) return;
 
-    console.log("Starting home navigation with cleanup");
     setIsNavigating(true);
     navigationInProgress.current = true;
 
     try {
-      // Complete cleanup first
-      await performFinalCleanup();
+      // Trigger full cleanup (but don't wait for it)
+      setShouldTriggerFullCleanup(true);
 
-      // Small delay to ensure cleanup completion
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // Single navigation call
-      if (componentMounted.current) {
-        router.replace("/user/home");
-      }
+      // Navigate immediately while cleanup runs in background
+      router.replace("/user/home");
     } catch (error) {
-      console.error("Navigation error:", error);
-      // Fallback navigation
-      if (componentMounted.current) {
-        router.replace("/user/home");
-      }
+      console.warn("Navigation error:", error);
+      router.replace("/user/home");
     } finally {
-      if (componentMounted.current) {
-        setIsNavigating(false);
-      }
       navigationInProgress.current = false;
+      setIsNavigating(false);
     }
-  }, [isNavigating, performFinalCleanup]);
-
-  // Component cleanup on unmount
-  useEffect(() => {
-    return () => {
-      componentMounted.current = false;
-      if (!cleanupExecuted.current) {
-        performFinalCleanup().catch(console.error);
-      }
-    };
-  }, [performFinalCleanup]);
+  }, []);
 
   // Render profile images
   const renderProfileImages = () => {
@@ -537,17 +530,20 @@ export default function BattleResultsScreen() {
   const shareImageAndText = async () => {
     setIsSharing(true);
     try {
+      // Capture the image from ViewShot
       if (!viewShotRef.current) throw new Error("ViewShot ref not available");
       const uri = await viewShotRef.current.capture();
 
+      // Save image to file system
       const timestamp = Date.now();
       const newUri = `${FileSystem.documentDirectory}tezmaths_battle_result_${timestamp}.jpg`;
       await FileSystem.copyAsync({ from: uri, to: newUri });
 
+      // Use react-native-share for proper image + text sharing
       const shareOptions = {
         title: "Check this out!",
         message: getShareMessage(),
-        url: newUri,
+        url: newUri, // Share the captured image URI
         type: "image/jpeg",
       };
 
@@ -667,7 +663,7 @@ export default function BattleResultsScreen() {
           <TouchableOpacity
             className="py-3 px-6 border border-black rounded-full flex-1 mr-1"
             onPress={handleHomeNavigation}
-            disabled={isNavigating || navigationInProgress.current}
+            disabled={navigationInProgress.current}
             activeOpacity={0.7}
           >
             <View className="flex-row items-center justify-center gap-2">
