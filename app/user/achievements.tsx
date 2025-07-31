@@ -127,7 +127,7 @@ export default function Achievements() {
           </Text>
           <View className="flex-row justify-between">
             <View className="items-center">
-              <Text className="text-sm text-gray-500">Completed Levels</Text>
+              <Text className="text-sm text-gray-500">Level</Text>
               <Text className="text-xl font-bold text-primary">
                 {/* FIX: Use completedLevelsCount calculation */}
                 {userData?.completedLevels

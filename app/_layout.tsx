@@ -2,8 +2,9 @@
 import React, { useState, useEffect } from "react";
 import { Slot } from "expo-router";
 import * as Font from "expo-font";
-import { ActivityIndicator, View, Text } from "react-native";
+import { View, Text } from "react-native";
 import "./globals.css";
+import { Image } from "react-native";
 
 export default function RootLayout() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
@@ -33,13 +34,21 @@ export default function RootLayout() {
     return (
       <View className="flex-1 bg-white justify-center items-center px-4">
         {/* Enhanced Loading Card matching your home screen design */}
-        <View className="bg-white rounded-2xl border border-black overflow-hidden w-full max-w-sm">
-          <View className="w-full h-8 bg-orange-500"></View>
+        <View className="bg-white w-full max-w-sm">
           <View className="p-6 flex flex-col items-center gap-5">
             {/* Quote Section */}
-            <View className="flex flex-col items-center gap-3">
-              <Text className="text-xl text-stone-900 font-black text-center mb-4">
-                Best for Bank, SSC, Railway & All Competitive Exams
+            <View className="relative">
+              <Image
+                source={require("../assets/icons/lamp.png")}
+                style={{ width: 80, height: 80 }}
+              />
+            </View>
+            <View className="flex flex-col items-center">
+              <Text className="text-2xl font-black text-center text-primary leading-8">
+                Best for Bank, SSC, Railway &
+              </Text>
+              <Text className="text-2xl font-black text-center text-stone-900 leading-8">
+                All Competitive Exams
               </Text>
             </View>
           </View>

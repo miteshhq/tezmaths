@@ -593,22 +593,24 @@ export default function HomeScreen() {
       return (
         <View className="flex-1 bg-white justify-center items-center px-4">
           {/* Enhanced Loading Card with Quote */}
-          <View className="bg-white rounded-2xl border border-black overflow-hidden w-full max-w-sm">
-            <View className="w-full h-8 bg-primary"></View>
+          <View className="bg-white w-full max-w-sm">
             <View className="p-6 flex flex-col items-center gap-5">
               <View className="relative">
-                <ActivityIndicator size="large" color="#FF6B35" />
+                <Image
+                  source={require("../../assets/icons/lamp.png")}
+                  style={{ width: 80, height: 80 }}
+                />
               </View>
               <View className="flex flex-col items-center gap-3">
-                <Text className="text-xl italic font-bold text-center text-stone-900 leading-6">
+                <Text className="text-2xl font-bold text-center text-stone-900 leading-8">
                   "{currentQuote}"
                 </Text>
               </View>
-              <View className="flex flex-col items-center gap-2">
+              {/* <View className="flex flex-col items-center gap-2">
                 <Text className="text-primary font-bold text-lg">
                   Preparing your math adventure...
                 </Text>
-              </View>
+              </View> */}
             </View>
           </View>
         </View>

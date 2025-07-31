@@ -408,7 +408,7 @@ export default function MultiplayerModeSelection() {
           <View className="flex-row justify-between items-center">
             <TouchableOpacity onPress={goBack}>
               <Image
-                source={require("../../assets/icons/back.png")}
+                source={require("../../assets/icons/quitquiz.png")}
                 style={{ width: 24, height: 24 }}
                 tintColor="white"
               />
@@ -427,11 +427,6 @@ export default function MultiplayerModeSelection() {
         {/* Random Match Section */}
         <View className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl p-6 mb-4 shadow-lg">
           <View className="flex-row items-center mb-4">
-            <Image
-              source={require("../../assets/icons/random.png")}
-              style={{ width: 32, height: 32 }}
-              tintColor="white"
-            />
             <Text className="text-white text-xl font-bold ml-3">
               Random Match
             </Text>
@@ -470,11 +465,6 @@ export default function MultiplayerModeSelection() {
         {/* Quiz Code Section */}
         <View className="bg-gradient-to-r from-blue-500 to-cyan-500 rounded-2xl p-6 mb-4 shadow-lg">
           <View className="flex-row items-center mb-4">
-            <Image
-              source={require("../../assets/icons/code.png")}
-              style={{ width: 32, height: 32 }}
-              tintColor="white"
-            />
             <Text className="text-white text-xl font-bold ml-3">
               Join with Code
             </Text>
@@ -548,11 +538,7 @@ export default function MultiplayerModeSelection() {
         {/* Create Room Section */}
         <View className="bg-gradient-to-r from-green-500 to-emerald-500 rounded-2xl p-6 shadow-lg">
           <View className="flex-row items-center mb-4">
-            <Image
-              source={require("../../assets/icons/create.png")}
-              style={{ width: 32, height: 32 }}
-              tintColor="white"
-            />
+          
             <Text className="text-white text-xl font-bold ml-3">
               Create Room
             </Text>
