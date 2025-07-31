@@ -339,27 +339,43 @@ export default function BattleResultsScreen() {
     validateBattleData();
   }, [roomId, players, currentUserId, totalQuestions]);
 
-  // NEW: Background Firebase cleanup (completely detached from UI)
+  // REPLACE the background cleanup useEffect with this:
   useEffect(() => {
     if (localResultsData) {
-      // Firebase cleanup happens independently, doesn't affect UI
-      const backgroundCleanup = async () => {
+      // Set a longer delay to allow all players to view results
+      const delayedCleanup = setTimeout(async () => {
         try {
-          await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait 5 seconds
+          // Only do minimal cleanup that doesn't affect other players
+          await battleManager.updatePlayerConnection(roomId, false);
+          console.log("Silent connection update completed");
+        } catch (error) {
+          console.error("Silent cleanup failed:", error);
+        }
+      }, 30000); // 30 seconds - gives all players time to view results
+
+      return () => clearTimeout(delayedCleanup);
+    }
+  }, [localResultsData, roomId]);
+
+  // NEW: Add cleanup queue that triggers when user actually leaves
+  const [shouldTriggerFullCleanup, setShouldTriggerFullCleanup] =
+    useState(false);
+
+  useEffect(() => {
+    if (shouldTriggerFullCleanup) {
+      const fullCleanup = async () => {
+        try {
           await performCleanup();
           await battleManager.leaveRoom(roomId);
-          console.log("Background Firebase cleanup completed");
+          await battleManager.resetUserBattleState();
+          console.log("Full cleanup completed");
         } catch (error) {
-          console.error(
-            "Background cleanup failed (doesn't affect user):",
-            error
-          );
+          console.error("Full cleanup failed:", error);
         }
       };
-
-      backgroundCleanup();
+      fullCleanup();
     }
-  }, [localResultsData, roomId, performCleanup]);
+  }, [shouldTriggerFullCleanup, performCleanup, roomId]);
 
   // Load user data
   useEffect(() => {
@@ -413,7 +429,6 @@ export default function BattleResultsScreen() {
     }, [])
   );
 
-  // UPDATED: Home navigation with only local cleanup (no Firebase operations)
   const handleHomeNavigation = useCallback(async () => {
     if (isNavigating || navigationInProgress.current) return;
 
@@ -421,10 +436,10 @@ export default function BattleResultsScreen() {
     navigationInProgress.current = true;
 
     try {
-      // ONLY local state reset - NO Firebase operations
-      await battleManager.resetUserBattleState(); // This only clears local AsyncStorage
+      // Trigger full cleanup (but don't wait for it)
+      setShouldTriggerFullCleanup(true);
 
-      // Instant navigation
+      // Navigate immediately while cleanup runs in background
       router.replace("/user/home");
     } catch (error) {
       console.warn("Navigation error:", error);
@@ -434,9 +449,6 @@ export default function BattleResultsScreen() {
       setIsNavigating(false);
     }
   }, []);
-
-  // REMOVED: The useEffect cleanup that called performCleanup on unmount
-  // This was causing cross-device interference
 
   // Render profile images
   const renderProfileImages = () => {
