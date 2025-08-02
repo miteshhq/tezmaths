@@ -15,11 +15,11 @@
             },
             "oauth_client": [
                 {
-                    "client_id": "235143806197-44ugfkl9qka0833igk37cmqdbg9k4m6q.apps.googleusercontent.com",
+                    "client_id": "235143806197-rijgreiqgn4ue4vanqvqbomgmgba0o67.apps.googleusercontent.com",
                     "client_type": 1,
                     "android_info": {
                         "package_name": "com.tezmathsteam.tezmaths",
-                        "certificate_hash": "35f6372625a4944a3bbeae54bb7fc97de2577d61"
+                        "certificate_hash": "1006c053e6ac23961e3871fad5d933148c4da53f"
                     }
                 },
                 {

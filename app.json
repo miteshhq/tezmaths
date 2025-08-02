@@ -37,7 +37,7 @@
                 "expo-splash-screen",
                 {
                     "image": "./assets/branding/splash-logo.png",
-                    "imageWidth": 250,
+                    "imageWidth": 200,
                     "resizeMode": "contain",
                     "backgroundColor": "#ffffff"
                 }
@@ -50,7 +50,7 @@
         "extra": {
             "router": {},
             "eas": {
-                "projectId": "9f26400b-95d7-47d7-a612-3a06f29576c6"
+                "projectId": "d0bb7500-b2e0-4a13-b556-4ff0cffde6d1"
             }
         }
     }
