@@ -8,12 +8,13 @@ import {
   Alert,
   ActivityIndicator,
   BackHandler,
+  AppState,
 } from "react-native";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
 import ViewShot from "react-native-view-shot";
 import { auth, database } from "../../firebase/firebaseConfig";
 import { ref, get, remove } from "firebase/database";
-import Share from "react-native-share";
+// import Share from "react-native-share";
 
 import * as FileSystem from "expo-file-system";
 import SoundManager from "../../components/soundManager";
@@ -94,6 +95,7 @@ export default function BattleResultsScreen() {
   const countdownInterval = useRef<NodeJS.Timeout | null>(null);
   const hasNavigatedAway = useRef(false);
   const isUnmounting = useRef(false);
+  const appStateRef = useRef(AppState.currentState);
 
   // State management
   const [isSharing, setIsSharing] = useState(false);
@@ -111,7 +113,7 @@ export default function BattleResultsScreen() {
   const [errorMessage, setErrorMessage] = useState("");
   const [isNavigating, setIsNavigating] = useState(false);
 
-  // STATE FOR COUNTDOWN
+  // STATE FOR COUNTDOWN - 10 seconds
   const [countdownSeconds, setCountdownSeconds] = useState(10);
   const [isCountdownActive, setIsCountdownActive] = useState(true);
 
@@ -186,6 +188,63 @@ export default function BattleResultsScreen() {
     }
   }, [performCleanup]);
 
+  // Monitor app state to pause countdown when app goes to background
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: string) => {
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === "active"
+      ) {
+        // App has come to the foreground - resume countdown if it was active
+        if (isCountdownActive && countdownSeconds > 0) {
+          // Resume countdown
+          if (countdownInterval.current) {
+            clearInterval(countdownInterval.current);
+          }
+          startCountdown();
+        }
+      } else if (nextAppState.match(/inactive|background/)) {
+        // App is going to background - pause countdown
+        if (countdownInterval.current) {
+          clearInterval(countdownInterval.current);
+          countdownInterval.current = null;
+        }
+      }
+      appStateRef.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener(
+      "change",
+      handleAppStateChange
+    );
+    return () => subscription?.remove();
+  }, [isCountdownActive, countdownSeconds]);
+
+  // Function to start countdown
+  const startCountdown = useCallback(() => {
+    if (countdownInterval.current) {
+      clearInterval(countdownInterval.current);
+    }
+
+    countdownInterval.current = setInterval(() => {
+      setCountdownSeconds((prev) => {
+        if (prev <= 1) {
+          setIsCountdownActive(false);
+          if (countdownInterval.current) {
+            clearInterval(countdownInterval.current);
+            countdownInterval.current = null;
+          }
+          // AUTO-NAVIGATE TO HOME when countdown completes
+          setTimeout(() => {
+            handleHomeNavigation();
+          }, 500);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
+
   // FIXED: Reset countdown every time component mounts/data changes
   useEffect(() => {
     // Reset navigation flags when screen loads
@@ -203,20 +262,8 @@ export default function BattleResultsScreen() {
       countdownInterval.current = null;
     }
 
-    if (battleData.isValid) {
-      countdownInterval.current = setInterval(() => {
-        setCountdownSeconds((prev) => {
-          if (prev <= 1) {
-            setIsCountdownActive(false);
-            if (countdownInterval.current) {
-              clearInterval(countdownInterval.current);
-              countdownInterval.current = null;
-            }
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+    if (battleData.isValid && !isSharing) {
+      startCountdown();
     }
 
     return () => {
@@ -225,13 +272,37 @@ export default function BattleResultsScreen() {
         countdownInterval.current = null;
       }
     };
-  }, [battleData.isValid, roomId, currentUserId]);
+  }, [battleData.isValid, roomId, currentUserId, startCountdown]);
+
+  // Pause countdown when sharing
+  useEffect(() => {
+    if (isSharing) {
+      // Pause countdown
+      if (countdownInterval.current) {
+        clearInterval(countdownInterval.current);
+        countdownInterval.current = null;
+      }
+    } else if (
+      isCountdownActive &&
+      countdownSeconds > 0 &&
+      battleData.isValid
+    ) {
+      // Resume countdown when not sharing
+      startCountdown();
+    }
+  }, [
+    isSharing,
+    isCountdownActive,
+    countdownSeconds,
+    battleData.isValid,
+    startCountdown,
+  ]);
 
   // FIXED: Focus effect that only resets timer, no cleanup on unfocus
   useFocusEffect(
     useCallback(() => {
       // Reset countdown whenever screen comes into focus
-      if (battleData.isValid && !hasNavigatedAway.current) {
+      if (battleData.isValid && !hasNavigatedAway.current && !isSharing) {
         setIsCountdownActive(true);
         setCountdownSeconds(10);
 
@@ -241,19 +312,7 @@ export default function BattleResultsScreen() {
           countdownInterval.current = null;
         }
 
-        countdownInterval.current = setInterval(() => {
-          setCountdownSeconds((prev) => {
-            if (prev <= 1) {
-              setIsCountdownActive(false);
-              if (countdownInterval.current) {
-                clearInterval(countdownInterval.current);
-                countdownInterval.current = null;
-              }
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
+        startCountdown();
       }
 
       // NO CLEANUP ON UNFOCUS - this was causing the circular navigation
@@ -263,7 +322,7 @@ export default function BattleResultsScreen() {
           countdownInterval.current = null;
         }
       };
-    }, [battleData.isValid])
+    }, [battleData.isValid, isSharing, startCountdown])
   );
 
   useEffect(() => {
@@ -462,7 +521,7 @@ export default function BattleResultsScreen() {
           // Show alert that they need to wait
           Alert.alert(
             "Please Wait",
-            `You can go home in ${countdownSeconds} seconds.`,
+            `You will be redirected to home in ${countdownSeconds} seconds.`,
             [{ text: "OK" }]
           );
           return true; // Prevent back action
@@ -488,15 +547,6 @@ export default function BattleResultsScreen() {
 
   // UPDATED: Home navigation with proper cleanup
   const handleHomeNavigation = useCallback(async () => {
-    if (isCountdownActive) {
-      Alert.alert(
-        "Please Wait",
-        `You can go home in ${countdownSeconds} seconds.`,
-        [{ text: "OK" }]
-      );
-      return;
-    }
-
     if (isNavigating || hasNavigatedAway.current) return;
 
     hasNavigatedAway.current = true;
@@ -518,7 +568,7 @@ export default function BattleResultsScreen() {
     } finally {
       setIsNavigating(false);
     }
-  }, [isCountdownActive, countdownSeconds, runSilentCleanup]);
+  }, [runSilentCleanup]);
 
   // FIXED: Only cleanup on actual unmount
   useEffect(() => {
@@ -538,7 +588,7 @@ export default function BattleResultsScreen() {
     };
   }, [runSilentCleanup]);
 
-  // Progress bar component
+  // Progress bar component with updated message
   const renderCountdownProgress = () => {
     if (!isCountdownActive) return null;
 
@@ -552,8 +602,8 @@ export default function BattleResultsScreen() {
             style={{ width: `${progress}%` }}
           />
         </View>
-        <Text className="text-center text-gray-600 text-sm">
-          You can go home in {countdownSeconds} seconds
+        <Text className="text-center text-gray-600 text-sm font-medium">
+          You will be redirected to home in {countdownSeconds} seconds
         </Text>
       </View>
     );
@@ -618,20 +668,20 @@ export default function BattleResultsScreen() {
 
   const getShareMessage = () => {
     const shareMessage = `${shareConfig.additionalText}
-  
-  🏆 I ranked #${battleData.userRank} with ${
+
+🏆 I ranked #${battleData.userRank} with ${
       battleData.userScore
     } points in a math battle!
-  "${getMotivationalQuote()}"
-  
-  🎯 Use my referral code: ${userData.username.toUpperCase()}
-  👆 Get bonus points when you sign up!
-  
-  ${shareConfig.playStoreLink}
-  
-  ${shareConfig.downloadText}
-  
-  ${shareConfig.hashtags}`;
+"${getMotivationalQuote()}"
+
+🎯 Use my referral code: ${userData.username.toUpperCase()}
+👆 Get bonus points when you sign up!
+
+${shareConfig.playStoreLink}
+
+${shareConfig.downloadText}
+
+${shareConfig.hashtags}`;
 
     return shareMessage;
   };
@@ -655,7 +705,7 @@ export default function BattleResultsScreen() {
         type: "image/jpeg",
       };
 
-      await Share.open(shareOptions);
+    //   await Share.open(shareOptions);
     } catch (error: any) {
       Alert.alert("Sharing failed", error.message || "Something went wrong.");
       console.error("Share error:", error);
@@ -770,35 +820,10 @@ export default function BattleResultsScreen() {
           </View>
         </ViewShot>
 
-        {/* BUTTONS WITH COUNTDOWN STATE */}
-        <View className="flex-row justify-between mt-6 w-full max-w-md">
+        {/* ONLY SHARE BUTTON - NO HOME BUTTON */}
+        <View className="flex-row justify-center mt-6 w-full max-w-md">
           <TouchableOpacity
-            className={`py-3 px-6 border border-black rounded-full flex-1 mr-1 ${
-              isCountdownActive ? "opacity-50" : "opacity-100"
-            }`}
-            onPress={handleHomeNavigation}
-            disabled={isCountdownActive || navigationInProgress.current}
-            activeOpacity={isCountdownActive ? 1 : 0.7}
-          >
-            {isCountdownActive && (
-              <Text className="text-xs text-gray-400 text-center mt-1">
-                Wait {countdownSeconds}s
-              </Text>
-            )}
-            {!isCountdownActive && (
-              <View className="flex-row items-center justify-center gap-2">
-                <Text className={`font-black text-2xl text-black`}>Home</Text>
-                <Image
-                  source={require("../../assets/icons/home.png")}
-                  style={{ width: 20, height: 20 }}
-                  tintColor={isCountdownActive ? "#9CA3AF" : "#FF6B35"}
-                />
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            className="py-3 px-6 border border-black rounded-full flex-1 ml-1"
+            className="py-3 px-6 border border-black rounded-full flex-1"
             onPress={shareImageAndText}
             disabled={isSharing}
             activeOpacity={0.7}
