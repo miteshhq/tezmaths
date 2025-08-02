@@ -13,7 +13,7 @@ export default function RootLayout() {
     const loadApp = async () => {
       // Minimum 2.5 seconds for quote readability
       const minLoadingDelay = new Promise((resolve) =>
-        setTimeout(resolve, 3000)
+        setTimeout(resolve, 0)
       );
 
       const fontLoadingPromise = Font.loadAsync({
