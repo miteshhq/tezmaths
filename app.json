@@ -36,8 +36,8 @@
             [
                 "expo-splash-screen",
                 {
-                    "image": "./assets/branding/tezmaths-full-logo.png",
-                    "imageWidth": 150,
+                    "image": "./assets/branding/main-logo.png",
+                    "imageWidth": 250,
                     "resizeMode": "contain",
                     "backgroundColor": "#ffffff"
                 }
