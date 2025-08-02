@@ -112,7 +112,7 @@ export default function BattleResultsScreen() {
   const [isNavigating, setIsNavigating] = useState(false);
 
   // STATE FOR COUNTDOWN
-  const [countdownSeconds, setCountdownSeconds] = useState(20);
+  const [countdownSeconds, setCountdownSeconds] = useState(10);
   const [isCountdownActive, setIsCountdownActive] = useState(true);
 
   // ENHANCED CLEANUP: Complete battle state reset
@@ -195,7 +195,7 @@ export default function BattleResultsScreen() {
 
     // Always reset countdown when component mounts or battle data changes
     setIsCountdownActive(true);
-    setCountdownSeconds(20);
+    setCountdownSeconds(10);
 
     // Clear any existing interval
     if (countdownInterval.current) {
@@ -233,7 +233,7 @@ export default function BattleResultsScreen() {
       // Reset countdown whenever screen comes into focus
       if (battleData.isValid && !hasNavigatedAway.current) {
         setIsCountdownActive(true);
-        setCountdownSeconds(20);
+        setCountdownSeconds(10);
 
         // Clear any existing interval
         if (countdownInterval.current) {
@@ -542,7 +542,7 @@ export default function BattleResultsScreen() {
   const renderCountdownProgress = () => {
     if (!isCountdownActive) return null;
 
-    const progress = ((20 - countdownSeconds) / 20) * 100;
+    const progress = ((10 - countdownSeconds) / 10) * 100;
 
     return (
       <View className="w-full mb-4 px-4">
