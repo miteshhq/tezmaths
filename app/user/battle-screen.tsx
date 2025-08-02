@@ -476,48 +476,6 @@ export default function BattleScreen() {
       (snapshot) => {
         const data = snapshot.val();
 
-        // FIRST: Check for battle completion and navigate immediately
-        if (data?.status === "finished" && data?.results) {
-          if (!navigationInProgress.current && !isLeaving) {
-            navigationInProgress.current = true;
-            setIsLeaving(true);
-
-            console.log("Battle finished, navigating to results");
-
-            clearBattleState().finally(() => {
-              router.replace({
-                pathname: "/user/battle-results",
-                params: {
-                  roomId: roomId,
-                  players: JSON.stringify(data.results),
-                  totalQuestions: data.totalQuestions?.toString() || "25",
-                  currentUserId: userId,
-                  endReason: data.gameEndReason || "game_completed",
-                },
-              });
-            });
-          }
-          return; // Stop processing further updates
-        }
-
-        if (data) {
-          // Check if current player is connected OR exists in room
-          if (!data.players?.[userId]?.connected) {
-            if (!navigationInProgress.current && !isLeaving) {
-              navigationInProgress.current = true;
-              setIsLeaving(true);
-
-              console.log(
-                "You were disconnected/removed from the battle, exiting..."
-              );
-              clearBattleState().finally(() => {
-                router.replace("/user/multiplayer-mode-selection");
-              });
-              return;
-            }
-          }
-        }
-
         if (!data) {
           // FIXED: Single navigation with proper cleanup
           if (!navigationInProgress.current && !isLeaving) {
@@ -534,6 +492,35 @@ export default function BattleScreen() {
 
         setRoomData(data);
         setNetworkError(false);
+
+        // FIXED: Handle battle end with single navigation
+        if (
+          data.status === "finished" &&
+          !isLeaving &&
+          !navigationInProgress.current
+        ) {
+          navigationInProgress.current = true;
+          setIsLeaving(true);
+
+          console.log("Battle finished, navigating to results");
+
+          // FIXED: Use data.results directly if available
+          const playerArray =
+            data.results || calculatePlayerScores(data.players || {});
+
+          clearBattleState().finally(() => {
+            router.replace({
+              pathname: "/user/battle-results",
+              params: {
+                roomId: roomId,
+                players: JSON.stringify(playerArray),
+                totalQuestions: data.totalQuestions?.toString() || "25",
+                currentUserId: userId,
+                endReason: data.gameEndReason || "game_completed",
+              },
+            });
+          });
+        }
       },
       (error) => {
         console.error("Database listener error:", error);

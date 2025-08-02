@@ -14,12 +14,12 @@ import ViewShot from "react-native-view-shot";
 import { auth, database } from "../../firebase/firebaseConfig";
 import { ref, get, remove } from "firebase/database";
 import Share from "react-native-share";
+
 import * as FileSystem from "expo-file-system";
 import SoundManager from "../../components/soundManager";
+const logo = require("../../assets/branding/tezmaths-full-logo.png");
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { battleManager } from "../../utils/battleManager";
-
-const logo = require("../../assets/branding/tezmaths-full-logo.png");
 
 interface PlayerData {
   name?: string;
@@ -83,59 +83,16 @@ const avatarImages = (avatar: number | string) => {
   }
 };
 
-// 🧹 COMPREHENSIVE cleanup keys
-const ALL_BATTLE_KEYS = [
-  "battleResults",
-  "currentBattleRoom",
-  "battleState",
-  "lastBattleResult",
-  "pendingBattle",
-  "battleInProgress",
-  "roomData",
-  "currentBattle",
-  "battleCompleted",
-  "roomId",
-  "currentRoom",
-  "joinedRoom",
-  "hostingRoom",
-  "playersData",
-  "gameState",
-  "battleSession",
-  "activeBattle",
-  "battleMode",
-  "multiplayerState",
-  "pendingNavigation",
-  "battleRoute",
-  "gameRoute",
-  "tempBattleData",
-  "cachedBattleResult",
-  "battleCache",
-  "gameCache",
-  "sessionData",
-  "battleStarting",
-  "gameStarting",
-  "newBattle",
-  "battleInitation",
-];
-
-// 🛡️ NAVIGATION BLOCKER
-let navigationBlockerActive = false;
-
 export default function BattleResultsScreen() {
   const params = useLocalSearchParams();
   const { roomId, players, totalQuestions, currentUserId } = params;
 
-  // 📌 REFS for lifecycle management
   const viewShotRef = useRef<ViewShot>(null);
   const cleanupExecuted = useRef(false);
   const navigationInProgress = useRef(false);
   const soundPlayed = useRef(false);
-  const dataValidated = useRef(false);
-  const componentMounted = useRef(true);
-  const originalRouterReplace = useRef(router.replace);
-  const originalRouterPush = useRef(router.push);
 
-  // 📊 STATE management
+  // State management
   const [isSharing, setIsSharing] = useState(false);
   const [userData, setUserData] = useState<UserData>({
     avatar: 0,
@@ -148,153 +105,102 @@ export default function BattleResultsScreen() {
     userScore: 0,
     isValid: false,
   });
+  const [errorMessage, setErrorMessage] = useState("");
   const [isNavigating, setIsNavigating] = useState(false);
 
-  // 🔒 COMPONENT LIFECYCLE & NAVIGATION CONTROL
-  useEffect(() => {
-    componentMounted.current = true;
-    cleanupExecuted.current = false;
-    navigationInProgress.current = false;
-    soundPlayed.current = false;
-    dataValidated.current = false;
-    navigationBlockerActive = true;
+  // ENHANCED CLEANUP: Complete battle state reset
+  const performCleanup = useCallback(async () => {
+    console.log("Battle results cleanup starting");
 
-    console.log("🔍 BattleResults mounted - Navigation protection active");
+    try {
+      const user = auth.currentUser;
+      const userId = user?.uid;
 
-    // 🚨 BLOCK ALL AUTOMATIC NAVIGATION
-    const blockNavigation = (...args: any[]) => {
-      console.log("🚫 BLOCKED automatic navigation attempt:", args);
-      console.trace("Navigation blocked from:");
-      return Promise.resolve();
-    };
+      if (roomId && userId) {
+        // Update player connection status
+        await battleManager.updatePlayerConnection(roomId, false);
 
-    // Override router methods to block unwanted navigation
-    router.replace = blockNavigation as any;
-    router.push = blockNavigation as any;
+        // Check if we should clean up the room
+        const roomRef = ref(database, `rooms/${roomId}`);
+        const snapshot = await get(roomRef);
 
-    // 🧹 IMMEDIATE cache cleanup
-    AsyncStorage.multiRemove(ALL_BATTLE_KEYS).catch(console.warn);
+        if (snapshot.exists()) {
+          const roomData = snapshot.val();
 
-    return () => {
-      componentMounted.current = false;
-      navigationBlockerActive = false;
+          // If we're the host and room is finished, clean it up
+          if (roomData.hostId === userId && roomData.status === "finished") {
+            const playersStillConnected = Object.values(
+              roomData.players || {}
+            ).some((player: any) => player.connected);
 
-      // Restore original router methods
-      router.replace = originalRouterReplace.current;
-      router.push = originalRouterPush.current;
-
-      console.log("🔓 Navigation protection removed");
-    };
-  }, []);
-
-  // 🔍 PARAMETER VALIDATION (without auto-redirect)
-  useEffect(() => {
-    if (dataValidated.current) return;
-    dataValidated.current = true;
-
-    const validateAndSetupData = () => {
-      try {
-        console.log("🔍 Validating battle parameters");
-        console.log("Received params:", {
-          roomId,
-          players,
-          currentUserId,
-          totalQuestions,
-        });
-
-        // Create fallback data for missing/invalid parameters
-        if (!roomId || !players || !currentUserId || !totalQuestions) {
-          console.log("⚠️ Missing parameters - using fallback data");
-          setBattleData({
-            players: [
-              {
-                userId: currentUserId || "fallback_user",
-                username: "You",
-                avatar: 0,
-                score: 0,
-              },
-            ],
-            totalQuestions: 10,
-            userRank: 1,
-            userScore: 0,
-            isValid: true,
-          });
-          return;
-        }
-
-        // Parse and validate players data
-        let parsedPlayers: any;
-        try {
-          const playersStr = Array.isArray(players) ? players : players;
-          parsedPlayers = JSON.parse(playersStr);
-        } catch (parseError) {
-          console.error("❌ JSON parsing failed:", parseError);
-          setBattleData({
-            players: [
-              {
-                userId: Array.isArray(currentUserId)
-                  ? currentUserId
-                  : currentUserId,
-                username: "You",
-                avatar: 0,
-                score: 0,
-              },
-            ],
-            totalQuestions: 10,
-            userRank: 1,
-            userScore: 0,
-            isValid: true,
-          });
-          return;
-        }
-
-        // Process players data
-        let processedPlayers: BattlePlayer[] = [];
-
-        if (Array.isArray(parsedPlayers)) {
-          processedPlayers = parsedPlayers.map(
-            (player: any, index: number) => ({
-              userId: player.userId || `player_${index}`,
-              username: player.name || player.username || "Unknown Player",
-              avatar:
-                typeof player.avatar === "number"
-                  ? player.avatar
-                  : parseInt(String(player.avatar)) || 0,
-              score:
-                typeof player.score === "number"
-                  ? player.score
-                  : parseInt(String(player.score)) || 0,
-            })
-          );
-        } else if (
-          typeof parsedPlayers === "object" &&
-          parsedPlayers !== null
-        ) {
-          processedPlayers = Object.entries(parsedPlayers).map(
-            ([userId, playerData]) => {
-              const player = playerData as PlayerData;
-              return {
-                userId,
-                username: player.name || player.username || "Unknown Player",
-                avatar:
-                  typeof player.avatar === "number"
-                    ? player.avatar
-                    : parseInt(String(player.avatar)) || 0,
-                score:
-                  typeof player.score === "number"
-                    ? player.score
-                    : parseInt(String(player.score)) || 0,
-              };
+            if (!playersStillConnected) {
+              await remove(roomRef);
+              console.log("Room cleaned up by host");
             }
-          );
+          } else {
+            // Just leave the room
+            await battleManager.leaveRoom(roomId);
+          }
+        }
+      }
+
+      // CRITICAL: Reset all battle manager state
+      await battleManager.resetUserBattleState();
+
+      console.log("Battle results cleanup completed");
+    } catch (error) {
+      console.error("Battle results cleanup error:", error);
+    }
+  }, [roomId]);
+
+  useEffect(() => {
+    const validateBattleData = () => {
+      try {
+        // Check required parameters
+        if (!roomId || !players || !currentUserId) {
+          setErrorMessage("Battle data incomplete. Returning to menu...");
+          setTimeout(() => {
+            router.replace("/user/multiplayer-mode-selection");
+          }, 1000);
+          return;
         }
 
-        if (processedPlayers.length === 0) {
-          processedPlayers = [
+        // Parse players data with better error handling
+        let parsedPlayers: any[] = [];
+        try {
+          const playersData = JSON.parse(
+            Array.isArray(players) ? players[0] : players
+          );
+
+          if (Array.isArray(playersData)) {
+            parsedPlayers = playersData;
+          } else if (typeof playersData === "object" && playersData !== null) {
+            parsedPlayers = Object.entries(playersData).map(
+              ([userId, playerData]) => {
+                const player = playerData as PlayerData;
+                return {
+                  userId: userId,
+                  username: player.name || player.username || "Unknown Player",
+                  avatar:
+                    typeof player.avatar === "number"
+                      ? player.avatar
+                      : parseInt(String(player.avatar)) || 0,
+                  score:
+                    typeof player.score === "number"
+                      ? player.score
+                      : parseInt(String(player.score)) || 0,
+                };
+              }
+            );
+          } else {
+            throw new Error("Invalid players data format");
+          }
+        } catch (parseError) {
+          console.error("Error parsing players data:", parseError);
+
+          parsedPlayers = [
             {
-              userId: Array.isArray(currentUserId)
-                ? currentUserId
-                : currentUserId,
+              userId: currentUserId,
               username: "You",
               avatar: 0,
               score: 0,
@@ -302,18 +208,46 @@ export default function BattleResultsScreen() {
           ];
         }
 
-        // Calculate rankings
+        if (!Array.isArray(parsedPlayers) || parsedPlayers.length === 0) {
+          parsedPlayers = [
+            {
+              userId: currentUserId,
+              username: "You",
+              avatar: 0,
+              score: 0,
+            },
+          ];
+        }
+
+        const processedPlayers: BattlePlayer[] = parsedPlayers.map(
+          (player: any, index: number) => ({
+            userId: player.userId || `player_${index}`,
+            username: player.name || player.username || "Unknown Player",
+            avatar:
+              typeof player.avatar === "number"
+                ? player.avatar
+                : parseInt(String(player.avatar)) || 0,
+            score:
+              typeof player.score === "number"
+                ? player.score
+                : parseInt(String(player.score)) || 0,
+          })
+        );
+
+        // Sort players by score (highest first)
         processedPlayers.sort((a, b) => b.score - a.score);
+
+        // Find current user's rank and score
         let userIndex = processedPlayers.findIndex(
           (p) =>
             p.userId ===
-            (Array.isArray(currentUserId) ? currentUserId : currentUserId)
+            (Array.isArray(currentUserId) ? currentUserId[0] : currentUserId)
         );
 
         if (userIndex === -1) {
           processedPlayers.push({
             userId: Array.isArray(currentUserId)
-              ? currentUserId
+              ? currentUserId[0]
               : currentUserId,
             username: "You",
             avatar: 0,
@@ -323,49 +257,45 @@ export default function BattleResultsScreen() {
           userIndex = processedPlayers.findIndex(
             (p) =>
               p.userId ===
-              (Array.isArray(currentUserId) ? currentUserId : currentUserId)
+              (Array.isArray(currentUserId) ? currentUserId[0] : currentUserId)
           );
         }
 
         const userRank = userIndex + 1;
         const userScore = processedPlayers[userIndex].score;
-        const totalQuestionsCount =
-          parseInt(
-            Array.isArray(totalQuestions)
-              ? totalQuestions
-              : totalQuestions || "10"
-          ) || 10;
 
-        // Set valid battle data
         setBattleData({
           players: processedPlayers,
-          totalQuestions: totalQuestionsCount,
+          totalQuestions:
+            parseInt(
+              Array.isArray(totalQuestions)
+                ? totalQuestions[0]
+                : totalQuestions || "0"
+            ) || 0,
           userRank,
           userScore,
           isValid: true,
         });
-
-        console.log("✅ Battle data validated successfully");
-
-        // Start background cleanup after delay
-        setTimeout(() => {
-          if (componentMounted.current && !cleanupExecuted.current) {
-            performBackgroundCleanup();
-          }
-        }, 3000);
       } catch (error) {
-        console.error("❌ Validation error:", error);
-        // Set fallback data even on error
+        console.error("Error validating battle data:", error);
+
         setBattleData({
           players: [
             {
-              userId: "error_user",
+              userId: Array.isArray(currentUserId)
+                ? currentUserId[0]
+                : currentUserId,
               username: "You",
               avatar: 0,
               score: 0,
             },
           ],
-          totalQuestions: 10,
+          totalQuestions:
+            parseInt(
+              Array.isArray(totalQuestions)
+                ? totalQuestions[0]
+                : totalQuestions || "0"
+            ) || 0,
           userRank: 1,
           userScore: 0,
           isValid: true,
@@ -373,82 +303,25 @@ export default function BattleResultsScreen() {
       }
     };
 
-    validateAndSetupData();
+    validateBattleData();
   }, [roomId, players, currentUserId, totalQuestions]);
 
-  // 🧹 BACKGROUND CLEANUP (non-blocking)
-  const performBackgroundCleanup = useCallback(async () => {
-    if (cleanupExecuted.current || !componentMounted.current) return;
-    cleanupExecuted.current = true;
-
-    console.log("🔄 Starting background cleanup");
-
-    try {
-      const user = auth.currentUser;
-      if (!user?.uid || !roomId) return;
-
-      // Update connection status only
-      if (typeof battleManager.updatePlayerConnection === "function") {
-        await battleManager.updatePlayerConnection(roomId, false);
-      }
-
-      // Safe room cleanup for host
-      try {
-        const roomRef = ref(database, `rooms/${roomId}`);
-        const snapshot = await get(roomRef);
-
-        if (snapshot.exists()) {
-          const roomData = snapshot.val();
-
-          if (roomData.hostId === user.uid && roomData.status === "finished") {
-            const otherPlayersConnected = Object.entries(roomData.players || {})
-              .filter(([playerId]) => playerId !== user.uid)
-              .some(([, player]: [string, any]) => player.connected);
-
-            if (!otherPlayersConnected) {
-              await remove(roomRef);
-              console.log("🗑️ Room cleaned up by host");
-            }
-          }
-        }
-      } catch (dbError) {
-        console.warn("Database cleanup warning:", dbError);
-      }
-
-      console.log("✅ Background cleanup completed");
-    } catch (error) {
-      console.warn("Background cleanup error:", error);
-    }
-  }, [roomId]);
-
-  // 👤 LOAD USER DATA
+  // Load user data
   useEffect(() => {
-    AsyncStorage.getItem("userData")
-      .then((cachedData) => {
-        if (cachedData && componentMounted.current) {
-          setUserData(JSON.parse(cachedData));
+    const loadUserData = async () => {
+      try {
+        const cachedData = await AsyncStorage.getItem("userData");
+        if (cachedData) {
+          const data = JSON.parse(cachedData);
+          setUserData(data);
         }
-      })
-      .catch(console.warn);
+      } catch (error) {
+        console.error("Error loading user data:", error);
+      }
+    };
+    loadUserData();
   }, []);
 
-  // 🔒 BLOCK HARDWARE BACK BUTTON
-  useFocusEffect(
-    useCallback(() => {
-      const handleBackPress = () => {
-        console.log("🚫 Hardware back button blocked - use Home button");
-        return true; // Block back navigation
-      };
-
-      const backHandler = BackHandler.addEventListener(
-        "hardwareBackPress",
-        handleBackPress
-      );
-      return () => backHandler.remove();
-    }, [])
-  );
-
-  // 🎵 VICTORY SOUND MANAGEMENT
   useFocusEffect(
     useCallback(() => {
       if (
@@ -457,109 +330,70 @@ export default function BattleResultsScreen() {
         !soundPlayed.current
       ) {
         soundPlayed.current = true;
-        SoundManager.playSound("victorySoundEffect").catch(console.warn);
+        SoundManager.playSound("victorySoundEffect").catch(() => {});
       }
 
       return () => {
         if (soundPlayed.current) {
-          SoundManager.stopSound("victorySoundEffect").catch(console.warn);
+          SoundManager.stopSound("victorySoundEffect").catch(() => {});
         }
       };
     }, [battleData.isValid, battleData.userRank])
   );
 
-  // 🏠 CONTROLLED HOME NAVIGATION
-  const handleHomeNavigation = useCallback(async () => {
-    if (isNavigating || navigationInProgress.current) {
-      console.log("⏳ Navigation already in progress");
-      return;
-    }
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (!navigationInProgress.current) {
+          handleHomeNavigation();
+        }
+        return true;
+      };
 
-    console.log("🏠 Starting controlled home navigation");
+      const backHandler = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress
+      );
+      return () => backHandler.remove();
+    }, [])
+  );
+
+  const handleHomeNavigation = useCallback(async () => {
+    if (isNavigating) return;
+
     setIsNavigating(true);
-    navigationInProgress.current = true;
 
     try {
-      // Restore original router methods for controlled navigation
-      router.replace = originalRouterReplace.current;
-      router.push = originalRouterPush.current;
+      // Perform cleanup first
+      await performCleanup();
 
-      // Navigate immediately
-      await router.replace("/user/home");
-      console.log("✅ Navigation to home completed");
+      // Small delay to ensure cleanup completes
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // Background cleanup (don't block navigation)
-      setTimeout(async () => {
-        if (!componentMounted.current) return;
-
-        try {
-          const user = auth.currentUser;
-          if (roomId && user?.uid) {
-            // All battleManager cleanup functions
-            const cleanupPromises = [
-              battleManager.updatePlayerConnection?.(roomId, false),
-              battleManager.leaveRoom?.(roomId),
-              battleManager.resetUserBattleState?.(),
-              battleManager.clearBattleCache?.(),
-              battleManager.resetGameState?.(),
-              battleManager.cleanupBattleData?.(),
-              battleManager.disconnectFromRoom?.(roomId),
-              battleManager.resetMultiplayerState?.(),
-              battleManager.cleanup?.(),
-              battleManager.reset?.(),
-            ].filter((promise) => promise !== undefined);
-
-            await Promise.allSettled(cleanupPromises);
-          }
-
-          // Complete AsyncStorage cleanup
-          const allKeys = await AsyncStorage.getAllKeys();
-          const battleKeys = allKeys.filter(
-            (key) =>
-              key.includes("battle") ||
-              key.includes("room") ||
-              key.includes("result") ||
-              key.includes("game") ||
-              key.includes("quiz") ||
-              key.includes("session") ||
-              key.includes("multiplayer") ||
-              key.includes("cache")
-          );
-          const allKeysToRemove = [
-            ...new Set([...battleKeys, ...ALL_BATTLE_KEYS]),
-          ];
-          await AsyncStorage.multiRemove(allKeysToRemove);
-
-          // Sound cleanup
-          await SoundManager.stopSound("victorySoundEffect").catch(() => {});
-
-          console.log("✅ Post-navigation cleanup completed");
-        } catch (error) {
-          console.warn("Post-navigation cleanup error:", error);
-        }
-      }, 100);
+      // Navigate back to multiplayer selection
+      router.replace("/user/home");
     } catch (error) {
-      console.warn("Navigation error:", error);
-      // Force navigation with fallback method
-      try {
-        router.push("/user/home");
-      } catch (fallbackError) {
-        console.error("Fallback navigation failed:", fallbackError);
-      }
-    } finally {
-      setIsNavigating(false);
-      navigationInProgress.current = false;
+      console.warn("Navigation cleanup error:", error);
+      // Navigate anyway
+      router.replace("/user/multiplayer-mode-selection");
     }
-  }, [roomId, isNavigating]);
+  }, [performCleanup]);
 
-  // 🖼️ RENDER FUNCTIONS
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      performCleanup();
+    };
+  }, [performCleanup]);
+
+  // Render profile images
   const renderProfileImages = () => {
-    if (!battleData.isValid || !battleData.players.length) return null;
+    if (!battleData.isValid || battleData.players.length === 0) return null;
 
     const elements = [];
     battleData.players.forEach((player, index) => {
       elements.push(
-        <View key={`player-${player.userId}-${index}`} className="items-center">
+        <View key={`player-${player.userId}`} className="items-center">
           <View className="rounded-full bg-gray-300 items-center justify-center border-2 border-primary">
             <Image
               source={avatarImages(player.avatar)}
@@ -602,8 +436,6 @@ export default function BattleResultsScreen() {
       "Keep fighting, greatness awaits!",
       "Math battles build champions!",
     ];
-
-    // Return individual quotes based on rank
     if (battleData.userRank === 1) return quotes[0];
     if (battleData.userRank === 2) return quotes[1];
     if (battleData.userRank === 3) return quotes[2];
@@ -612,50 +444,63 @@ export default function BattleResultsScreen() {
   };
 
   const getShareMessage = () => {
-    return `${shareConfig.additionalText}
-
-🏆 I ranked #${battleData.userRank} with ${
+    const shareMessage = `${shareConfig.additionalText}
+  
+  🏆 I ranked #${battleData.userRank} with ${
       battleData.userScore
     } points in a math battle!
-"${getMotivationalQuote()}"
+  "${getMotivationalQuote()}"
+  
+  🎯 Use my referral code: ${userData.username.toUpperCase()}
+  👆 Get bonus points when you sign up!
+  
+  ${shareConfig.playStoreLink}
+  
+  ${shareConfig.downloadText}
+  
+  ${shareConfig.hashtags}`;
 
-🎯 Use my referral code: ${userData.username.toUpperCase()}
-👆 Get bonus points when you sign up!
-
-${shareConfig.playStoreLink}
-
-${shareConfig.downloadText}
-
-${shareConfig.hashtags}`;
+    return shareMessage;
   };
 
   const shareImageAndText = async () => {
-    if (isSharing) return;
-
     setIsSharing(true);
     try {
+      // Capture the image from ViewShot
       if (!viewShotRef.current) throw new Error("ViewShot ref not available");
-
       const uri = await viewShotRef.current.capture();
+
+      // Save image to file system
       const timestamp = Date.now();
       const newUri = `${FileSystem.documentDirectory}tezmaths_battle_result_${timestamp}.jpg`;
       await FileSystem.copyAsync({ from: uri, to: newUri });
 
-        await Share.open({
-          title: "Check this out!",
-          message: getShareMessage(),
-          url: newUri,
-          type: "image/jpeg",
-        });
+      // Use react-native-share for proper image + text sharing
+      const shareOptions = {
+        title: "Check this out!",
+        message: getShareMessage(),
+        url: newUri, // Share the captured image URI
+        type: "image/jpeg",
+      };
+
+      await Share.open(shareOptions);
     } catch (error: any) {
-      console.error("Share error:", error);
       Alert.alert("Sharing failed", error.message || "Something went wrong.");
+      console.error("Share error:", error);
     } finally {
       setIsSharing(false);
     }
   };
 
-  // 🎨 RENDER UI
+  if (!battleData.isValid) {
+    return (
+      <View className="flex-1 bg-white justify-center items-center">
+        <ActivityIndicator size="large" color="#FF6B35" />
+        <Text className="text-lg mt-4">Loading results...</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView
       className="bg-white"
@@ -713,11 +558,11 @@ ${shareConfig.hashtags}`;
             <ScrollView className="w-full mb-4">
               {battleData.players.map((player, index) => (
                 <View
-                  key={`score-${player.userId}-${index}`}
+                  key={player.userId}
                   className={`flex-row justify-between items-center w-full p-4 py-2 rounded-lg mb-2 bg-light-orange ${
                     player.userId ===
                     (Array.isArray(currentUserId)
-                      ? currentUserId
+                      ? currentUserId[0]
                       : currentUserId)
                       ? "border-2 border-primary"
                       : "border-transparent border-2"
@@ -727,7 +572,7 @@ ${shareConfig.hashtags}`;
                     {index + 1}. {player.username}
                     {player.userId ===
                     (Array.isArray(currentUserId)
-                      ? currentUserId
+                      ? currentUserId[0]
                       : currentUserId)
                       ? " (You)"
                       : ""}
@@ -754,32 +599,24 @@ ${shareConfig.hashtags}`;
           <TouchableOpacity
             className="py-3 px-6 border border-black rounded-full flex-1 mr-1"
             onPress={handleHomeNavigation}
-            disabled={isNavigating}
+            disabled={navigationInProgress.current}
             activeOpacity={0.7}
-            style={{ opacity: isNavigating ? 0.6 : 1 }}
           >
             <View className="flex-row items-center justify-center gap-2">
-              {isNavigating ? (
-                <ActivityIndicator color="#FF6B35" size="small" />
-              ) : (
-                <>
-                  <Text className="font-black text-2xl">Home</Text>
-                  <Image
-                    source={require("../../assets/icons/home.png")}
-                    style={{ width: 20, height: 20 }}
-                    tintColor="#FF6B35"
-                  />
-                </>
-              )}
+              <Text className="font-black text-2xl">Home</Text>
+              <Image
+                source={require("../../assets/icons/home.png")}
+                style={{ width: 20, height: 20 }}
+                tintColor="#FF6B35"
+              />
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity
             className="py-3 px-6 border border-black rounded-full flex-1 ml-1"
             onPress={shareImageAndText}
-            disabled={isSharing || isNavigating}
+            disabled={isSharing}
             activeOpacity={0.7}
-            style={{ opacity: isSharing || isNavigating ? 0.6 : 1 }}
           >
             {isSharing ? (
               <ActivityIndicator color="#FF6B35" />
