@@ -91,6 +91,9 @@ export default function BattleResultsScreen() {
   const cleanupExecuted = useRef(false);
   const navigationInProgress = useRef(false);
   const soundPlayed = useRef(false);
+  const countdownInterval = useRef<NodeJS.Timeout | null>(null);
+  const hasNavigatedAway = useRef(false);
+  const isUnmounting = useRef(false);
 
   // State management
   const [isSharing, setIsSharing] = useState(false);
@@ -108,8 +111,15 @@ export default function BattleResultsScreen() {
   const [errorMessage, setErrorMessage] = useState("");
   const [isNavigating, setIsNavigating] = useState(false);
 
+  // STATE FOR COUNTDOWN
+  const [countdownSeconds, setCountdownSeconds] = useState(20);
+  const [isCountdownActive, setIsCountdownActive] = useState(true);
+
   // ENHANCED CLEANUP: Complete battle state reset
   const performCleanup = useCallback(async () => {
+    if (cleanupExecuted.current) return;
+    cleanupExecuted.current = true;
+
     console.log("Battle results cleanup starting");
 
     try {
@@ -152,6 +162,109 @@ export default function BattleResultsScreen() {
       console.error("Battle results cleanup error:", error);
     }
   }, [roomId]);
+
+  // FIXED: Silent cleanup function that doesn't interfere with navigation
+  const runSilentCleanup = useCallback(async () => {
+    try {
+      // Clear countdown interval
+      if (countdownInterval.current) {
+        clearInterval(countdownInterval.current);
+        countdownInterval.current = null;
+      }
+
+      // Stop any playing sounds
+      if (soundPlayed.current) {
+        SoundManager.stopSound("victorySoundEffect").catch(() => {});
+      }
+
+      // Perform cleanup
+      await performCleanup();
+
+      console.log("Silent cleanup completed");
+    } catch (error) {
+      console.warn("Silent cleanup error:", error);
+    }
+  }, [performCleanup]);
+
+  // FIXED: Reset countdown every time component mounts/data changes
+  useEffect(() => {
+    // Reset navigation flags when screen loads
+    hasNavigatedAway.current = false;
+    cleanupExecuted.current = false;
+    isUnmounting.current = false;
+
+    // Always reset countdown when component mounts or battle data changes
+    setIsCountdownActive(true);
+    setCountdownSeconds(20);
+
+    // Clear any existing interval
+    if (countdownInterval.current) {
+      clearInterval(countdownInterval.current);
+      countdownInterval.current = null;
+    }
+
+    if (battleData.isValid) {
+      countdownInterval.current = setInterval(() => {
+        setCountdownSeconds((prev) => {
+          if (prev <= 1) {
+            setIsCountdownActive(false);
+            if (countdownInterval.current) {
+              clearInterval(countdownInterval.current);
+              countdownInterval.current = null;
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+
+    return () => {
+      if (countdownInterval.current) {
+        clearInterval(countdownInterval.current);
+        countdownInterval.current = null;
+      }
+    };
+  }, [battleData.isValid, roomId, currentUserId]);
+
+  // FIXED: Focus effect that only resets timer, no cleanup on unfocus
+  useFocusEffect(
+    useCallback(() => {
+      // Reset countdown whenever screen comes into focus
+      if (battleData.isValid && !hasNavigatedAway.current) {
+        setIsCountdownActive(true);
+        setCountdownSeconds(20);
+
+        // Clear any existing interval
+        if (countdownInterval.current) {
+          clearInterval(countdownInterval.current);
+          countdownInterval.current = null;
+        }
+
+        countdownInterval.current = setInterval(() => {
+          setCountdownSeconds((prev) => {
+            if (prev <= 1) {
+              setIsCountdownActive(false);
+              if (countdownInterval.current) {
+                clearInterval(countdownInterval.current);
+                countdownInterval.current = null;
+              }
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      }
+
+      // NO CLEANUP ON UNFOCUS - this was causing the circular navigation
+      return () => {
+        if (countdownInterval.current) {
+          clearInterval(countdownInterval.current);
+          countdownInterval.current = null;
+        }
+      };
+    }, [battleData.isValid])
+  );
 
   useEffect(() => {
     const validateBattleData = () => {
@@ -341,11 +454,26 @@ export default function BattleResultsScreen() {
     }, [battleData.isValid, battleData.userRank])
   );
 
+  // FIXED: Block back button during countdown
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        if (!navigationInProgress.current) {
-          handleHomeNavigation();
+        if (isCountdownActive) {
+          // Show alert that they need to wait
+          Alert.alert(
+            "Please Wait",
+            `You can go home in ${countdownSeconds} seconds.`,
+            [{ text: "OK" }]
+          );
+          return true; // Prevent back action
+        }
+
+        if (!navigationInProgress.current && !hasNavigatedAway.current) {
+          hasNavigatedAway.current = true;
+          // Run cleanup silently and then navigate
+          runSilentCleanup().finally(() => {
+            router.back();
+          });
         }
         return true;
       };
@@ -355,36 +483,81 @@ export default function BattleResultsScreen() {
         onBackPress
       );
       return () => backHandler.remove();
-    }, [])
+    }, [isCountdownActive, countdownSeconds, runSilentCleanup])
   );
 
+  // UPDATED: Home navigation with proper cleanup
   const handleHomeNavigation = useCallback(async () => {
-    if (isNavigating) return;
+    if (isCountdownActive) {
+      Alert.alert(
+        "Please Wait",
+        `You can go home in ${countdownSeconds} seconds.`,
+        [{ text: "OK" }]
+      );
+      return;
+    }
 
+    if (isNavigating || hasNavigatedAway.current) return;
+
+    hasNavigatedAway.current = true;
     setIsNavigating(true);
 
     try {
-      // Perform cleanup first
-      await performCleanup();
+      // Run the cleanup
+      await runSilentCleanup();
 
       // Small delay to ensure cleanup completes
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
-      // Navigate back to multiplayer selection
+      // Navigate back to home
       router.replace("/user/home");
     } catch (error) {
       console.warn("Navigation cleanup error:", error);
       // Navigate anyway
       router.replace("/user/multiplayer-mode-selection");
+    } finally {
+      setIsNavigating(false);
     }
-  }, [performCleanup]);
+  }, [isCountdownActive, countdownSeconds, runSilentCleanup]);
 
-  // Cleanup on unmount
+  // FIXED: Only cleanup on actual unmount
   useEffect(() => {
     return () => {
-      performCleanup();
+      isUnmounting.current = true;
+      console.log("Component unmounting - running final cleanup");
+
+      if (countdownInterval.current) {
+        clearInterval(countdownInterval.current);
+        countdownInterval.current = null;
+      }
+
+      // Only run cleanup if we haven't already navigated away
+      if (!hasNavigatedAway.current) {
+        runSilentCleanup();
+      }
     };
-  }, [performCleanup]);
+  }, [runSilentCleanup]);
+
+  // Progress bar component
+  const renderCountdownProgress = () => {
+    if (!isCountdownActive) return null;
+
+    const progress = ((20 - countdownSeconds) / 20) * 100;
+
+    return (
+      <View className="w-full mb-4 px-4">
+        <View className="bg-gray-200 rounded-full h-3 mb-2">
+          <View
+            className="bg-primary rounded-full h-3 transition-all duration-1000"
+            style={{ width: `${progress}%` }}
+          />
+        </View>
+        <Text className="text-center text-gray-600 text-sm">
+          You can go home in {countdownSeconds} seconds
+        </Text>
+      </View>
+    );
+  };
 
   // Render profile images
   const renderProfileImages = () => {
@@ -475,11 +648,10 @@ export default function BattleResultsScreen() {
       const newUri = `${FileSystem.documentDirectory}tezmaths_battle_result_${timestamp}.jpg`;
       await FileSystem.copyAsync({ from: uri, to: newUri });
 
-      // Use react-native-share for proper image + text sharing
       const shareOptions = {
         title: "Check this out!",
         message: getShareMessage(),
-        url: newUri, // Share the captured image URI
+        url: newUri,
         type: "image/jpeg",
       };
 
@@ -509,6 +681,9 @@ export default function BattleResultsScreen() {
       showsVerticalScrollIndicator={false}
     >
       <View className="flex-1 bg-white justify-center items-center p-4">
+        {/* COUNTDOWN PROGRESS BAR AT TOP */}
+        {renderCountdownProgress()}
+
         <ViewShot
           ref={viewShotRef}
           options={{
@@ -595,21 +770,31 @@ export default function BattleResultsScreen() {
           </View>
         </ViewShot>
 
+        {/* BUTTONS WITH COUNTDOWN STATE */}
         <View className="flex-row justify-between mt-6 w-full max-w-md">
           <TouchableOpacity
-            className="py-3 px-6 border border-black rounded-full flex-1 mr-1"
+            className={`py-3 px-6 border border-black rounded-full flex-1 mr-1 ${
+              isCountdownActive ? "opacity-50" : "opacity-100"
+            }`}
             onPress={handleHomeNavigation}
-            disabled={navigationInProgress.current}
-            activeOpacity={0.7}
+            disabled={isCountdownActive || navigationInProgress.current}
+            activeOpacity={isCountdownActive ? 1 : 0.7}
           >
-            <View className="flex-row items-center justify-center gap-2">
-              <Text className="font-black text-2xl">Home</Text>
-              <Image
-                source={require("../../assets/icons/home.png")}
-                style={{ width: 20, height: 20 }}
-                tintColor="#FF6B35"
-              />
-            </View>
+            {isCountdownActive && (
+              <Text className="text-xs text-gray-400 text-center mt-1">
+                Wait {countdownSeconds}s
+              </Text>
+            )}
+            {!isCountdownActive && (
+              <View className="flex-row items-center justify-center gap-2">
+                <Text className={`font-black text-2xl text-black`}>Home</Text>
+                <Image
+                  source={require("../../assets/icons/home.png")}
+                  style={{ width: 20, height: 20 }}
+                  tintColor={isCountdownActive ? "#9CA3AF" : "#FF6B35"}
+                />
+              </View>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
